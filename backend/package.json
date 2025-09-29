@@ -7,7 +7,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
-    "better-sqlite3": "^9.0.0",
+    "better-sqlite3": "^12.4.1",
     "express": "^4.19.2",
     "morgan": "^1.10.0"
   },
