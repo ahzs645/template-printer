@@ -1,0 +1,320 @@
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent } from 'react'
+
+import './App.css'
+import { TemplateSidebar } from './components/TemplateSidebar'
+import { PreviewWorkspace } from './components/PreviewWorkspace'
+import { useFontManager } from './hooks/useFontManager'
+import { exportSingleCard } from './lib/exporter'
+import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
+import {
+  getDefaultField,
+  nextFieldId,
+  parseTemplate,
+  parseTemplateString,
+  renderSvgWithData,
+} from './lib/svgTemplate'
+import type { TemplateSummary } from './components/TemplateSelector'
+import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
+import { labelFromId } from './lib/fields'
+
+const PREVIEW_BASE_WIDTH = 420
+
+function App() {
+  const [template, setTemplate] = useState<TemplateMeta | null>(null)
+  const [fields, setFields] = useState<FieldDefinition[]>([])
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
+  const [cardData, setCardData] = useState<CardData>(() => ({}))
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const previousObjectUrl = useRef<string | null>(null)
+  const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+
+  const resetPreviousObjectUrl = (nextUrl: string | null | undefined) => {
+    if (previousObjectUrl.current && previousObjectUrl.current !== nextUrl) {
+      URL.revokeObjectURL(previousObjectUrl.current)
+    }
+    previousObjectUrl.current = nextUrl ?? null
+  }
+  const { fontList, missingFonts, availableFontOptions, registerTemplateFonts, loadFontFile } = useFontManager()
+
+  const fontOptions = useMemo(() => {
+    const names = new Set<string>(availableFontOptions)
+    fields.forEach((field) => {
+      if (field.fontFamily) {
+        names.add(field.fontFamily)
+      }
+    })
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  }, [availableFontOptions, fields])
+
+  useEffect(() => {
+    return () => {
+      if (previousObjectUrl.current) {
+        URL.revokeObjectURL(previousObjectUrl.current)
+      }
+    }
+  }, [])
+
+  const selectedField = useMemo(
+    () => fields.find((field) => field.id === selectedFieldId) ?? null,
+    [fields, selectedFieldId],
+  )
+
+  const previewRatio = template ? template.height / template.width : 54 / 86
+  const previewWidth = PREVIEW_BASE_WIDTH
+  const previewHeight = previewWidth * previewRatio
+
+  const renderedSvg = useMemo(() => {
+    if (!template) return null
+    try {
+      return renderSvgWithData(template, fields, cardData)
+    } catch (error) {
+      console.error('Failed to render SVG preview', error)
+      return template.rawSvg
+    }
+  }, [template, fields, cardData])
+
+  const handleTemplateUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setErrorMessage(null)
+    try {
+      const { metadata, autoFields } = await parseTemplate(file)
+      resetPreviousObjectUrl(metadata.objectUrl)
+      setTemplate(metadata)
+      registerTemplateFonts(metadata.fonts)
+      setFields(autoFields.length > 0 ? autoFields : [getDefaultField('primary_text')])
+      setCardData(() => ({}))
+      setSelectedFieldId(autoFields[0]?.id ?? null)
+      setSelectedTemplateId(null)
+      setStatusMessage(
+        autoFields.length
+          ? `Imported ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}`
+          : 'Template imported. No placeholders detected, starting with a default field.',
+      )
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to import template')
+    }
+  }
+
+  const handleTemplateSelect = async (templateSummary: TemplateSummary) => {
+    try {
+      setErrorMessage(null)
+      const response = await fetch(templateSummary.svgPath)
+      if (!response.ok) {
+        throw new Error(`Failed to load template: ${response.status}`)
+      }
+      const svgText = await response.text()
+      const { metadata, autoFields } = await parseTemplateString(svgText, templateSummary.name)
+      resetPreviousObjectUrl(metadata.objectUrl)
+      setTemplate(metadata)
+      registerTemplateFonts(metadata.fonts)
+      setFields(autoFields.length > 0 ? autoFields : [getDefaultField('primary_text')])
+      setCardData(() => ({}))
+      setSelectedFieldId(autoFields[0]?.id ?? null)
+      setSelectedTemplateId(templateSummary.id)
+      setStatusMessage(`Loaded template “${templateSummary.name}”`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to load template')
+    }
+  }
+
+  const handleFieldSelect = (fieldId: string) => {
+    setSelectedFieldId(fieldId)
+  }
+
+  const handleFieldChange = <K extends keyof FieldDefinition>(fieldId: string, key: K, value: FieldDefinition[K]) => {
+    if (key === 'id' && typeof value === 'string') {
+      const nextId = value.trim() || fieldId
+      setFields((current) =>
+        current.map((field) => (field.id === fieldId ? { ...field, id: nextId } : field)),
+      )
+      renameFieldInCardData(fieldId, nextId, setCardData)
+      setSelectedFieldId(nextId)
+      return
+    }
+
+    setFields((current) => current.map((field) => (field.id === fieldId ? { ...field, [key]: value } : field)))
+  }
+
+  const handleCardDataChange = (fieldId: string, value: string) => {
+    setCardData((current) => ({ ...current, [fieldId]: value }))
+  }
+
+  const handleImageUpload = (fieldId: string, file: File) => {
+    setImageFieldValue(file, fieldId, setCardData)
+  }
+
+  const handleImageAdjust = (fieldId: string, patch: Partial<ImageValue>) => {
+    updateImageFieldValue(fieldId, patch, setCardData)
+  }
+
+  const handleAddField = () => {
+    setFields((current) => {
+      const newId = nextFieldId(current)
+      const nextField = getDefaultField(newId)
+      setSelectedFieldId(newId)
+      return [...current, nextField]
+    })
+  }
+
+  const handleDeleteField = (fieldId: string) => {
+    setFields((current) => current.filter((field) => field.id !== fieldId))
+    setCardData((current) => {
+      const next = { ...current }
+      delete next[fieldId]
+      return next
+    })
+    if (selectedFieldId === fieldId) {
+      setSelectedFieldId(null)
+    }
+  }
+
+  const handleDuplicateField = (fieldId: string) => {
+    setFields((current) => {
+      const target = current.find((field) => field.id === fieldId)
+      if (!target) return current
+      const newId = nextFieldId(current)
+      const duplicate: FieldDefinition = {
+        ...target,
+        id: newId,
+        label: labelFromId(newId),
+        auto: false,
+        sourceId: undefined,
+      }
+      setSelectedFieldId(newId)
+      return [...current, duplicate]
+    })
+  }
+
+  const handleFontUploadClick = (fontName: string) => {
+    const input = fontInputRefs.current[fontName]
+    input?.click()
+  }
+
+  const handleFontFileSelect = async (fontName: string, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setErrorMessage(null)
+    try {
+      await loadFontFile(fontName, file)
+      setStatusMessage(`Loaded font "${fontName}"`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? `Failed to load font: ${error.message}` : 'Failed to load font file')
+    }
+  }
+
+  const handleExportPdf = async () => {
+    if (!template) {
+      setErrorMessage('Upload a template before exporting.')
+      return
+    }
+
+    if (fields.length === 0) {
+      setErrorMessage('Define at least one field before exporting.')
+      return
+    }
+
+    setIsExporting(true)
+    setErrorMessage(null)
+
+    try {
+      await exportSingleCard(template, fields, cardData)
+      setStatusMessage('Exported PDF with current card data.')
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to export PDF')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const registerFontInput = (fontName: string, element: HTMLInputElement | null) => {
+    if (element) {
+      fontInputRefs.current[fontName] = element
+    } else {
+      delete fontInputRefs.current[fontName]
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <h1>ID Card Maker</h1>
+          <p className="subtitle">Import Illustrator SVG templates, define editable fields, and preview cards.</p>
+        </div>
+        <div className="template-meta">
+          {template ? (
+            <Fragment>
+              <span className="meta-item">Template: {template.name}</span>
+              <span className="meta-item">
+                Size: {template.width} × {template.height} {template.unit}
+              </span>
+              {template.viewBox ? (
+                <span className="meta-item">
+                  ViewBox: {template.viewBox.width.toFixed(0)} × {template.viewBox.height.toFixed(0)}
+                </span>
+              ) : null}
+              {template.fonts.length ? (
+                <span className="meta-item">Fonts: {template.fonts.join(', ')}</span>
+              ) : null}
+            </Fragment>
+          ) : (
+            <span className="meta-item muted">No template loaded</span>
+          )}
+        </div>
+      </header>
+
+      <main className="app-main">
+        <TemplateSidebar
+          selectedTemplateId={selectedTemplateId}
+          onTemplateSelect={handleTemplateSelect}
+          onTemplateUpload={handleTemplateUpload}
+          statusMessage={statusMessage}
+          errorMessage={errorMessage}
+          fontList={fontList}
+          missingFonts={missingFonts}
+          onFontUploadClick={handleFontUploadClick}
+          onFontFileSelect={handleFontFileSelect}
+          registerFontInput={registerFontInput}
+          fields={fields}
+          selectedFieldId={selectedFieldId}
+          onFieldSelect={handleFieldSelect}
+          onAddField={handleAddField}
+        />
+
+        <PreviewWorkspace
+          template={template}
+          renderedSvg={renderedSvg}
+          fields={fields}
+          cardData={cardData}
+          selectedField={selectedField}
+          onCardDataChange={handleCardDataChange}
+          onImageUpload={handleImageUpload}
+          onImageAdjust={handleImageAdjust}
+          onFieldChange={handleFieldChange}
+          onDuplicateField={handleDuplicateField}
+          onDeleteField={handleDeleteField}
+          fontOptions={fontOptions}
+          missingFonts={missingFonts}
+          onExportPdf={handleExportPdf}
+          isExporting={isExporting}
+          previewWidth={previewWidth}
+          previewHeight={previewHeight}
+        />
+      </main>
+    </div>
+  )
+}
+
+export default App
