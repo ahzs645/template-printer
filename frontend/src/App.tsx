@@ -2,9 +2,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 
 import './App.css'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
 import { TemplateSidebar } from './components/TemplateSidebar'
 import { PreviewWorkspace } from './components/PreviewWorkspace'
 import { ExportPage } from './components/ExportPage'
+import { UsersTab } from './components/UsersTab'
 import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
@@ -22,7 +24,7 @@ import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
 
-type ActiveTab = 'design' | 'export'
+type ActiveTab = 'design' | 'users' | 'export'
 
 const PREVIEW_BASE_WIDTH = 420
 
@@ -381,6 +383,12 @@ function App() {
           Design
         </button>
         <button
+          className={`tab ${activeTab === 'users' ? 'active' : ''}`}
+          onClick={() => setActiveTab('users')}
+        >
+          Users
+        </button>
+        <button
           className={`tab ${activeTab === 'export' ? 'active' : ''}`}
           onClick={() => setActiveTab('export')}
         >
@@ -433,6 +441,8 @@ function App() {
               previewHeight={previewHeight}
             />
           </Fragment>
+        ) : activeTab === 'users' ? (
+          <UsersTab />
         ) : (
           <ExportPage
             template={template}

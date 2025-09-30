@@ -58,9 +58,12 @@ router.put('/:id', (req, res, next) => {
       return
     }
 
-    // Validate required fields
-    if (!userData.firstName || !userData.lastName) {
-      res.status(400).json({ error: 'firstName and lastName are required.' })
+    // Validate required fields if they are being updated
+    const finalFirstName = userData.firstName ?? existing.firstName
+    const finalLastName = userData.lastName ?? existing.lastName
+
+    if (!finalFirstName || !finalLastName) {
+      res.status(400).json({ error: 'firstName and lastName cannot be empty.' })
       return
     }
 

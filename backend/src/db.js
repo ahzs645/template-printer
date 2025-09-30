@@ -384,6 +384,10 @@ export function createUser(userData) {
 export function updateUser(id, userData) {
   const db = getDatabase()
 
+  // Get existing user to merge with new data
+  const existing = getUserById(id)
+  if (!existing) return null
+
   const stmt = db.prepare(`
     UPDATE users SET
       firstName = ?,
@@ -408,23 +412,23 @@ export function updateUser(id, userData) {
   `)
 
   stmt.run(
-    userData.firstName,
-    userData.lastName,
-    userData.middleName || null,
-    userData.studentId || null,
-    userData.department || null,
-    userData.position || null,
-    userData.grade || null,
-    userData.email || null,
-    userData.phoneNumber || null,
-    userData.address || null,
-    userData.emergencyContact || null,
-    userData.photoPath || null,
-    userData.signaturePath || null,
-    userData.issueDate || null,
-    userData.expiryDate || null,
-    userData.birthDate || null,
-    userData.metadata || null,
+    userData.firstName ?? existing.firstName,
+    userData.lastName ?? existing.lastName,
+    userData.middleName ?? existing.middleName,
+    userData.studentId ?? existing.studentId,
+    userData.department ?? existing.department,
+    userData.position ?? existing.position,
+    userData.grade ?? existing.grade,
+    userData.email ?? existing.email,
+    userData.phoneNumber ?? existing.phoneNumber,
+    userData.address ?? existing.address,
+    userData.emergencyContact ?? existing.emergencyContact,
+    userData.photoPath ?? existing.photoPath,
+    userData.signaturePath ?? existing.signaturePath,
+    userData.issueDate ?? existing.issueDate,
+    userData.expiryDate ?? existing.expiryDate,
+    userData.birthDate ?? existing.birthDate,
+    userData.metadata ?? existing.metadata,
     id
   )
 

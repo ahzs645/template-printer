@@ -6,6 +6,7 @@ import path from 'path'
 import { getDatabase } from './db.js'
 import { clientDistDir, templatesDir } from './paths.js'
 import templatesRouter from './routes/templates.js'
+import usersRouter from './routes/users.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 
 export function createApp() {
@@ -21,6 +22,7 @@ export function createApp() {
   })
 
   app.use('/api/templates', templatesRouter)
+  app.use('/api/users', usersRouter)
 
   if (fs.existsSync(templatesDir)) {
     app.use('/templates', express.static(templatesDir))
