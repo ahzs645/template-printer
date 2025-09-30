@@ -73,12 +73,56 @@ function createSchema(db) {
     )
   `
 
+  const createUsersTable = `
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      firstName TEXT NOT NULL,
+      lastName TEXT NOT NULL,
+      middleName TEXT,
+      studentId TEXT,
+      department TEXT,
+      position TEXT,
+      grade TEXT,
+      email TEXT,
+      phoneNumber TEXT,
+      address TEXT,
+      emergencyContact TEXT,
+      photoPath TEXT,
+      signaturePath TEXT,
+      issueDate TEXT,
+      expiryDate TEXT,
+      birthDate TEXT,
+      metadata TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `
+
+  const createFieldMappingsTable = `
+    CREATE TABLE IF NOT EXISTS template_field_mappings (
+      id TEXT PRIMARY KEY,
+      templateId TEXT NOT NULL,
+      svgLayerId TEXT NOT NULL,
+      standardFieldName TEXT NOT NULL,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (templateId) REFERENCES templates(id) ON DELETE CASCADE
+    )
+  `
+
   const createUniqueIndex = `
     CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_name ON templates(name)
   `
 
+  const createFieldMappingIndex = `
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_field_mappings_template_layer
+    ON template_field_mappings(templateId, svgLayerId)
+  `
+
   db.exec(createTemplatesTable)
+  db.exec(createUsersTable)
+  db.exec(createFieldMappingsTable)
   db.exec(createUniqueIndex)
+  db.exec(createFieldMappingIndex)
 
   // Migration: Add template_type column if it doesn't exist
   try {
@@ -281,4 +325,119 @@ function normalizePublicPath(value, { required }) {
   const sanitized = trimmed.replace(/^\/+/, '')
   const withPrefix = sanitized.startsWith('templates/') ? sanitized : path.posix.join('templates', sanitized)
   return `/${withPrefix}`
+}
+
+// ============================================
+// USER CRUD OPERATIONS
+// ============================================
+
+export function listUsers() {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT * FROM users ORDER BY lastName, firstName
+  `)
+  return stmt.all()
+}
+
+export function getUserById(id) {
+  const db = getDatabase()
+  const stmt = db.prepare(`SELECT * FROM users WHERE id = ?`)
+  return stmt.get(id) || null
+}
+
+export function createUser(userData) {
+  const db = getDatabase()
+  const id = userData.id || `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+  const stmt = db.prepare(`
+    INSERT INTO users (
+      id, firstName, lastName, middleName, studentId, department,
+      position, grade, email, phoneNumber, address, emergencyContact,
+      photoPath, signaturePath, issueDate, expiryDate, birthDate, metadata
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  stmt.run(
+    id,
+    userData.firstName,
+    userData.lastName,
+    userData.middleName || null,
+    userData.studentId || null,
+    userData.department || null,
+    userData.position || null,
+    userData.grade || null,
+    userData.email || null,
+    userData.phoneNumber || null,
+    userData.address || null,
+    userData.emergencyContact || null,
+    userData.photoPath || null,
+    userData.signaturePath || null,
+    userData.issueDate || null,
+    userData.expiryDate || null,
+    userData.birthDate || null,
+    userData.metadata || null
+  )
+
+  return getUserById(id)
+}
+
+export function updateUser(id, userData) {
+  const db = getDatabase()
+
+  const stmt = db.prepare(`
+    UPDATE users SET
+      firstName = ?,
+      lastName = ?,
+      middleName = ?,
+      studentId = ?,
+      department = ?,
+      position = ?,
+      grade = ?,
+      email = ?,
+      phoneNumber = ?,
+      address = ?,
+      emergencyContact = ?,
+      photoPath = ?,
+      signaturePath = ?,
+      issueDate = ?,
+      expiryDate = ?,
+      birthDate = ?,
+      metadata = ?,
+      updatedAt = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `)
+
+  stmt.run(
+    userData.firstName,
+    userData.lastName,
+    userData.middleName || null,
+    userData.studentId || null,
+    userData.department || null,
+    userData.position || null,
+    userData.grade || null,
+    userData.email || null,
+    userData.phoneNumber || null,
+    userData.address || null,
+    userData.emergencyContact || null,
+    userData.photoPath || null,
+    userData.signaturePath || null,
+    userData.issueDate || null,
+    userData.expiryDate || null,
+    userData.birthDate || null,
+    userData.metadata || null,
+    id
+  )
+
+  return getUserById(id)
+}
+
+export function deleteUser(id) {
+  const db = getDatabase()
+  const user = getUserById(id)
+  if (!user) return null
+
+  const stmt = db.prepare(`DELETE FROM users WHERE id = ?`)
+  stmt.run(id)
+
+  return user
 }

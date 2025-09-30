@@ -89,6 +89,22 @@ export function ExportPage({
       // Find placeholder groups (Topcard, Bottomcard)
       const placeholderGroups = ['Topcard', 'Bottomcard']
 
+      // Get card dimensions from viewBox or width/height
+      const cardViewBox = cardSvg.getAttribute('viewBox')
+      let cardNaturalWidth = 100
+      let cardNaturalHeight = 100
+
+      if (cardViewBox) {
+        const [, , vbW, vbH] = cardViewBox.split(/\s+/).map(parseFloat)
+        cardNaturalWidth = vbW
+        cardNaturalHeight = vbH
+      } else {
+        const cardWidth = cardSvg.getAttribute('width')
+        const cardHeight = cardSvg.getAttribute('height')
+        if (cardWidth) cardNaturalWidth = parseFloat(cardWidth)
+        if (cardHeight) cardNaturalHeight = parseFloat(cardHeight)
+      }
+
       placeholderGroups.forEach((groupId) => {
         const group = layoutDoc.getElementById(groupId)
         if (!group) return
@@ -98,53 +114,29 @@ export function ExportPage({
         const targetRect = rects[rects.length - 1]
         if (!targetRect) return
 
-        const x = parseFloat(targetRect.getAttribute('x') || '0')
-        const y = parseFloat(targetRect.getAttribute('y') || '0')
-        const width = parseFloat(targetRect.getAttribute('width') || '0')
-        const height = parseFloat(targetRect.getAttribute('height') || '0')
+        const slotX = parseFloat(targetRect.getAttribute('x') || '0')
+        const slotY = parseFloat(targetRect.getAttribute('y') || '0')
+        const slotWidth = parseFloat(targetRect.getAttribute('width') || '0')
+        const slotHeight = parseFloat(targetRect.getAttribute('height') || '0')
 
-        // Clone the card SVG
-        const cardClone = cardSvg.cloneNode(true) as SVGElement
-
-        // Create a group to position the card
-        const cardGroup = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'g')
-        cardGroup.setAttribute('transform', `translate(${x}, ${y})`)
-
-        // Get card viewBox to scale it properly
-        const cardViewBox = cardSvg.getAttribute('viewBox')
-        const cardWidth = cardSvg.getAttribute('width')
-        const cardHeight = cardSvg.getAttribute('height')
-
-        let cardW = width
-        let cardH = height
-
-        if (cardViewBox) {
-          const [, , vbW, vbH] = cardViewBox.split(/\s+/).map(parseFloat)
-          const scale = Math.min(width / vbW, height / vbH)
-          cardW = vbW * scale
-          cardH = vbH * scale
-        } else if (cardWidth && cardHeight) {
-          const cW = parseFloat(cardWidth)
-          const cH = parseFloat(cardHeight)
-          const scale = Math.min(width / cW, height / cH)
-          cardW = cW * scale
-          cardH = cH * scale
-        }
+        // Calculate scale to fit card in slot while maintaining aspect ratio
+        const scale = Math.min(slotWidth / cardNaturalWidth, slotHeight / cardNaturalHeight)
+        const scaledWidth = cardNaturalWidth * scale
+        const scaledHeight = cardNaturalHeight * scale
 
         // Center the card in the slot
-        const offsetX = (width - cardW) / 2
-        const offsetY = (height - cardH) / 2
+        const offsetX = slotX + (slotWidth - scaledWidth) / 2
+        const offsetY = slotY + (slotHeight - scaledHeight) / 2
 
-        // Wrap card content in a scaled/positioned group
-        const innerGroup = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'g')
-        innerGroup.setAttribute('transform', `translate(${offsetX}, ${offsetY}) scale(${cardW / (cardViewBox ? parseFloat(cardViewBox.split(/\s+/)[2]) : parseFloat(cardWidth || '100'))})`)
+        // Create a group for the card with proper positioning and scaling
+        const cardGroup = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'g')
+        cardGroup.setAttribute('transform', `translate(${offsetX}, ${offsetY}) scale(${scale})`)
 
-        // Move all children from cardClone to innerGroup
-        while (cardClone.firstChild) {
-          innerGroup.appendChild(cardClone.firstChild)
-        }
-
-        cardGroup.appendChild(innerGroup)
+        // Clone all children from the card SVG into the new group
+        Array.from(cardSvg.children).forEach((child) => {
+          const clonedChild = child.cloneNode(true)
+          cardGroup.appendChild(clonedChild)
+        })
 
         // Replace the placeholder group with the card
         group.parentNode?.replaceChild(cardGroup, group)
