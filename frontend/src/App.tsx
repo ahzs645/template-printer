@@ -5,6 +5,8 @@ import './App.css'
 import { TemplateSidebar } from './components/TemplateSidebar'
 import { PreviewWorkspace } from './components/PreviewWorkspace'
 import { useFontManager } from './hooks/useFontManager'
+import { useTemplateLibrary } from './hooks/useTemplateLibrary'
+import { deleteTemplateFromLibrary, uploadTemplateToLibrary } from './lib/api'
 import { exportSingleCard } from './lib/exporter'
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import {
@@ -14,7 +16,7 @@ import {
   parseTemplateString,
   renderSvgWithData,
 } from './lib/svgTemplate'
-import type { TemplateSummary } from './components/TemplateSelector'
+import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
 
@@ -32,6 +34,19 @@ function App() {
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
+  const {
+    templates: designTemplates,
+    isLoading: designTemplatesLoading,
+    error: designTemplatesError,
+    reload: reloadDesignTemplates,
+  } = useTemplateLibrary('design')
+
+  const {
+    templates: printTemplates,
+    isLoading: printTemplatesLoading,
+    error: printTemplatesError,
+    reload: reloadPrintTemplates,
+  } = useTemplateLibrary('print')
 
   const resetPreviousObjectUrl = (nextUrl: string | null | undefined) => {
     if (previousObjectUrl.current && previousObjectUrl.current !== nextUrl) {
@@ -83,20 +98,35 @@ function App() {
     event.target.value = ''
     if (!file) return
     setErrorMessage(null)
+
     try {
       const { metadata, autoFields } = await parseTemplate(file)
       resetPreviousObjectUrl(metadata.objectUrl)
       setTemplate(metadata)
       registerTemplateFonts(metadata.fonts)
-      setFields(autoFields.length > 0 ? autoFields : [getDefaultField('primary_text')])
+
+      const nextFields = autoFields.length > 0 ? autoFields : []
+      setFields(nextFields)
       setCardData(() => ({}))
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(null)
-      setStatusMessage(
-        autoFields.length
-          ? `Imported ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}`
-          : 'Template imported. No placeholders detected, starting with a default field.',
-      )
+
+      const baseMessage = autoFields.length
+        ? `Imported ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
+        : 'Template imported. No placeholders detected - add fields manually to continue.'
+      setStatusMessage(baseMessage)
+
+      try {
+        const savedTemplate = await uploadTemplateToLibrary(file, metadata)
+        setSelectedTemplateId(savedTemplate.id)
+        await reloadDesignTemplates()
+        setStatusMessage(`${baseMessage} Saved "${savedTemplate.name}" to your template library.`)
+      } catch (uploadError) {
+        console.error(uploadError)
+        setSelectedTemplateId(null)
+        setErrorMessage(uploadError instanceof Error ? uploadError.message : 'Failed to save template to library.')
+        setStatusMessage(`${baseMessage} Saving to library failed.`)
+      }
     } catch (error) {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to import template')
@@ -115,11 +145,16 @@ function App() {
       resetPreviousObjectUrl(metadata.objectUrl)
       setTemplate(metadata)
       registerTemplateFonts(metadata.fonts)
-      setFields(autoFields.length > 0 ? autoFields : [getDefaultField('primary_text')])
+      const nextFields = autoFields.length > 0 ? autoFields : []
+      setFields(nextFields)
       setCardData(() => ({}))
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
-      setStatusMessage(`Loaded template “${templateSummary.name}”`)
+      setStatusMessage(
+        autoFields.length
+          ? `Loaded template “${templateSummary.name}” with ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
+          : `Loaded template “${templateSummary.name}”. No placeholders detected - add fields manually to continue.`,
+      )
     } catch (error) {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load template')
@@ -246,6 +281,33 @@ function App() {
     }
   }
 
+  const handleTemplateDelete = async (templateSummary: TemplateSummary) => {
+    if (!confirm(`Are you sure you want to delete "${templateSummary.name}"?`)) {
+      return
+    }
+
+    try {
+      setErrorMessage(null)
+      await deleteTemplateFromLibrary(templateSummary.id)
+
+      // If the deleted template was selected, clear the current template
+      if (selectedTemplateId === templateSummary.id) {
+        setTemplate(null)
+        setFields([])
+        setCardData({})
+        setSelectedFieldId(null)
+        setSelectedTemplateId(null)
+      }
+
+      await reloadDesignTemplates()
+      await reloadPrintTemplates()
+      setStatusMessage(`Deleted template "${templateSummary.name}".`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to delete template')
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -278,8 +340,17 @@ function App() {
       <main className="app-main">
         <TemplateSidebar
           selectedTemplateId={selectedTemplateId}
+          designTemplates={designTemplates}
+          designTemplatesLoading={designTemplatesLoading}
+          designTemplatesError={designTemplatesError}
+          printTemplates={printTemplates}
+          printTemplatesLoading={printTemplatesLoading}
+          printTemplatesError={printTemplatesError}
+          onRefreshDesignTemplates={reloadDesignTemplates}
+          onRefreshPrintTemplates={reloadPrintTemplates}
           onTemplateSelect={handleTemplateSelect}
           onTemplateUpload={handleTemplateUpload}
+          onTemplateDelete={handleTemplateDelete}
           statusMessage={statusMessage}
           errorMessage={errorMessage}
           fontList={fontList}

@@ -1,14 +1,24 @@
-import type { ChangeEvent } from 'react'
+import { useRef, type ChangeEvent } from 'react'
 
 import { CollapsibleSection } from './CollapsibleSection'
-import { TemplateSelector, type TemplateSummary } from './TemplateSelector'
+import { TemplateSelector } from './TemplateSelector'
 import type { FieldDefinition } from '../lib/types'
 import type { FontEntry } from '../hooks/useFontManager'
+import type { TemplateSummary } from '../lib/templates'
 
 export type TemplateSidebarProps = {
   selectedTemplateId: string | null
+  designTemplates: TemplateSummary[]
+  designTemplatesLoading: boolean
+  designTemplatesError: string | null
+  printTemplates: TemplateSummary[]
+  printTemplatesLoading: boolean
+  printTemplatesError: string | null
+  onRefreshDesignTemplates: () => void
+  onRefreshPrintTemplates: () => void
   onTemplateSelect: (template: TemplateSummary) => void
   onTemplateUpload: (event: ChangeEvent<HTMLInputElement>) => void
+  onTemplateDelete: (template: TemplateSummary) => void
   statusMessage: string | null
   errorMessage: string | null
   fontList: FontEntry[]
@@ -24,8 +34,17 @@ export type TemplateSidebarProps = {
 
 export function TemplateSidebar({
   selectedTemplateId,
+  designTemplates,
+  designTemplatesLoading,
+  designTemplatesError,
+  printTemplates,
+  printTemplatesLoading,
+  printTemplatesError,
+  onRefreshDesignTemplates,
+  onRefreshPrintTemplates,
   onTemplateSelect,
   onTemplateUpload,
+  onTemplateDelete,
   statusMessage,
   errorMessage,
   fontList,
@@ -38,19 +57,48 @@ export function TemplateSidebar({
   onFieldSelect,
   onAddField,
 }: TemplateSidebarProps) {
+  const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleTemplateUploadClick = () => {
+    templateUploadInputRef.current?.click()
+  }
+
   return (
     <section className="controls">
       <div className="section-block">
-        <TemplateSelector selectedId={selectedTemplateId} onSelect={onTemplateSelect} />
+        <TemplateSelector
+          title="Card Design Templates"
+          templates={designTemplates}
+          selectedId={selectedTemplateId}
+          isLoading={designTemplatesLoading}
+          error={designTemplatesError}
+          onSelect={onTemplateSelect}
+          onRetry={onRefreshDesignTemplates}
+          onUploadClick={handleTemplateUploadClick}
+          onDelete={onTemplateDelete}
+        />
+        <input
+          ref={templateUploadInputRef}
+          className="template-upload-input"
+          type="file"
+          accept="image/svg+xml"
+          onChange={onTemplateUpload}
+        />
+        {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
+        {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
       </div>
 
       <div className="section-block">
-        <label className="file-upload">
-          <span className="file-upload__label">Upload Illustrator SVG Template</span>
-          <input type="file" accept="image/svg+xml" onChange={onTemplateUpload} />
-        </label>
-        {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
-        {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
+        <TemplateSelector
+          title="Print Layouts"
+          templates={printTemplates}
+          selectedId={selectedTemplateId}
+          isLoading={printTemplatesLoading}
+          error={printTemplatesError}
+          onSelect={onTemplateSelect}
+          onRetry={onRefreshPrintTemplates}
+          onDelete={onTemplateDelete}
+        />
       </div>
 
       <div className="section-block">

@@ -385,10 +385,30 @@ label span {
   gap: 0.75rem;
 }
 
+.template-selector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.template-selector__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.template-upload-input {
+  display: none;
+}
+
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 0.75rem;
+}
+
+.template-card-container {
+  position: relative;
 }
 
 .template-card {
@@ -399,6 +419,7 @@ label span {
   text-align: left;
   cursor: pointer;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
 }
 
 .template-card:hover {
@@ -411,10 +432,37 @@ label span {
   box-shadow: 0 10px 20px rgba(26, 115, 232, 0.2);
 }
 
+.template-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .template-card__name {
   font-weight: 600;
   font-size: 0.95rem;
   color: #202124;
+}
+
+.template-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  align-self: flex-start;
+}
+
+.template-badge--design {
+  background: rgba(26, 115, 232, 0.1);
+  color: #1a73e8;
+}
+
+.template-badge--print {
+  background: rgba(156, 39, 176, 0.1);
+  color: #9c27b0;
 }
 
 .template-card__description {
@@ -422,6 +470,40 @@ label span {
   font-size: 0.8rem;
   color: #5f6368;
   margin-top: 0.35rem;
+}
+
+.template-card__delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(220, 53, 69, 0.9);
+  color: white;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.template-card-container:hover .template-card__delete {
+  opacity: 1;
+}
+
+.template-card__delete:hover {
+  background: #dc3545;
+}
+
+.template-card__delete:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 input[type='text'],

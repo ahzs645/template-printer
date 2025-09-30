@@ -13,22 +13,34 @@ export function getDatabase() {
   return dbSingleton
 }
 
-export function listTemplates() {
+export function listTemplates(type = null) {
   const db = getDatabase()
-  const rows = db
-    .prepare(
-      `SELECT id, name, description, svg_path AS svgPath, thumbnail_path AS thumbnailPath
-       FROM templates ORDER BY name`
-    )
-    .all()
+  let query = `SELECT id, name, description, svg_path AS svgPath, thumbnail_path AS thumbnailPath, template_type AS templateType, created_at AS createdAt
+       FROM templates`
+
+  if (type) {
+    query += ` WHERE template_type = ?`
+  }
+
+  query += ` ORDER BY name`
+
+  const stmt = type ? db.prepare(query) : db.prepare(query)
+  const rows = type ? stmt.all(type) : stmt.all()
+
   return rows.map((row) => ({
-    ...row,
+    id: row.id,
+    name: row.name,
+    description: row.description ?? null,
+    svgPath: row.svgPath,
     thumbnailPath: row.thumbnailPath ?? null,
+    templateType: row.templateType ?? 'design',
+    createdAt: row.createdAt ?? null,
   }))
 }
 
 function initializeDatabase() {
   ensureDataDirectory()
+  ensureTemplatesDirectory()
   const db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   createSchema(db)
@@ -42,6 +54,12 @@ function ensureDataDirectory() {
   }
 }
 
+function ensureTemplatesDirectory() {
+  if (!fs.existsSync(templatesDir)) {
+    fs.mkdirSync(templatesDir, { recursive: true })
+  }
+}
+
 function createSchema(db) {
   const createTemplatesTable = `
     CREATE TABLE IF NOT EXISTS templates (
@@ -50,6 +68,7 @@ function createSchema(db) {
       description TEXT,
       svg_path TEXT NOT NULL,
       thumbnail_path TEXT,
+      template_type TEXT DEFAULT 'design',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `
@@ -60,6 +79,16 @@ function createSchema(db) {
 
   db.exec(createTemplatesTable)
   db.exec(createUniqueIndex)
+
+  // Migration: Add template_type column if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE templates ADD COLUMN template_type TEXT DEFAULT 'design'`)
+  } catch (error) {
+    // Column already exists, ignore error
+    if (!error.message.includes('duplicate column name')) {
+      throw error
+    }
+  }
 }
 
 function seedTemplates(db) {
@@ -69,13 +98,14 @@ function seedTemplates(db) {
   }
 
   const insert = db.prepare(`
-    INSERT INTO templates (id, name, description, svg_path, thumbnail_path)
-    VALUES (@id, @name, @description, @svgPath, @thumbnailPath)
+    INSERT INTO templates (id, name, description, svg_path, thumbnail_path, template_type)
+    VALUES (@id, @name, @description, @svgPath, @thumbnailPath, @templateType)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       description = excluded.description,
       svg_path = excluded.svg_path,
-      thumbnail_path = excluded.thumbnail_path
+      thumbnail_path = excluded.thumbnail_path,
+      template_type = excluded.template_type
   `)
 
   for (const template of templates) {
@@ -103,6 +133,7 @@ function seedTemplates(db) {
       description: template.description ?? null,
       svgPath: normalized.svgPath,
       thumbnailPath: thumbnailAbsolute ? normalized.thumbnailPath : null,
+      templateType: template.templateType ?? 'design',
     })
   }
 }
@@ -134,6 +165,7 @@ function defaultTemplateSeeds() {
       description: 'Dual-card tray layout for Canon MP tray printers.',
       svgPath: '/templates/canon-mp-tray.svg',
       thumbnailPath: null,
+      templateType: 'print',
     },
     {
       id: 'libre-badge',
@@ -141,8 +173,85 @@ function defaultTemplateSeeds() {
       description: 'LibreBadge badge template imported from the LibreBadge project.',
       svgPath: '/templates/libre-badge.svg',
       thumbnailPath: null,
+      templateType: 'print',
     },
   ]
+}
+
+export function createTemplateRecord({ id, name, description, svgPath, thumbnailPath, templateType }) {
+  const db = getDatabase()
+  const cleaned = {
+    id,
+    name: name?.trim(),
+    description: description?.trim() || null,
+    svgPath,
+    thumbnailPath: thumbnailPath ?? null,
+    templateType: templateType ?? 'design',
+  }
+
+  if (!cleaned.id) {
+    throw new Error('Template id is required')
+  }
+  if (!cleaned.name) {
+    throw new Error('Template name is required')
+  }
+  if (!cleaned.svgPath) {
+    throw new Error('Template svgPath is required')
+  }
+
+  const insert = db.prepare(`
+    INSERT INTO templates (id, name, description, svg_path, thumbnail_path, template_type)
+    VALUES (@id, @name, @description, @svgPath, @thumbnailPath, @templateType)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      description = excluded.description,
+      svg_path = excluded.svg_path,
+      thumbnail_path = excluded.thumbnail_path,
+      template_type = excluded.template_type
+  `)
+
+  insert.run(cleaned)
+
+  return getTemplateById(cleaned.id)
+}
+
+export function getTemplateById(id) {
+  const db = getDatabase()
+  const row = db
+    .prepare(`
+      SELECT id, name, description, svg_path AS svgPath, thumbnail_path AS thumbnailPath, template_type AS templateType, created_at AS createdAt
+      FROM templates
+      WHERE id = ?
+    `)
+    .get(id)
+
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? null,
+    svgPath: row.svgPath,
+    thumbnailPath: row.thumbnailPath ?? null,
+    templateType: row.templateType ?? 'design',
+    createdAt: row.createdAt ?? null,
+  }
+}
+
+export function deleteTemplate(id) {
+  const db = getDatabase()
+  const template = getTemplateById(id)
+
+  if (!template) {
+    return null
+  }
+
+  const deleteStmt = db.prepare('DELETE FROM templates WHERE id = ?')
+  deleteStmt.run(id)
+
+  return template
 }
 
 function normalizeTemplatePaths(template) {
