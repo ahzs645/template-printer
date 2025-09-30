@@ -11,9 +11,8 @@
   display: flex;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 2rem 3rem 1.5rem;
+  padding: 2rem 3rem 0;
   background: #ffffff;
-  border-bottom: 1px solid rgba(32, 33, 36, 0.08);
 }
 
 .app-header h1 {
@@ -41,6 +40,34 @@
 
 .meta-item.muted {
   color: #9aa0a6;
+}
+
+.app-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 3rem;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(32, 33, 36, 0.08);
+}
+
+.app-tabs .tab {
+  all: unset;
+  padding: 1rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #5f6368;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.app-tabs .tab:hover {
+  color: #1a73e8;
+}
+
+.app-tabs .tab.active {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
 }
 
 .app-main {
@@ -594,6 +621,40 @@ button.danger:hover {
   gap: 1.5rem;
 }
 
+.export-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.print-layout-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.print-layout-selector label {
+  color: #5f6368;
+  white-space: nowrap;
+}
+
+.print-layout-selector select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(32, 33, 36, 0.15);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.9rem;
+  color: #3c4043;
+  cursor: pointer;
+  min-width: 200px;
+}
+
+.print-layout-selector select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .preview-layout {
   display: flex;
   gap: 1.5rem;
@@ -717,6 +778,266 @@ button.danger:hover {
   }
 }
 
+/* Export Page */
+.export-page {
+  display: flex;
+  gap: 2rem;
+  width: 100%;
+}
+
+.export-sidebar {
+  flex: 0 0 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.export-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.option-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.option-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.option-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3c4043;
+}
+
+.file-button-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.65rem;
+  background: rgba(26, 115, 232, 0.12);
+  color: #1a73e8;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid rgba(26, 115, 232, 0.2);
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: background 0.2s ease;
+}
+
+.file-button-small:hover {
+  background: rgba(26, 115, 232, 0.2);
+}
+
+.secondary-small {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.9rem;
+  border-radius: 8px;
+}
+
+.option-hint {
+  font-size: 0.75rem;
+  color: #5f6368;
+  margin: 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  width: auto;
+  cursor: pointer;
+}
+
+.checkbox-label span {
+  font-size: 0.9rem;
+  color: #3c4043;
+}
+
+.export-button {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.card-data-preview {
+  margin-top: 0.75rem;
+}
+
+.card-data-preview .field-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card-data-preview .field-list li {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.card-data-preview .field-name {
+  font-weight: 600;
+  color: #3c4043;
+  flex-shrink: 0;
+}
+
+.card-data-preview .field-value {
+  color: #5f6368;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-data-preview .field-value em {
+  color: #9aa0a6;
+  font-style: italic;
+}
+
+.card-data-preview .muted-text {
+  color: #9aa0a6;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.preview-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-container h2 {
+  margin-bottom: 1rem;
+}
+
+.preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #3c4043;
+  margin-bottom: 1rem;
+}
+
+.single-card-preview,
+.print-layout-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.svg-preview {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.svg-preview svg {
+  max-width: 100%;
+  max-height: 500px;
+  height: auto;
+  width: auto;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  border-radius: 8px;
+  display: block;
+}
+
+.print-layout-svg {
+  min-height: 400px;
+}
+
+.print-layout-svg svg {
+  max-height: 600px;
+  width: auto !important;
+  height: auto !important;
+}
+
+.preview-hint {
+  font-size: 0.85rem;
+  color: #5f6368;
+  text-align: center;
+  margin: 1rem 0 0;
+  font-style: italic;
+}
+
+.layout-preview-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 2px dashed rgba(32, 33, 36, 0.2);
+  min-height: 300px;
+}
+
+.layout-preview-placeholder p {
+  color: #5f6368;
+  font-size: 0.95rem;
+  text-align: center;
+  margin: 0;
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  min-height: 400px;
+}
+
+.empty-state p {
+  color: #9aa0a6;
+  font-size: 1rem;
+  text-align: center;
+  margin: 0;
+}
+
+.loading-message {
+  font-size: 0.8rem;
+  color: #1a73e8;
+  margin: 0.5rem 0 0;
+}
+
 @media (max-width: 768px) {
   .app-header,
   .app-main {
@@ -728,6 +1049,10 @@ button.danger:hover {
     align-items: flex-start;
   }
 
+  .app-tabs {
+    padding: 0 1.25rem;
+  }
+
   .controls,
   .preview {
     width: 100%;
@@ -737,5 +1062,13 @@ button.danger:hover {
     width: 100% !important;
     height: auto !important;
     aspect-ratio: 86 / 54;
+  }
+
+  .export-page {
+    flex-direction: column;
+  }
+
+  .export-sidebar {
+    width: 100%;
   }
 }

@@ -11,9 +11,8 @@ import {
 const PX_PER_MM = 3.779527559055
 const MM_PER_INCH = 25.4
 const POINTS_PER_INCH = 72
-const EXPORT_DPI = 300
+const DEFAULT_EXPORT_DPI = 300
 const PREVIEW_BASE_WIDTH = 420
-const LAYOUT_TEMPLATE_URL = '/templates/canon-mp-tray.svg'
 
 function asImageValue(value: CardData[string]): ImageValue | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -25,9 +24,47 @@ export async function exportSingleCard(
   template: TemplateMeta,
   fields: FieldDefinition[],
   cardData: CardData,
+  dpi: number = DEFAULT_EXPORT_DPI,
 ): Promise<void> {
-  const canvas = await renderCardToCanvas(template, fields, cardData)
-  const layout = await loadPrintLayout()
+  const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
+
+  const pdfDoc = await PDFDocument.create()
+  const page = pdfDoc.addPage([widthPoints, heightPoints])
+
+  const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+  const cardImage = await pdfDoc.embedPng(cardPngBytes)
+
+  page.drawImage(cardImage, {
+    x: 0,
+    y: 0,
+    width: widthPoints,
+    height: heightPoints,
+  })
+
+  const pdfBytes = await pdfDoc.save()
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  const baseName = template.name.replace(/\.svg$/i, '') || 'id-card'
+
+  downloadLink.href = downloadUrl
+  downloadLink.download = `${baseName}.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+export async function exportWithPrintLayout(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  cardData: CardData,
+  printLayoutSvgPath: string,
+  dpi: number = DEFAULT_EXPORT_DPI,
+): Promise<void> {
+  const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  const layout = await loadPrintLayout(printLayoutSvgPath)
 
   const pdfDoc = await PDFDocument.create()
   const page = pdfDoc.addPage([layout.widthPoints, layout.heightPoints])
@@ -68,7 +105,7 @@ export async function exportSingleCard(
   const baseName = template.name.replace(/\.svg$/i, '') || 'id-card'
 
   downloadLink.href = downloadUrl
-  downloadLink.download = `${baseName}-preview.pdf`
+  downloadLink.download = `${baseName}-print-layout.pdf`
   document.body.appendChild(downloadLink)
   downloadLink.click()
   downloadLink.remove()
@@ -79,10 +116,11 @@ export async function renderCardToCanvas(
   template: TemplateMeta,
   fields: FieldDefinition[],
   cardData: CardData,
+  dpi: number = DEFAULT_EXPORT_DPI,
 ): Promise<HTMLCanvasElement> {
   const { widthMm, heightMm } = getTemplateSizeInMm(template)
-  const canvasWidth = Math.max(1, Math.round((widthMm / MM_PER_INCH) * EXPORT_DPI))
-  const canvasHeight = Math.max(1, Math.round((heightMm / MM_PER_INCH) * EXPORT_DPI))
+  const canvasWidth = Math.max(1, Math.round((widthMm / MM_PER_INCH) * dpi))
+  const canvasHeight = Math.max(1, Math.round((heightMm / MM_PER_INCH) * dpi))
 
   const canvas = document.createElement('canvas')
   canvas.width = canvasWidth
@@ -292,8 +330,8 @@ type LayoutTemplate = {
   placeholders: LayoutPlaceholder[]
 }
 
-async function loadPrintLayout(): Promise<LayoutTemplate> {
-  const response = await fetch(LAYOUT_TEMPLATE_URL)
+async function loadPrintLayout(layoutSvgPath: string): Promise<LayoutTemplate> {
+  const response = await fetch(layoutSvgPath)
   if (!response.ok) {
     throw new Error('Unable to load print layout template')
   }

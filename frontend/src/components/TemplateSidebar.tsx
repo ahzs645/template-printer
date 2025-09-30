@@ -11,11 +11,7 @@ export type TemplateSidebarProps = {
   designTemplates: TemplateSummary[]
   designTemplatesLoading: boolean
   designTemplatesError: string | null
-  printTemplates: TemplateSummary[]
-  printTemplatesLoading: boolean
-  printTemplatesError: string | null
   onRefreshDesignTemplates: () => void
-  onRefreshPrintTemplates: () => void
   onTemplateSelect: (template: TemplateSummary) => void
   onTemplateUpload: (event: ChangeEvent<HTMLInputElement>) => void
   onTemplateDelete: (template: TemplateSummary) => void
@@ -37,11 +33,7 @@ export function TemplateSidebar({
   designTemplates,
   designTemplatesLoading,
   designTemplatesError,
-  printTemplates,
-  printTemplatesLoading,
-  printTemplatesError,
   onRefreshDesignTemplates,
-  onRefreshPrintTemplates,
   onTemplateSelect,
   onTemplateUpload,
   onTemplateDelete,
@@ -86,19 +78,6 @@ export function TemplateSidebar({
         />
         {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
         {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-      </div>
-
-      <div className="section-block">
-        <TemplateSelector
-          title="Print Layouts"
-          templates={printTemplates}
-          selectedId={selectedTemplateId}
-          isLoading={printTemplatesLoading}
-          error={printTemplatesError}
-          onSelect={onTemplateSelect}
-          onRetry={onRefreshPrintTemplates}
-          onDelete={onTemplateDelete}
-        />
       </div>
 
       <div className="section-block">

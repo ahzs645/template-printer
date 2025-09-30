@@ -4,10 +4,12 @@ import type { ChangeEvent } from 'react'
 import './App.css'
 import { TemplateSidebar } from './components/TemplateSidebar'
 import { PreviewWorkspace } from './components/PreviewWorkspace'
+import { ExportPage } from './components/ExportPage'
+import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { deleteTemplateFromLibrary, uploadTemplateToLibrary } from './lib/api'
-import { exportSingleCard } from './lib/exporter'
+import { exportSingleCard, exportWithPrintLayout } from './lib/exporter'
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import {
   getDefaultField,
@@ -20,9 +22,12 @@ import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
 
+type ActiveTab = 'design' | 'export'
+
 const PREVIEW_BASE_WIDTH = 420
 
 function App() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('design')
   const [template, setTemplate] = useState<TemplateMeta | null>(null)
   const [fields, setFields] = useState<FieldDefinition[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
@@ -117,7 +122,7 @@ function App() {
       setStatusMessage(baseMessage)
 
       try {
-        const savedTemplate = await uploadTemplateToLibrary(file, metadata)
+        const savedTemplate = await uploadTemplateToLibrary(file, metadata, 'design')
         setSelectedTemplateId(savedTemplate.id)
         await reloadDesignTemplates()
         setStatusMessage(`${baseMessage} Saved "${savedTemplate.name}" to your template library.`)
@@ -130,6 +135,23 @@ function App() {
     } catch (error) {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to import template')
+    }
+  }
+
+  const handlePrintLayoutUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setErrorMessage(null)
+
+    try {
+      const { metadata } = await parseTemplate(file)
+      await uploadTemplateToLibrary(file, metadata, 'print')
+      await reloadPrintTemplates()
+      setStatusMessage(`Print layout "${metadata.name}" uploaded successfully.`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload print layout')
     }
   }
 
@@ -248,7 +270,7 @@ function App() {
     }
   }
 
-  const handleExportPdf = async () => {
+  const handleExport = async (options: ExportOptions) => {
     if (!template) {
       setErrorMessage('Upload a template before exporting.')
       return
@@ -263,11 +285,25 @@ function App() {
     setErrorMessage(null)
 
     try {
-      await exportSingleCard(template, fields, cardData)
-      setStatusMessage('Exported PDF with current card data.')
+      // TODO: Implement PNG and SVG export formats
+      if (options.format === 'pdf') {
+        if (options.printLayoutId) {
+          const printLayout = printTemplates.find(t => t.id === options.printLayoutId)
+          if (!printLayout) {
+            throw new Error('Selected print layout not found')
+          }
+          await exportWithPrintLayout(template, fields, cardData, printLayout.svgPath, options.resolution)
+          setStatusMessage(`Exported PDF with print layout "${printLayout.name}".`)
+        } else {
+          await exportSingleCard(template, fields, cardData, options.resolution)
+          setStatusMessage(`Exported single card PDF.`)
+        }
+      } else {
+        throw new Error(`${options.format.toUpperCase()} export is not yet implemented`)
+      }
     } catch (error) {
       console.error(error)
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to export PDF')
+      setErrorMessage(error instanceof Error ? error.message : `Failed to export ${options.format.toUpperCase()}`)
     } finally {
       setIsExporting(false)
     }
@@ -337,52 +373,81 @@ function App() {
         </div>
       </header>
 
-      <main className="app-main">
-        <TemplateSidebar
-          selectedTemplateId={selectedTemplateId}
-          designTemplates={designTemplates}
-          designTemplatesLoading={designTemplatesLoading}
-          designTemplatesError={designTemplatesError}
-          printTemplates={printTemplates}
-          printTemplatesLoading={printTemplatesLoading}
-          printTemplatesError={printTemplatesError}
-          onRefreshDesignTemplates={reloadDesignTemplates}
-          onRefreshPrintTemplates={reloadPrintTemplates}
-          onTemplateSelect={handleTemplateSelect}
-          onTemplateUpload={handleTemplateUpload}
-          onTemplateDelete={handleTemplateDelete}
-          statusMessage={statusMessage}
-          errorMessage={errorMessage}
-          fontList={fontList}
-          missingFonts={missingFonts}
-          onFontUploadClick={handleFontUploadClick}
-          onFontFileSelect={handleFontFileSelect}
-          registerFontInput={registerFontInput}
-          fields={fields}
-          selectedFieldId={selectedFieldId}
-          onFieldSelect={handleFieldSelect}
-          onAddField={handleAddField}
-        />
+      <nav className="app-tabs">
+        <button
+          className={`tab ${activeTab === 'design' ? 'active' : ''}`}
+          onClick={() => setActiveTab('design')}
+        >
+          Design
+        </button>
+        <button
+          className={`tab ${activeTab === 'export' ? 'active' : ''}`}
+          onClick={() => setActiveTab('export')}
+        >
+          Export
+        </button>
+      </nav>
 
-        <PreviewWorkspace
-          template={template}
-          renderedSvg={renderedSvg}
-          fields={fields}
-          cardData={cardData}
-          selectedField={selectedField}
-          onCardDataChange={handleCardDataChange}
-          onImageUpload={handleImageUpload}
-          onImageAdjust={handleImageAdjust}
-          onFieldChange={handleFieldChange}
-          onDuplicateField={handleDuplicateField}
-          onDeleteField={handleDeleteField}
-          fontOptions={fontOptions}
-          missingFonts={missingFonts}
-          onExportPdf={handleExportPdf}
-          isExporting={isExporting}
-          previewWidth={previewWidth}
-          previewHeight={previewHeight}
-        />
+      <main className="app-main">
+        {activeTab === 'design' ? (
+          <Fragment>
+            <TemplateSidebar
+              selectedTemplateId={selectedTemplateId}
+              designTemplates={designTemplates}
+              designTemplatesLoading={designTemplatesLoading}
+              designTemplatesError={designTemplatesError}
+              onRefreshDesignTemplates={reloadDesignTemplates}
+              onTemplateSelect={handleTemplateSelect}
+              onTemplateUpload={handleTemplateUpload}
+              onTemplateDelete={handleTemplateDelete}
+              statusMessage={statusMessage}
+              errorMessage={errorMessage}
+              fontList={fontList}
+              missingFonts={missingFonts}
+              onFontUploadClick={handleFontUploadClick}
+              onFontFileSelect={handleFontFileSelect}
+              registerFontInput={registerFontInput}
+              fields={fields}
+              selectedFieldId={selectedFieldId}
+              onFieldSelect={handleFieldSelect}
+              onAddField={handleAddField}
+            />
+
+            <PreviewWorkspace
+              template={template}
+              renderedSvg={renderedSvg}
+              fields={fields}
+              cardData={cardData}
+              selectedField={selectedField}
+              onCardDataChange={handleCardDataChange}
+              onImageUpload={handleImageUpload}
+              onImageAdjust={handleImageAdjust}
+              onFieldChange={handleFieldChange}
+              onDuplicateField={handleDuplicateField}
+              onDeleteField={handleDeleteField}
+              fontOptions={fontOptions}
+              missingFonts={missingFonts}
+              onExportPdf={handleExport}
+              isExporting={isExporting}
+              previewWidth={previewWidth}
+              previewHeight={previewHeight}
+            />
+          </Fragment>
+        ) : (
+          <ExportPage
+            template={template}
+            fields={fields}
+            cardData={cardData}
+            printTemplates={printTemplates}
+            printTemplatesLoading={printTemplatesLoading}
+            printTemplatesError={printTemplatesError}
+            onRefreshPrintTemplates={reloadPrintTemplates}
+            onPrintLayoutUpload={handlePrintLayoutUpload}
+            onExport={handleExport}
+            isExporting={isExporting}
+            renderedSvg={renderedSvg}
+          />
+        )}
       </main>
     </div>
   )

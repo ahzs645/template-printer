@@ -2,6 +2,7 @@ import { CardDataPanel } from './CardDataPanel'
 import { FieldEditorPanel } from './FieldEditorPanel'
 import { PreviewField } from './PreviewField'
 import type { CardData, CardDataValue, FieldDefinition, ImageValue, TemplateMeta } from '../lib/types'
+import type { ExportOptions } from './ExportPage'
 
 export type PreviewWorkspaceProps = {
   template: TemplateMeta | null
@@ -17,7 +18,7 @@ export type PreviewWorkspaceProps = {
   onDeleteField: (fieldId: string) => void
   fontOptions: string[]
   missingFonts: string[]
-  onExportPdf: () => void
+  onExportPdf: (options: ExportOptions) => void
   isExporting: boolean
   previewWidth: number
   previewHeight: number
@@ -49,8 +50,13 @@ export function PreviewWorkspace({
           <h2>Live Preview</h2>
           <p className="muted">Fields are positioned relative to the template. Adjust values to fine-tune placement.</p>
         </div>
-        <button className="primary" type="button" onClick={onExportPdf} disabled={!template || isExporting}>
-          {isExporting ? 'Exporting…' : 'Export PDF'}
+        <button
+          className="primary"
+          type="button"
+          onClick={() => onExportPdf({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null })}
+          disabled={!template || isExporting}
+        >
+          {isExporting ? 'Exporting…' : 'Quick Export PDF'}
         </button>
       </div>
 
