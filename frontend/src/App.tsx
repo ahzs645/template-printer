@@ -14,7 +14,7 @@ import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { useUsers } from './hooks/useUsers'
 import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, getFieldMappings } from './lib/api'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
-import { exportSingleCard, exportWithPrintLayout, exportBatchCards } from './lib/exporter'
+import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout } from './lib/exporter'
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import {
   getDefaultField,
@@ -318,8 +318,25 @@ function App() {
         const selectedUsers = users.filter((u) => options.selectedUserIds.includes(u.id!))
 
         if (options.format === 'pdf') {
-          await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution)
-          setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
+          // Check if print layout is selected
+          if (options.printLayoutId) {
+            const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
+            if (!printLayout) {
+              throw new Error('Selected print layout not found')
+            }
+            await exportBatchCardsWithPrintLayout(
+              template,
+              fields,
+              selectedUsers,
+              fieldMappingsMap,
+              printLayout.svgPath,
+              options.resolution
+            )
+            setStatusMessage(`Exported ${selectedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
+          } else {
+            await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution)
+            setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
+          }
         } else {
           throw new Error(`${options.format.toUpperCase()} export is not yet implemented for batch mode`)
         }

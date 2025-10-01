@@ -170,6 +170,84 @@ export async function exportBatchCards(
   URL.revokeObjectURL(downloadUrl)
 }
 
+/**
+ * Export multiple cards for multiple users with print layout to a single PDF
+ * Each page in the PDF will have the print layout with cards in the placeholder slots
+ */
+export async function exportBatchCardsWithPrintLayout(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  printLayoutSvgPath: string,
+  dpi: number = DEFAULT_EXPORT_DPI,
+): Promise<void> {
+  const layout = await loadPrintLayout(printLayoutSvgPath)
+  const pdfDoc = await PDFDocument.create()
+  const { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
+
+  // Render each user's card
+  for (const user of users) {
+    // Convert user data to card data using field mappings
+    const cardData: CardData = {}
+    fields.forEach(field => {
+      const standardFieldName = fieldMappings[field.sourceId || ''] || fieldMappings[field.id]
+      if (standardFieldName) {
+        cardData[field.id] = parseField(standardFieldName, user)
+      }
+    })
+
+    // Render this user's card
+    const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+
+    // Create a new page with the print layout
+    const page = pdfDoc.addPage([layout.widthPoints, layout.heightPoints])
+
+    // Draw the print layout background
+    const layoutPngBytes = await svgMarkupToPngBytes(layout.backgroundSvg)
+    const layoutImage = await pdfDoc.embedPng(layoutPngBytes)
+    page.drawImage(layoutImage, {
+      x: 0,
+      y: 0,
+      width: layout.widthPoints,
+      height: layout.heightPoints,
+    })
+
+    // Convert card to image
+    const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+    const cardImage = await pdfDoc.embedPng(cardPngBytes)
+
+    // Place the card in each placeholder slot
+    layout.placeholders.forEach((slot) => {
+      const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+      const drawWidth = cardWidthPoints * scale
+      const drawHeight = cardHeightPoints * scale
+      const offsetX = slot.x + (slot.width - drawWidth) / 2
+      const offsetY = layout.heightPoints - slot.y - slot.height + (slot.height - drawHeight) / 2
+
+      page.drawImage(cardImage, {
+        x: offsetX,
+        y: offsetY,
+        width: drawWidth,
+        height: drawHeight,
+      })
+    })
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  const baseName = template.name.replace(/\.svg$/i, '') || 'id-cards'
+
+  downloadLink.href = downloadUrl
+  downloadLink.download = `${baseName}-batch-${users.length}-cards-print-layout.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
 export async function renderCardToCanvas(
   template: TemplateMeta,
   fields: FieldDefinition[],
