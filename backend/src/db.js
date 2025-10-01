@@ -445,3 +445,44 @@ export function deleteUser(id) {
 
   return user
 }
+
+// ============================================
+// FIELD MAPPING OPERATIONS
+// ============================================
+
+export function getFieldMappings(templateId) {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT id, templateId, svgLayerId, standardFieldName, createdAt
+    FROM template_field_mappings
+    WHERE templateId = ?
+  `)
+  return stmt.all(templateId)
+}
+
+export function saveFieldMappings(templateId, mappings) {
+  const db = getDatabase()
+
+  // Delete existing mappings for this template
+  const deleteStmt = db.prepare(`DELETE FROM template_field_mappings WHERE templateId = ?`)
+  deleteStmt.run(templateId)
+
+  // Insert new mappings
+  if (mappings.length === 0) return []
+
+  const insertStmt = db.prepare(`
+    INSERT INTO template_field_mappings (id, templateId, svgLayerId, standardFieldName)
+    VALUES (?, ?, ?, ?)
+  `)
+
+  const insertMany = db.transaction((mappingsToInsert) => {
+    for (const mapping of mappingsToInsert) {
+      const id = `mapping-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      insertStmt.run(id, templateId, mapping.svgLayerId, mapping.standardFieldName)
+    }
+  })
+
+  insertMany(mappings)
+
+  return getFieldMappings(templateId)
+}

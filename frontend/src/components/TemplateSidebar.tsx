@@ -1,5 +1,5 @@
-import { useRef, type ChangeEvent } from 'react'
-import { Upload, Plus, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
+import { useRef, useState, type ChangeEvent } from 'react'
+import { Upload, Plus, AlertCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
@@ -30,6 +30,8 @@ export type TemplateSidebarProps = {
   selectedFieldId: string | null
   onFieldSelect: (fieldId: string) => void
   onAddField: () => void
+  templateSvg: string | null
+  onOpenFieldMapping: () => void
 }
 
 export function TemplateSidebar({
@@ -52,6 +54,8 @@ export function TemplateSidebar({
   selectedFieldId,
   onFieldSelect,
   onAddField,
+  templateSvg,
+  onOpenFieldMapping,
 }: TemplateSidebarProps) {
   const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -200,10 +204,18 @@ export function TemplateSidebar({
         <CardHeader>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <CardTitle style={{ fontSize: '1rem' }}>Fields</CardTitle>
-            <Button variant="outline" size="sm" onClick={onAddField}>
-              <Plus style={{ width: '1rem', height: '1rem', marginRight: '0.5rem' }} />
-              Add Field
-            </Button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {selectedTemplateId && templateSvg && (
+                <Button variant="outline" size="sm" onClick={onOpenFieldMapping}>
+                  <Settings style={{ width: '1rem', height: '1rem', marginRight: '0.5rem' }} />
+                  Map Fields
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={onAddField}>
+                <Plus style={{ width: '1rem', height: '1rem', marginRight: '0.5rem' }} />
+                Add Field
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

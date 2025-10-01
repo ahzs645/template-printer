@@ -11,8 +11,10 @@ import { UsersTab } from './components/UsersTab'
 import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
-import { deleteTemplateFromLibrary, uploadTemplateToLibrary } from './lib/api'
-import { exportSingleCard, exportWithPrintLayout } from './lib/exporter'
+import { useUsers } from './hooks/useUsers'
+import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, getFieldMappings } from './lib/api'
+import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
+import { exportSingleCard, exportWithPrintLayout, exportBatchCards } from './lib/exporter'
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import {
   getDefaultField,
@@ -39,6 +41,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [fieldMappingDialogOpen, setFieldMappingDialogOpen] = useState(false)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -55,6 +58,8 @@ function App() {
     error: printTemplatesError,
     reload: reloadPrintTemplates,
   } = useTemplateLibrary('print')
+
+  const { users, loading: usersLoading } = useUsers()
 
   const resetPreviousObjectUrl = (nextUrl: string | null | undefined) => {
     if (previousObjectUrl.current && previousObjectUrl.current !== nextUrl) {
@@ -288,25 +293,66 @@ function App() {
     setErrorMessage(null)
 
     try {
-      // TODO: Implement PNG and SVG export formats
-      if (options.format === 'pdf') {
-        if (options.printLayoutId) {
-          const printLayout = printTemplates.find(t => t.id === options.printLayoutId)
-          if (!printLayout) {
-            throw new Error('Selected print layout not found')
-          }
-          await exportWithPrintLayout(template, fields, cardData, printLayout.svgPath, options.resolution)
-          setStatusMessage(`Exported PDF with print layout "${printLayout.name}".`)
-        } else {
-          await exportSingleCard(template, fields, cardData, options.resolution)
-          setStatusMessage(`Exported single card PDF.`)
+      // Database mode - batch export for multiple users
+      if (options.mode === 'database') {
+        if (options.selectedUserIds.length === 0) {
+          throw new Error('Select at least one user to export')
         }
-      } else {
-        throw new Error(`${options.format.toUpperCase()} export is not yet implemented`)
+
+        if (!selectedTemplateId) {
+          throw new Error('Template must be saved to use database mode')
+        }
+
+        // Get field mappings for this template
+        const mappings = await getFieldMappings(selectedTemplateId)
+        const fieldMappingsMap: Record<string, string> = {}
+        mappings.forEach((m) => {
+          fieldMappingsMap[m.svgLayerId] = m.standardFieldName
+        })
+
+        if (Object.keys(fieldMappingsMap).length === 0) {
+          throw new Error('No field mappings defined. Use "Map Fields" button in Design tab.')
+        }
+
+        // Get selected users
+        const selectedUsers = users.filter((u) => options.selectedUserIds.includes(u.id!))
+
+        if (options.format === 'pdf') {
+          await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution)
+          setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
+        } else {
+          throw new Error(`${options.format.toUpperCase()} export is not yet implemented for batch mode`)
+        }
+      }
+      // Quick mode - single card export
+      else {
+        if (options.format === 'pdf') {
+          if (options.printLayoutId) {
+            const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
+            if (!printLayout) {
+              throw new Error('Selected print layout not found')
+            }
+            await exportWithPrintLayout(
+              template,
+              fields,
+              cardData,
+              printLayout.svgPath,
+              options.resolution
+            )
+            setStatusMessage(`Exported PDF with print layout "${printLayout.name}".`)
+          } else {
+            await exportSingleCard(template, fields, cardData, options.resolution)
+            setStatusMessage(`Exported single card PDF.`)
+          }
+        } else {
+          throw new Error(`${options.format.toUpperCase()} export is not yet implemented`)
+        }
       }
     } catch (error) {
       console.error(error)
-      setErrorMessage(error instanceof Error ? error.message : `Failed to export ${options.format.toUpperCase()}`)
+      setErrorMessage(
+        error instanceof Error ? error.message : `Failed to export ${options.format.toUpperCase()}`
+      )
     } finally {
       setIsExporting(false)
     }
@@ -344,6 +390,24 @@ function App() {
     } catch (error) {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to delete template')
+    }
+  }
+
+  const handleOpenFieldMapping = () => {
+    setFieldMappingDialogOpen(true)
+  }
+
+  const handleSaveFieldMappings = async (mappings: FieldMapping[]) => {
+    if (!selectedTemplateId) {
+      throw new Error('No template selected')
+    }
+
+    try {
+      await saveFieldMappings(selectedTemplateId, mappings)
+      setStatusMessage(`Saved ${mappings.length} field mapping${mappings.length !== 1 ? 's' : ''}.`)
+    } catch (error) {
+      console.error(error)
+      throw error
     }
   }
 
@@ -431,6 +495,8 @@ function App() {
                   selectedFieldId={selectedFieldId}
                   onFieldSelect={handleFieldSelect}
                   onAddField={handleAddField}
+                  templateSvg={template?.rawSvg ?? null}
+                  onOpenFieldMapping={handleOpenFieldMapping}
                 />
               </div>
 
@@ -465,7 +531,7 @@ function App() {
 
           <TabsContent value="export" style={{ marginTop: 0 }}>
             <ExportPage
-              template={template}
+              template={selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
               fields={fields}
               cardData={cardData}
               printTemplates={printTemplates}
@@ -476,10 +542,25 @@ function App() {
               onExport={handleExport}
               isExporting={isExporting}
               renderedSvg={renderedSvg}
+              users={users}
+              usersLoading={usersLoading}
+              designTemplates={designTemplates}
+              designTemplatesLoading={designTemplatesLoading}
+              onTemplateSelect={handleTemplateSelect}
+              onCardDataChange={handleCardDataChange}
             />
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Field Mapping Dialog */}
+      <FieldMappingDialog
+        open={fieldMappingDialogOpen}
+        onOpenChange={setFieldMappingDialogOpen}
+        svgContent={template?.rawSvg ?? ''}
+        templateId={selectedTemplateId}
+        onSave={handleSaveFieldMappings}
+      />
     </div>
   )
 }

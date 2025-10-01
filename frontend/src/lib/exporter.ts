@@ -1,5 +1,7 @@
 import { PDFDocument } from 'pdf-lib'
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './types'
+import type { UserData } from './fieldParser'
+import { parseField } from './fieldParser'
 import {
   buildCanvasFontString,
   clamp,
@@ -106,6 +108,57 @@ export async function exportWithPrintLayout(
 
   downloadLink.href = downloadUrl
   downloadLink.download = `${baseName}-print-layout.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+/**
+ * Export multiple cards for multiple users to a single PDF
+ */
+export async function exportBatchCards(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  users: UserData[],
+  fieldMappings: Record<string, string>, // Map of field IDs to standard field names
+  dpi: number = DEFAULT_EXPORT_DPI,
+): Promise<void> {
+  const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
+  const pdfDoc = await PDFDocument.create()
+
+  for (const user of users) {
+    // Convert user data to card data using field mappings
+    const cardData: CardData = {}
+    Object.entries(fieldMappings).forEach(([fieldId, standardFieldName]) => {
+      if (standardFieldName) {
+        cardData[fieldId] = parseField(standardFieldName, user)
+      }
+    })
+
+    // Render this user's card
+    const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    const page = pdfDoc.addPage([widthPoints, heightPoints])
+
+    const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+    const cardImage = await pdfDoc.embedPng(cardPngBytes)
+
+    page.drawImage(cardImage, {
+      x: 0,
+      y: 0,
+      width: widthPoints,
+      height: heightPoints,
+    })
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  const baseName = template.name.replace(/\.svg$/i, '') || 'id-cards'
+
+  downloadLink.href = downloadUrl
+  downloadLink.download = `${baseName}-batch-${users.length}-cards.pdf`
   document.body.appendChild(downloadLink)
   downloadLink.click()
   downloadLink.remove()

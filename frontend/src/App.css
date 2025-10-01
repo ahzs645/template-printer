@@ -13,6 +13,13 @@
   height: auto;
 }
 
+/* Export preview SVG scaling */
+.export-preview-svg svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
 /* File input hidden for custom button styling */
 .file-button__input {
   display: none;

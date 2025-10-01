@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useUsers } from '../hooks/useUsers'
 import { Button } from './ui/button'
 import {
@@ -19,7 +19,7 @@ import {
 } from './ui/dialog'
 import { Input } from './ui/input'
 import type { UserData } from '../lib/fieldParser'
-import { Plus, Pencil, Trash2, Download, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download, Upload, ImageIcon } from 'lucide-react'
 
 export function UsersTab() {
   const { users, loading, error, createUser, updateUser, deleteUser, refresh } = useUsers()
@@ -27,6 +27,8 @@ export function UsersTab() {
   const [editingUser, setEditingUser] = useState<UserData | null>(null)
   const [formData, setFormData] = useState<Partial<UserData>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const csvImportInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingPhotoFor, setUploadingPhotoFor] = useState<string | null>(null)
 
   const handleOpenCreate = () => {
     setEditingUser(null)
@@ -74,11 +76,92 @@ export function UsersTab() {
   }
 
   const handleImportCSV = () => {
-    alert('CSV import coming soon!')
+    csvImportInputRef.current?.click()
   }
 
-  const handleExportCSV = () => {
-    alert('CSV export coming soon!')
+  const handleCSVFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/users/import-csv', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to import CSV')
+      }
+
+      const result = await response.json()
+
+      if (result.errors && result.errors.length > 0) {
+        alert(`Imported ${result.created} users with ${result.errors.length} errors:\n${result.errors.slice(0, 5).join('\n')}`)
+      } else {
+        alert(`Successfully imported ${result.created} users`)
+      }
+
+      refresh()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to import CSV')
+    }
+  }
+
+  const handleExportCSV = async () => {
+    try {
+      const response = await fetch('/api/users/export-csv')
+
+      if (!response.ok) {
+        throw new Error('Failed to export CSV')
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'users.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export CSV')
+    }
+  }
+
+  const handlePhotoUpload = async (userId: string, file: File) => {
+    setUploadingPhotoFor(userId)
+    try {
+      const formData = new FormData()
+      formData.append('photo', file)
+
+      const response = await fetch(`/api/users/${userId}/upload-photo`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload photo')
+      }
+
+      await refresh()
+      alert('Photo uploaded successfully')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to upload photo')
+    } finally {
+      setUploadingPhotoFor(null)
+    }
+  }
+
+  const handlePhotoInputChange = (userId: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    handlePhotoUpload(userId, file)
   }
 
   if (loading) {
@@ -149,17 +232,41 @@ export function UsersTab() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead style={{ width: '60px' }}>Photo</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Student ID</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Position</TableHead>
-                  <TableHead style={{ width: '100px', textAlign: 'right' }}>Actions</TableHead>
+                  <TableHead style={{ width: '140px', textAlign: 'right' }}>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
+                    <TableCell>
+                      {user.photoPath ? (
+                        <img
+                          src={user.photoPath}
+                          alt={`${user.firstName} ${user.lastName}`}
+                          style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          backgroundColor: '#e4e4e7',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#71717a',
+                          fontSize: '0.75rem'
+                        }}>
+                          {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell style={{ fontWeight: 500 }}>
                       {user.firstName} {user.middleName && `${user.middleName}. `}
                       {user.lastName}
@@ -170,6 +277,22 @@ export function UsersTab() {
                     <TableCell>{user.position || '-'}</TableCell>
                     <TableCell>
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id={`photo-upload-${user.id}`}
+                          onChange={(e) => handlePhotoInputChange(user.id!, e)}
+                          style={{ display: 'none' }}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => document.getElementById(`photo-upload-${user.id}`)?.click()}
+                          disabled={uploadingPhotoFor === user.id}
+                          title="Upload photo"
+                        >
+                          <ImageIcon style={{ width: '1rem', height: '1rem' }} />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -195,6 +318,14 @@ export function UsersTab() {
           </div>
         )}
       </div>
+
+      <input
+        ref={csvImportInputRef}
+        type="file"
+        accept=".csv"
+        onChange={handleCSVFileSelect}
+        style={{ display: 'none' }}
+      />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>

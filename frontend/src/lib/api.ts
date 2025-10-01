@@ -49,3 +49,40 @@ async function safeReadErrorMessage(response: Response): Promise<string | null> 
   }
   return null
 }
+
+// Field Mapping API
+export interface FieldMapping {
+  svgLayerId: string
+  standardFieldName: string
+}
+
+export async function getFieldMappings(templateId: string): Promise<FieldMapping[]> {
+  const response = await fetch(`/api/templates/${templateId}/field-mappings`)
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to get field mappings (${response.status})`)
+  }
+
+  return await response.json()
+}
+
+export async function saveFieldMappings(
+  templateId: string,
+  mappings: FieldMapping[]
+): Promise<FieldMapping[]> {
+  const response = await fetch(`/api/templates/${templateId}/field-mappings`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ mappings }),
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to save field mappings (${response.status})`)
+  }
+
+  return await response.json()
+}
