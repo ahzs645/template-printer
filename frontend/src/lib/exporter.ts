@@ -123,6 +123,7 @@ export async function exportBatchCards(
   users: UserData[],
   fieldMappings: Record<string, string>, // Map of field IDs to standard field names
   dpi: number = DEFAULT_EXPORT_DPI,
+  customValues?: Record<string, string>, // Map of field IDs to custom static values
 ): Promise<void> {
   const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
   const pdfDoc = await PDFDocument.create()
@@ -135,9 +136,11 @@ export async function exportBatchCards(
 
     fields.forEach(field => {
       // Check if this field has a mapping (check sourceId first, then id as fallback)
-      const standardFieldName = fieldMappings[field.sourceId || ''] || fieldMappings[field.id]
+      const layerId = field.sourceId || field.id
+      const standardFieldName = fieldMappings[layerId]
       if (standardFieldName) {
-        cardData[field.id] = parseField(standardFieldName, user)
+        const customValue = customValues?.[layerId]
+        cardData[field.id] = parseField(standardFieldName, user, customValue)
       }
     })
 
@@ -181,6 +184,7 @@ export async function exportBatchCardsWithPrintLayout(
   fieldMappings: Record<string, string>,
   printLayoutSvgPath: string,
   dpi: number = DEFAULT_EXPORT_DPI,
+  customValues?: Record<string, string>,
 ): Promise<void> {
   const layout = await loadPrintLayout(printLayoutSvgPath)
   const pdfDoc = await PDFDocument.create()
@@ -191,9 +195,11 @@ export async function exportBatchCardsWithPrintLayout(
     // Convert user data to card data using field mappings
     const cardData: CardData = {}
     fields.forEach(field => {
-      const standardFieldName = fieldMappings[field.sourceId || ''] || fieldMappings[field.id]
+      const layerId = field.sourceId || field.id
+      const standardFieldName = fieldMappings[layerId]
       if (standardFieldName) {
-        cardData[field.id] = parseField(standardFieldName, user)
+        const customValue = customValues?.[layerId]
+        cardData[field.id] = parseField(standardFieldName, user, customValue)
       }
     })
 

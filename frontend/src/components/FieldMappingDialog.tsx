@@ -9,6 +9,7 @@ import {
 } from './ui/dialog'
 import { Button } from './ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Input } from './ui/input'
 import { extractFieldsFromSVG } from '../lib/fieldParser'
 import { Badge } from './ui/badge'
 import { Check, X } from 'lucide-react'
@@ -16,12 +17,14 @@ import { Check, X } from 'lucide-react'
 export interface FieldMapping {
   svgLayerId: string
   standardFieldName: string
+  customValue?: string
 }
 
 interface FieldMappingDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   svgContent: string
+  fields: Array<{ id: string; sourceId?: string; label: string; type: string }>
   templateId: string | null
   onSave: (mappings: FieldMapping[]) => Promise<void>
 }
@@ -75,32 +78,104 @@ const STANDARD_FIELDS = [
   'logo',
 ]
 
+const CUSTOM_STATIC_VALUE = '__custom__'
+
+// Extract text content from SVG field
+function extractTextFromSVGField(svgContent: string, fieldId: string): string {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(svgContent, 'image/svg+xml')
+
+  // Find element by ID
+  const element = doc.getElementById(fieldId)
+  if (!element) return ''
+
+  // Try to get text content from tspan or text elements
+  const tspans = element.querySelectorAll('tspan')
+  if (tspans.length > 0) {
+    return Array.from(tspans).map(t => t.textContent || '').join(' ').trim()
+  }
+
+  // Check if it's a text element itself
+  if (element.tagName.toLowerCase() === 'text' || element.tagName.toLowerCase() === 'tspan') {
+    return element.textContent?.trim() || ''
+  }
+
+  // Try children
+  const textElements = element.querySelectorAll('text, tspan')
+  if (textElements.length > 0) {
+    return Array.from(textElements).map(t => t.textContent || '').join(' ').trim()
+  }
+
+  return ''
+}
+
 export function FieldMappingDialog({
   open,
   onOpenChange,
   svgContent,
+  fields,
   templateId,
   onSave,
 }: FieldMappingDialogProps) {
   const [detectedFields, setDetectedFields] = useState<string[]>([])
   const [mappings, setMappings] = useState<Record<string, string>>({})
+  const [customValues, setCustomValues] = useState<Record<string, string>>({})
+  const [fieldTextContent, setFieldTextContent] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (open && svgContent) {
-      const fields = extractFieldsFromSVG(svgContent)
-      setDetectedFields(fields)
+    if (open && fields.length > 0) {
+      // Use sourceId (original SVG id) for field mapping keys
+      const fieldIds = fields.map(f => f.sourceId || f.id)
+      setDetectedFields(fieldIds)
+
+      // Extract text content for each field using sourceId
+      const textContent: Record<string, string> = {}
+      fields.forEach(field => {
+        const fieldId = field.sourceId || field.id
+        textContent[fieldId] = field.label || extractTextFromSVGField(svgContent, fieldId)
+      })
+      setFieldTextContent(textContent)
 
       // Auto-map fields that match standard field names
       const autoMappings: Record<string, string> = {}
+      const autoCustomValues: Record<string, string> = {}
+
       fields.forEach(field => {
-        if (STANDARD_FIELDS.includes(field)) {
-          autoMappings[field] = field
+        const fieldId = field.sourceId || field.id
+        const normalizedId = fieldId.toLowerCase()
+
+        // Exact match
+        if (STANDARD_FIELDS.includes(fieldId)) {
+          autoMappings[fieldId] = fieldId
+        }
+        // Case-insensitive match
+        else {
+          const matchingField = STANDARD_FIELDS.find(sf => sf.toLowerCase() === normalizedId)
+          if (matchingField) {
+            autoMappings[fieldId] = matchingField
+          }
+          // Special mappings for common variations
+          else if (normalizedId === 'profilephoto' || normalizedId === 'profile' || normalizedId === 'userphoto') {
+            autoMappings[fieldId] = 'photo'
+          }
+          else if (normalizedId === 'studentid' || normalizedId === 'student_id' || normalizedId === 'id') {
+            autoMappings[fieldId] = 'studentId'
+          }
+          else if (normalizedId === 'fullname' || normalizedId === 'name') {
+            autoMappings[fieldId] = 'fullName_Last_Comma_First_MiddleInitial_AllCaps'
+          }
+          // If field starts with "custom", auto-map to Custom Static Text with existing label
+          else if (normalizedId.startsWith('custom')) {
+            autoMappings[fieldId] = CUSTOM_STATIC_VALUE
+            autoCustomValues[fieldId] = field.label || textContent[fieldId] || ''
+          }
         }
       })
       setMappings(autoMappings)
+      setCustomValues(autoCustomValues)
     }
-  }, [open, svgContent])
+  }, [open, fields, svgContent])
 
   const handleMappingChange = (svgLayerId: string, standardFieldName: string) => {
     setMappings(prev => ({
@@ -124,6 +199,7 @@ export function FieldMappingDialog({
         ([svgLayerId, standardFieldName]) => ({
           svgLayerId,
           standardFieldName,
+          customValue: standardFieldName === CUSTOM_STATIC_VALUE ? customValues[svgLayerId] : undefined,
         })
       )
       await onSave(mappingsArray)
@@ -185,7 +261,7 @@ export function FieldMappingDialog({
                     backgroundColor: mappings[field] ? '#f0fdf4' : '#fff',
                   }}
                 >
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       {mappings[field] ? (
                         <Check style={{ width: '1rem', height: '1rem', color: '#16a34a' }} />
@@ -194,6 +270,20 @@ export function FieldMappingDialog({
                       )}
                       <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{field}</span>
                     </div>
+                    {fieldTextContent[field] && (
+                      <div style={{
+                        fontSize: '0.75rem',
+                        color: '#71717a',
+                        marginBottom: '0.5rem',
+                        fontStyle: 'italic',
+                        padding: '0.25rem 0.5rem',
+                        backgroundColor: '#f4f4f5',
+                        borderRadius: '0.25rem',
+                        border: '1px solid #e4e4e7'
+                      }}>
+                        Example: "{fieldTextContent[field]}"
+                      </div>
+                    )}
                     <Select
                       value={mappings[field] || ''}
                       onValueChange={(value) => {
@@ -211,6 +301,9 @@ export function FieldMappingDialog({
                         <SelectItem value="__none__">
                           <em style={{ color: '#71717a' }}>No mapping</em>
                         </SelectItem>
+                        <SelectItem value={CUSTOM_STATIC_VALUE}>
+                          <strong>Custom Static Text...</strong>
+                        </SelectItem>
                         {STANDARD_FIELDS.map(standardField => (
                           <SelectItem key={standardField} value={standardField}>
                             {standardField}
@@ -218,6 +311,19 @@ export function FieldMappingDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    {mappings[field] === CUSTOM_STATIC_VALUE && (
+                      <Input
+                        placeholder="Enter static text (same for all cards)..."
+                        value={customValues[field] || ''}
+                        onChange={(e) => {
+                          setCustomValues(prev => ({
+                            ...prev,
+                            [field]: e.target.value,
+                          }))
+                        }}
+                        style={{ marginTop: '0.5rem' }}
+                      />
+                    )}
                   </div>
                 </div>
               ))}

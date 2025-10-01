@@ -15,6 +15,7 @@ import { useUsers } from './hooks/useUsers'
 import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, getFieldMappings } from './lib/api'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout } from './lib/exporter'
+import { generateAutoMappings } from './lib/autoMapping'
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import {
   getDefaultField,
@@ -42,6 +43,7 @@ function App() {
   const [isExporting, setIsExporting] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [fieldMappingDialogOpen, setFieldMappingDialogOpen] = useState(false)
+  const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -133,7 +135,16 @@ function App() {
         const savedTemplate = await uploadTemplateToLibrary(file, metadata, 'design')
         setSelectedTemplateId(savedTemplate.id)
         await reloadDesignTemplates()
-        setStatusMessage(`${baseMessage} Saved "${savedTemplate.name}" to your template library.`)
+
+        // Automatically generate and save field mappings
+        const autoMappings = generateAutoMappings(nextFields)
+        if (autoMappings.length > 0) {
+          await saveFieldMappings(savedTemplate.id, autoMappings)
+          setFieldMappingsVersion(v => v + 1)
+          setStatusMessage(`${baseMessage} Saved "${savedTemplate.name}" with ${autoMappings.length} auto-mapped field${autoMappings.length === 1 ? '' : 's'}.`)
+        } else {
+          setStatusMessage(`${baseMessage} Saved "${savedTemplate.name}" to your template library.`)
+        }
       } catch (uploadError) {
         console.error(uploadError)
         setSelectedTemplateId(null)
@@ -180,10 +191,25 @@ function App() {
       setCardData(() => ({}))
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
+
+      // Check if field mappings exist, if not, auto-generate and save them
+      const existingMappings = await getFieldMappings(templateSummary.id)
+      if (existingMappings.length === 0 && nextFields.length > 0) {
+        const autoMappings = generateAutoMappings(nextFields)
+        if (autoMappings.length > 0) {
+          await saveFieldMappings(templateSummary.id, autoMappings)
+          setFieldMappingsVersion(v => v + 1)
+          setStatusMessage(
+            `Loaded template "${templateSummary.name}" with ${autoFields.length} placeholder${autoFields.length === 1 ? '' : 's'}. Auto-mapped ${autoMappings.length} field${autoMappings.length === 1 ? '' : 's'}.`
+          )
+          return
+        }
+      }
+
       setStatusMessage(
         autoFields.length
-          ? `Loaded template “${templateSummary.name}” with ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
-          : `Loaded template “${templateSummary.name}”. No placeholders detected - add fields manually to continue.`,
+          ? `Loaded template "${templateSummary.name}" with ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
+          : `Loaded template "${templateSummary.name}". No placeholders detected - add fields manually to continue.`,
       )
     } catch (error) {
       console.error(error)
@@ -306,8 +332,12 @@ function App() {
         // Get field mappings for this template
         const mappings = await getFieldMappings(selectedTemplateId)
         const fieldMappingsMap: Record<string, string> = {}
+        const customValuesMap: Record<string, string> = {}
         mappings.forEach((m) => {
           fieldMappingsMap[m.svgLayerId] = m.standardFieldName
+          if (m.customValue) {
+            customValuesMap[m.svgLayerId] = m.customValue
+          }
         })
 
         if (Object.keys(fieldMappingsMap).length === 0) {
@@ -330,11 +360,12 @@ function App() {
               selectedUsers,
               fieldMappingsMap,
               printLayout.svgPath,
-              options.resolution
+              options.resolution,
+              customValuesMap
             )
             setStatusMessage(`Exported ${selectedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
           } else {
-            await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution)
+            await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution, customValuesMap)
             setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
           }
         } else {
@@ -422,6 +453,11 @@ function App() {
     try {
       await saveFieldMappings(selectedTemplateId, mappings)
       setStatusMessage(`Saved ${mappings.length} field mapping${mappings.length !== 1 ? 's' : ''}.`)
+      // Trigger refresh of field mappings in sidebar
+      setFieldMappingsVersion(v => v + 1)
+      setTimeout(() => {
+        setStatusMessage(null)
+      }, 3000)
     } catch (error) {
       console.error(error)
       throw error
@@ -514,6 +550,7 @@ function App() {
                   onAddField={handleAddField}
                   templateSvg={template?.rawSvg ?? null}
                   onOpenFieldMapping={handleOpenFieldMapping}
+                  fieldMappingsVersion={fieldMappingsVersion}
                 />
               </div>
 
@@ -577,6 +614,7 @@ function App() {
         open={fieldMappingDialogOpen}
         onOpenChange={setFieldMappingDialogOpen}
         svgContent={template?.rawSvg ?? ''}
+        fields={fields}
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
       />

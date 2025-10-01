@@ -145,6 +145,16 @@ function createSchema(db) {
       throw error
     }
   }
+
+  // Migration: Add customValue column to template_field_mappings if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE template_field_mappings ADD COLUMN customValue TEXT`)
+  } catch (error) {
+    // Column already exists, ignore error
+    if (!error.message.includes('duplicate column name')) {
+      throw error
+    }
+  }
 }
 
 function seedTemplates(db) {
@@ -465,7 +475,7 @@ export function deleteUser(id) {
 export function getFieldMappings(templateId) {
   const db = getDatabase()
   const stmt = db.prepare(`
-    SELECT id, templateId, svgLayerId, standardFieldName, createdAt
+    SELECT id, templateId, svgLayerId, standardFieldName, customValue, createdAt
     FROM template_field_mappings
     WHERE templateId = ?
   `)
@@ -483,14 +493,14 @@ export function saveFieldMappings(templateId, mappings) {
   if (mappings.length === 0) return []
 
   const insertStmt = db.prepare(`
-    INSERT INTO template_field_mappings (id, templateId, svgLayerId, standardFieldName)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO template_field_mappings (id, templateId, svgLayerId, standardFieldName, customValue)
+    VALUES (?, ?, ?, ?, ?)
   `)
 
   const insertMany = db.transaction((mappingsToInsert) => {
     for (const mapping of mappingsToInsert) {
       const id = `mapping-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-      insertStmt.run(id, templateId, mapping.svgLayerId, mapping.standardFieldName)
+      insertStmt.run(id, templateId, mapping.svgLayerId, mapping.standardFieldName, mapping.customValue || null)
     }
   })
 

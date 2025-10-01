@@ -10,6 +10,7 @@ import type { FieldDefinition } from '../lib/types'
 import type { FontEntry } from '../hooks/useFontManager'
 import type { TemplateSummary } from '../lib/templates'
 import { getFieldMappings } from '../lib/api'
+import { isAutoMappable } from '../lib/autoMapping'
 
 export type TemplateSidebarProps = {
   selectedTemplateId: string | null
@@ -33,6 +34,7 @@ export type TemplateSidebarProps = {
   onAddField: () => void
   templateSvg: string | null
   onOpenFieldMapping: () => void
+  fieldMappingsVersion: number
 }
 
 export function TemplateSidebar({
@@ -57,13 +59,14 @@ export function TemplateSidebar({
   onAddField,
   templateSvg,
   onOpenFieldMapping,
+  fieldMappingsVersion,
 }: TemplateSidebarProps) {
   const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
 
-  // Fetch field mappings when template is selected
+  // Fetch field mappings when template is selected, fields change, or mappings are saved
   useEffect(() => {
-    if (selectedTemplateId) {
+    if (selectedTemplateId && fields.length > 0) {
       getFieldMappings(selectedTemplateId)
         .then(mappings => {
           const mappingsMap: Record<string, string> = {}
@@ -78,15 +81,24 @@ export function TemplateSidebar({
     } else {
       setFieldMappings({})
     }
-  }, [selectedTemplateId])
+  }, [selectedTemplateId, fields, fieldMappingsVersion])
 
   const handleTemplateUploadClick = () => {
     templateUploadInputRef.current?.click()
   }
 
-  // Check if a field is mapped
+  // Check if a field is mapped (either saved or would be auto-mapped)
   const isFieldMapped = (field: FieldDefinition): boolean => {
-    return !!(fieldMappings[field.sourceId || ''] || fieldMappings[field.id])
+    // Check if already saved in database
+    const sourceIdMapped = fieldMappings[field.sourceId || '']
+    const idMapped = fieldMappings[field.id]
+
+    if (sourceIdMapped || idMapped) {
+      return true
+    }
+
+    // Check if it would be auto-mapped (even if not saved yet)
+    return isAutoMappable(field)
   }
 
   return (

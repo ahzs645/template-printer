@@ -26,6 +26,7 @@ export function useExportPreview({
   renderedSvg,
 }: UseExportPreviewParams) {
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
+  const [customValues, setCustomValues] = useState<Record<string, string>>({})
 
   // Fetch field mappings when template or mode changes
   useEffect(() => {
@@ -33,10 +34,15 @@ export function useExportPreview({
       getFieldMappings(selectedTemplateId)
         .then(mappings => {
           const mappingsMap: Record<string, string> = {}
+          const customValuesMap: Record<string, string> = {}
           mappings.forEach(m => {
             mappingsMap[m.svgLayerId] = m.standardFieldName
+            if (m.customValue) {
+              customValuesMap[m.svgLayerId] = m.customValue
+            }
           })
           setFieldMappings(mappingsMap)
+          setCustomValues(customValuesMap)
         })
         .catch(err => {
           console.error('Failed to load field mappings:', err)
@@ -66,9 +72,11 @@ export function useExportPreview({
       const previewCardData: CardData = {}
 
       fields.forEach(field => {
-        const standardFieldName = fieldMappings[field.sourceId || ''] || fieldMappings[field.id]
+        const layerId = field.sourceId || field.id
+        const standardFieldName = fieldMappings[layerId]
         if (standardFieldName) {
-          previewCardData[field.id] = parseField(standardFieldName, firstUser)
+          const customValue = customValues[layerId]
+          previewCardData[field.id] = parseField(standardFieldName, firstUser, customValue)
         }
       })
 
@@ -77,7 +85,7 @@ export function useExportPreview({
       console.error('Failed to generate database mode preview:', error)
       return renderedSvg
     }
-  }, [mode, selectedUserIds, templateMeta, users, fieldMappings, fields, renderedSvg])
+  }, [mode, selectedUserIds, templateMeta, users, fieldMappings, customValues, fields, renderedSvg])
 
   return { previewSvg }
 }

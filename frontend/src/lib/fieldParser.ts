@@ -69,11 +69,17 @@ function applyCapitalization(text: string, capitalization?: string): string {
 /**
  * Parse a field name and return the value from user data
  *
- * @param fieldName - The standardized field name (e.g., "fullName_Last_Comma_First_MiddleInitial_AllCaps")
+ * @param fieldName - The standardized field name (e.g., "fullName_Last_Comma_First_MiddleInitial_AllCaps") or "__custom__" for static values
  * @param userData - The user data object
+ * @param customValue - Optional static value for custom fields
  * @returns The formatted field value (string or ImageValue for image fields)
  */
-export function parseField(fieldName: string, userData: UserData): string | ImageValue {
+export function parseField(fieldName: string, userData: UserData, customValue?: string): string | ImageValue {
+  // Handle custom static value
+  if (fieldName === '__custom__' && customValue !== undefined) {
+    return customValue
+  }
+
   const parts = fieldName.split('_')
   const fieldType = parts[0]
 
