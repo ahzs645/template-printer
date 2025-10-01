@@ -20,7 +20,6 @@ RUN pnpm install --prod
 # Explicitly rebuild better-sqlite3 for the container architecture
 RUN cd node_modules/.pnpm/better-sqlite3@12.4.1/node_modules/better-sqlite3 && npm run build-release
 COPY backend/src ./src
-COPY backend/data ./data
 
 FROM node:20-alpine AS runner
 ENV NODE_ENV=production
@@ -34,11 +33,13 @@ RUN addgroup -g 1001 -S nodejs \
 COPY --from=backend-deps /app/backend/package.json ./backend/package.json
 COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
 COPY --from=backend-deps /app/backend/src ./backend/src
-COPY --from=backend-deps /app/backend/data ./backend/data
 
 # Copy built frontend assets
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 COPY --from=frontend-build /app/frontend/public ./frontend/public
+
+# Create data directory and set permissions
+RUN mkdir -p /app/backend/data && chown -R nodejs:nodejs /app
 
 USER nodejs
 EXPOSE 3000
