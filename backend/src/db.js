@@ -109,6 +109,17 @@ function createSchema(db) {
     )
   `
 
+  const createFontsTable = `
+    CREATE TABLE IF NOT EXISTS fonts (
+      id TEXT PRIMARY KEY,
+      fontName TEXT NOT NULL UNIQUE,
+      fileName TEXT NOT NULL,
+      fontData TEXT NOT NULL,
+      mimeType TEXT NOT NULL,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `
+
   const createUniqueIndex = `
     CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_name ON templates(name)
   `
@@ -121,6 +132,7 @@ function createSchema(db) {
   db.exec(createTemplatesTable)
   db.exec(createUsersTable)
   db.exec(createFieldMappingsTable)
+  db.exec(createFontsTable)
   db.exec(createUniqueIndex)
   db.exec(createFieldMappingIndex)
 
@@ -485,4 +497,66 @@ export function saveFieldMappings(templateId, mappings) {
   insertMany(mappings)
 
   return getFieldMappings(templateId)
+}
+
+// ============================================
+// FONT OPERATIONS
+// ============================================
+
+export function listFonts() {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT id, fontName, fileName, fontData, mimeType, createdAt
+    FROM fonts
+    ORDER BY fontName
+  `)
+  return stmt.all()
+}
+
+export function getFontByName(fontName) {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT id, fontName, fileName, fontData, mimeType, createdAt
+    FROM fonts
+    WHERE fontName = ?
+  `)
+  return stmt.get(fontName) || null
+}
+
+export function saveFont(fontData) {
+  const db = getDatabase()
+
+  // Check if font already exists
+  const existing = getFontByName(fontData.fontName)
+
+  if (existing) {
+    // Update existing font
+    const stmt = db.prepare(`
+      UPDATE fonts
+      SET fileName = ?, fontData = ?, mimeType = ?
+      WHERE fontName = ?
+    `)
+    stmt.run(fontData.fileName, fontData.fontData, fontData.mimeType, fontData.fontName)
+    return getFontByName(fontData.fontName)
+  } else {
+    // Insert new font
+    const id = `font-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    const stmt = db.prepare(`
+      INSERT INTO fonts (id, fontName, fileName, fontData, mimeType)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    stmt.run(id, fontData.fontName, fontData.fileName, fontData.fontData, fontData.mimeType)
+    return getFontByName(fontData.fontName)
+  }
+}
+
+export function deleteFont(fontName) {
+  const db = getDatabase()
+  const font = getFontByName(fontName)
+  if (!font) return null
+
+  const stmt = db.prepare(`DELETE FROM fonts WHERE fontName = ?`)
+  stmt.run(fontName)
+
+  return font
 }

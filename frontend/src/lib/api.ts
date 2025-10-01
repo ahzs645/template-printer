@@ -86,3 +86,53 @@ export async function saveFieldMappings(
 
   return await response.json()
 }
+
+// Font API
+export interface FontData {
+  id: string
+  fontName: string
+  fileName: string
+  fontData: string // base64
+  mimeType: string
+  createdAt: string
+}
+
+export async function listFonts(): Promise<FontData[]> {
+  const response = await fetch('/api/fonts')
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to list fonts (${response.status})`)
+  }
+
+  return await response.json()
+}
+
+export async function uploadFont(fontName: string, file: File): Promise<FontData> {
+  const formData = new FormData()
+  formData.append('font', file)
+  formData.append('fontName', fontName)
+
+  const response = await fetch('/api/fonts', {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to upload font (${response.status})`)
+  }
+
+  return await response.json()
+}
+
+export async function deleteFont(fontName: string): Promise<void> {
+  const response = await fetch(`/api/fonts/${encodeURIComponent(fontName)}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to delete font (${response.status})`)
+  }
+}

@@ -8,6 +8,7 @@ import { clientDistDir, templatesDir } from './paths.js'
 import templatesRouter from './routes/templates.js'
 import usersRouter from './routes/users.js'
 import fieldMappingsRouter from './routes/fieldMappings.js'
+import fontsRouter from './routes/fonts.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 
 export function createApp() {
@@ -25,6 +26,7 @@ export function createApp() {
   app.use('/api/templates', templatesRouter)
   app.use('/api/templates', fieldMappingsRouter)
   app.use('/api/users', usersRouter)
+  app.use('/api/fonts', fontsRouter)
 
   if (fs.existsSync(templatesDir)) {
     app.use('/templates', express.static(templatesDir))

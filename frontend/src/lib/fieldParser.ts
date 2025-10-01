@@ -8,7 +8,15 @@
  * - fullName_First_MiddleInitial_Last_TitleCase → "Timber J. Wolves"
  * - firstName_AllCaps → "TIMBER"
  * - studentId → "12345"
+ * - photo → ImageValue with user's photo
  */
+
+export interface ImageValue {
+  src: string
+  offsetX?: number
+  offsetY?: number
+  scale?: number
+}
 
 export interface UserData {
   id?: string
@@ -63,11 +71,16 @@ function applyCapitalization(text: string, capitalization?: string): string {
  *
  * @param fieldName - The standardized field name (e.g., "fullName_Last_Comma_First_MiddleInitial_AllCaps")
  * @param userData - The user data object
- * @returns The formatted field value
+ * @returns The formatted field value (string or ImageValue for image fields)
  */
-export function parseField(fieldName: string, userData: UserData): string {
+export function parseField(fieldName: string, userData: UserData): string | ImageValue {
   const parts = fieldName.split('_')
   const fieldType = parts[0]
+
+  // Handle image fields (photo, signature, logo, ProfilePhoto)
+  if (isImageField(fieldType)) {
+    return getImageField(fieldType, userData)
+  }
 
   // Extract capitalization if present (always the last part if it's a capitalization keyword)
   const lastPart = parts[parts.length - 1]
@@ -93,6 +106,51 @@ export function parseField(fieldName: string, userData: UserData): string {
   // Default: try to get as simple field
   const value = getSimpleField(fieldType, userData)
   return capitalization ? applyCapitalization(value, capitalization) : value
+}
+
+/**
+ * Check if a field type is an image field
+ */
+function isImageField(fieldType: string): boolean {
+  const imageFields = ['photo', 'signature', 'logo', 'profilephoto']
+  return imageFields.includes(fieldType.toLowerCase())
+}
+
+/**
+ * Get image field value from user data
+ */
+function getImageField(fieldType: string, userData: UserData): ImageValue | string {
+  const normalizedType = fieldType.toLowerCase()
+
+  let imagePath: string | null | undefined = null
+
+  switch (normalizedType) {
+    case 'photo':
+    case 'profilephoto':
+      imagePath = userData.photoPath
+      break
+    case 'signature':
+      imagePath = userData.signaturePath
+      break
+    case 'logo':
+      // Logo is not stored per user, would need to be added to UserData interface if needed
+      imagePath = null
+      break
+    default:
+      imagePath = null
+  }
+
+  if (!imagePath) {
+    return '' // Return empty string if no image
+  }
+
+  // Return ImageValue object
+  return {
+    src: imagePath,
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  }
 }
 
 /**
@@ -229,7 +287,8 @@ function isKnownSimpleField(fieldName: string): boolean {
     'firstName', 'lastName', 'middleName', 'fullName',
     'studentId', 'department', 'position', 'grade',
     'email', 'phoneNumber', 'address', 'emergencyContact',
-    'issueDate', 'expiryDate', 'birthDate'
+    'issueDate', 'expiryDate', 'birthDate',
+    'photo', 'signature', 'logo', 'profilephoto', 'ProfilePhoto'
   ]
   return knownFields.includes(fieldName)
 }

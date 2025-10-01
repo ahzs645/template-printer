@@ -68,6 +68,11 @@ const STANDARD_FIELDS = [
   'issueDate',
   'expiryDate',
   'birthDate',
+
+  // Image fields
+  'photo',
+  'signature',
+  'logo',
 ]
 
 export function FieldMappingDialog({
