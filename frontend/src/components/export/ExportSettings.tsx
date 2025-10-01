@@ -34,8 +34,6 @@ export function ExportSettings({
   onRefreshPrintTemplates,
   onExport,
 }: ExportSettingsProps) {
-  const selectedPrintLayout = printTemplates.find((t) => t.id === options.printLayoutId)
-
   return (
     <Card>
       <CardHeader>

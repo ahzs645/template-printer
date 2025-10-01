@@ -18,9 +18,9 @@ export type TemplateMeta = {
 
 export type ImageValue = {
   src: string
-  offsetX: number
-  offsetY: number
-  scale: number
+  offsetX?: number
+  offsetY?: number
+  scale?: number
 }
 
 export type CardDataValue = string | ImageValue

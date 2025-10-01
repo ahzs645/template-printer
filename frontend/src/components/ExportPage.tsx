@@ -1,7 +1,7 @@
 import { useState, useEffect, type ChangeEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import type { TemplateSummary } from '../lib/templates'
-import type { FieldDefinition } from '../lib/types'
+import type { FieldDefinition, CardData } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import { useExportPreview } from '../hooks/useExportPreview'
 import { TemplateSelector } from './export/TemplateSelector'
@@ -28,7 +28,7 @@ export type ExportPageProps = {
   templateMeta: any
   selectedTemplateId: string | null
   fields: FieldDefinition[]
-  cardData: Record<string, string>
+  cardData: CardData
   printTemplates: TemplateSummary[]
   printTemplatesLoading: boolean
   printTemplatesError: string | null
@@ -278,7 +278,7 @@ export function ExportPage({
                     <li key={field.id} style={{ fontSize: '0.875rem', display: 'flex', gap: '0.5rem' }}>
                       <span style={{ fontWeight: 500, color: '#3f3f46' }}>{field.id}:</span>
                       <span style={{ color: '#71717a' }}>
-                        {cardData[field.id] || <em style={{ fontStyle: 'italic' }}>empty</em>}
+                        {typeof cardData[field.id] === 'string' ? (cardData[field.id] as string) : (typeof cardData[field.id] === 'object' ? '[Image]' : <em style={{ fontStyle: 'italic' }}>empty</em>)}
                       </span>
                     </li>
                   ))}

@@ -25,7 +25,6 @@ export function useFontManager(): UseFontManagerResult {
   const [entries, setEntries] = useState<FontEntryMap>({})
   const [templateFonts, setTemplateFonts] = useState<string[]>([])
   const entriesRef = useRef(entries)
-  const [fontsLoaded, setFontsLoaded] = useState(false)
 
   useEffect(() => {
     entriesRef.current = entries
@@ -46,10 +45,8 @@ export function useFontManager(): UseFontManagerResult {
           }
         }
 
-        setFontsLoaded(true)
       } catch (error) {
         console.error('Failed to load saved fonts:', error)
-        setFontsLoaded(true)
       }
     }
 

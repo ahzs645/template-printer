@@ -1,7 +1,6 @@
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import { ScrollArea } from './ui/scroll-area'
 import type { FieldDefinition, FieldType } from '../lib/types'
 
 export type FieldEditorPanelProps = {

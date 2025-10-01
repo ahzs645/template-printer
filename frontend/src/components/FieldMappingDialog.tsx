@@ -10,7 +10,6 @@ import {
 import { Button } from './ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Input } from './ui/input'
-import { extractFieldsFromSVG } from '../lib/fieldParser'
 import { Badge } from './ui/badge'
 import { Check, X } from 'lucide-react'
 
@@ -114,7 +113,6 @@ export function FieldMappingDialog({
   onOpenChange,
   svgContent,
   fields,
-  templateId,
   onSave,
 }: FieldMappingDialogProps) {
   const [detectedFields, setDetectedFields] = useState<string[]>([])

@@ -54,6 +54,7 @@ async function safeReadErrorMessage(response: Response): Promise<string | null> 
 export interface FieldMapping {
   svgLayerId: string
   standardFieldName: string
+  customValue?: string
 }
 
 export async function getFieldMappings(templateId: string): Promise<FieldMapping[]> {

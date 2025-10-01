@@ -1,11 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import type { FieldDefinition } from '../../lib/types'
+import type { FieldDefinition, CardData } from '../../lib/types'
 
 type QuickModeFieldsProps = {
   fields: FieldDefinition[]
-  cardData: Record<string, string>
+  cardData: CardData
   onCardDataChange: (fieldId: string, value: string) => void
 }
 
@@ -28,7 +28,7 @@ export function QuickModeFields({ fields, cardData, onCardDataChange }: QuickMod
                 </Label>
                 <Input
                   id={`field-${field.id}`}
-                  value={cardData[field.id] || ''}
+                  value={(typeof cardData[field.id] === 'string' ? cardData[field.id] as string : '') || ''}
                   onChange={(e) => onCardDataChange(field.id, e.target.value)}
                   placeholder={`Enter ${field.label || field.id}`}
                 />

@@ -1,7 +1,6 @@
 import { FileDown, Copy, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
-import { Separator } from './ui/separator'
 import { CardDataPanel } from './CardDataPanel'
 import { FieldEditorPanel } from './FieldEditorPanel'
 import { PreviewField } from './PreviewField'
@@ -60,7 +59,7 @@ export function PreviewWorkspace({
               </CardDescription>
             </div>
             <Button
-              onClick={() => onExportPdf({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null })}
+              onClick={() => onExportPdf({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [] })}
               disabled={!template || isExporting}
               size="sm"
             >

@@ -13,8 +13,12 @@ RUN pnpm build
 
 FROM base AS backend-deps
 WORKDIR /app/backend
+# Install build dependencies for better-sqlite3
+RUN apk add --no-cache python3 make g++
 COPY backend/package.json ./
 RUN pnpm install --prod
+# Explicitly rebuild better-sqlite3 for the container architecture
+RUN cd node_modules/.pnpm/better-sqlite3@12.4.1/node_modules/better-sqlite3 && npm run build-release
 COPY backend/src ./src
 COPY backend/data ./data
 

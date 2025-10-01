@@ -3,10 +3,7 @@ import { useUsers } from '../hooks/useUsers'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Badge } from './ui/badge'
-import { Checkbox } from './ui/checkbox'
-import type { UserData } from '../lib/fieldParser'
-import { Users, UserCheck } from 'lucide-react'
+import { UserCheck } from 'lucide-react'
 
 interface UserSelectorProps {
   selectedUserIds: string[]
