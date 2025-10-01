@@ -25,6 +25,9 @@ FROM node:20-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Install su-exec for dropping privileges
+RUN apk add --no-cache su-exec
+
 # Add non-root user for security
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S nodejs -G nodejs
@@ -38,9 +41,13 @@ COPY --from=backend-deps /app/backend/src ./backend/src
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 COPY --from=frontend-build /app/frontend/public ./frontend/public
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create data directory and set permissions
 RUN mkdir -p /app/backend/data && chown -R nodejs:nodejs /app
 
-USER nodejs
 EXPOSE 3000
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "backend/src/server.js"]
