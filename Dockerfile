@@ -49,5 +49,5 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 RUN mkdir -p /app/backend/data && chown -R nodejs:nodejs /app
 
 EXPOSE 3000
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "backend/src/server.js"]
