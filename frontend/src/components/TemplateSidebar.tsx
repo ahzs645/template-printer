@@ -1,6 +1,10 @@
 import { useRef, type ChangeEvent } from 'react'
-
-import { CollapsibleSection } from './CollapsibleSection'
+import { Upload, Plus, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { ScrollArea } from './ui/scroll-area'
+import { Separator } from './ui/separator'
 import { TemplateSelector } from './TemplateSelector'
 import type { FieldDefinition } from '../lib/types'
 import type { FontEntry } from '../hooks/useFontManager'
@@ -56,112 +60,206 @@ export function TemplateSidebar({
   }
 
   return (
-    <section className="controls">
-      <div className="section-block">
-        <TemplateSelector
-          title="Card Design Templates"
-          templates={designTemplates}
-          selectedId={selectedTemplateId}
-          isLoading={designTemplatesLoading}
-          error={designTemplatesError}
-          onSelect={onTemplateSelect}
-          onRetry={onRefreshDesignTemplates}
-          onUploadClick={handleTemplateUploadClick}
-          onDelete={onTemplateDelete}
-        />
-        <input
-          ref={templateUploadInputRef}
-          className="template-upload-input"
-          type="file"
-          accept="image/svg+xml"
-          onChange={onTemplateUpload}
-        />
-        {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
-        {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-      </div>
+    <aside style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Card Design Templates */}
+      <Card>
+        <CardHeader>
+          <CardTitle style={{ fontSize: '1rem' }}>Card Design Templates</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TemplateSelector
+            title=""
+            templates={designTemplates}
+            selectedId={selectedTemplateId}
+            isLoading={designTemplatesLoading}
+            error={designTemplatesError}
+            onSelect={onTemplateSelect}
+            onRetry={onRefreshDesignTemplates}
+            onUploadClick={handleTemplateUploadClick}
+            onDelete={onTemplateDelete}
+          />
+          <input
+            ref={templateUploadInputRef}
+            type="file"
+            accept="image/svg+xml"
+            onChange={onTemplateUpload}
+            style={{ display: 'none' }}
+          />
 
-      <div className="section-block">
-        <CollapsibleSection
-          title="Fonts"
-          defaultOpen={fontList.length > 0}
-          description={renderFontSectionDescription(fontList.length, missingFonts)}
-        >
+          {statusMessage && (
+            <div style={{
+              marginTop: '0.75rem',
+              padding: '0.75rem',
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: '0.375rem',
+              fontSize: '0.875rem',
+              color: '#166534',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <CheckCircle2 style={{ width: '1rem', height: '1rem', flexShrink: 0 }} />
+              {statusMessage}
+            </div>
+          )}
+
+          {errorMessage && (
+            <div style={{
+              marginTop: '0.75rem',
+              padding: '0.75rem',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fca5a5',
+              borderRadius: '0.375rem',
+              fontSize: '0.875rem',
+              color: '#dc2626',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <AlertCircle style={{ width: '1rem', height: '1rem', flexShrink: 0 }} />
+              {errorMessage}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Fonts */}
+      <Card>
+        <CardHeader>
+          <CardTitle style={{ fontSize: '1rem' }}>Fonts</CardTitle>
+          <CardDescription>
+            {fontList.length === 0
+              ? 'Load a template to detect fonts'
+              : missingFonts.length > 0
+              ? `${missingFonts.length} font${missingFonts.length > 1 ? 's' : ''} missing`
+              : 'All fonts loaded'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           {fontList.length === 0 ? (
-            <p className="muted">Fonts from the template appear here once an SVG is imported.</p>
+            <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+              Fonts from the template appear here once an SVG is imported.
+            </p>
           ) : (
-            <div className="font-list">
-              {fontList.map((font) => (
-                <div className="font-list__item" key={font.name}>
-                  <div className="font-list__info">
-                    <span className="font-name">{font.name}</span>
-                    <span className={`font-badge font-badge--${font.status}`}>
-                      {font.status === 'loaded' ? 'Loaded' : 'Missing'}
-                    </span>
-                    <span className="font-source">
-                      {font.source === 'template' ? 'Template font' : 'Custom font'}
-                    </span>
-                    {font.fileName ? <span className="font-file">{font.fileName}</span> : null}
-                  </div>
-                  <div className="font-actions">
-                    <button className="secondary" type="button" onClick={() => onFontUploadClick(font.name)}>
+            <ScrollArea style={{ maxHeight: '200px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {fontList.map((font) => (
+                  <div
+                    key={font.name}
+                    style={{
+                      padding: '0.75rem',
+                      border: '1px solid #e4e4e7',
+                      borderRadius: '0.375rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {font.name}
+                      </span>
+                      <Badge variant={font.status === 'loaded' ? 'secondary' : 'destructive'} style={{ fontSize: '0.625rem' }}>
+                        {font.status === 'loaded' ? 'Loaded' : 'Missing'}
+                      </Badge>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#71717a' }}>
+                      <span>{font.source === 'template' ? 'Template font' : 'Custom font'}</span>
+                      {font.fileName && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{font.fileName}</span>}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onFontUploadClick(font.name)}
+                      style={{ width: '100%' }}
+                    >
+                      <Upload style={{ width: '0.875rem', height: '0.875rem', marginRight: '0.5rem' }} />
                       {font.status === 'loaded' ? 'Replace' : 'Upload'}
-                    </button>
+                    </Button>
+
                     <input
                       ref={(element) => registerFontInput(font.name, element)}
-                      className="font-upload-input"
                       type="file"
                       accept=".ttf,.otf,.woff,.woff2"
                       onChange={(event) => onFontFileSelect(font.name, event)}
+                      style={{ display: 'none' }}
                     />
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
-        </CollapsibleSection>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div className="section-block">
-        <CollapsibleSection
-          title="Fields"
-          actions={
-            <button className="secondary" onClick={onAddField} type="button">
-              + Add Field
-            </button>
-          }
-        >
+      {/* Fields */}
+      <Card>
+        <CardHeader>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <CardTitle style={{ fontSize: '1rem' }}>Fields</CardTitle>
+            <Button variant="outline" size="sm" onClick={onAddField}>
+              <Plus style={{ width: '1rem', height: '1rem', marginRight: '0.5rem' }} />
+              Add Field
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
           {fields.length === 0 ? (
-            <p className="muted">Upload a template or add a new field to get started.</p>
+            <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+              Upload a template or add a new field to get started.
+            </p>
           ) : (
-            <div className="field-list">
-              {fields.map((field) => (
-                <button
-                  key={field.id}
-                  type="button"
-                  className={`field-list__item${field.id === selectedFieldId ? ' is-selected' : ''}`}
-                  onClick={() => onFieldSelect(field.id)}
-                >
-                  <span className="field-title">{field.label}</span>
-                  <span className="field-type">{field.type}</span>
-                  {field.auto ? <span className="field-tag">auto</span> : null}
-                </button>
-              ))}
-            </div>
+            <ScrollArea style={{ maxHeight: '300px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                {fields.map((field) => (
+                  <button
+                    key={field.id}
+                    type="button"
+                    onClick={() => onFieldSelect(field.id)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      textAlign: 'left',
+                      border: '1px solid',
+                      borderColor: field.id === selectedFieldId ? '#18181b' : '#e4e4e7',
+                      backgroundColor: field.id === selectedFieldId ? '#fafafa' : '#fff',
+                      borderRadius: '0.375rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.25rem'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (field.id !== selectedFieldId) {
+                        e.currentTarget.style.backgroundColor = '#f9f9f9'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (field.id !== selectedFieldId) {
+                        e.currentTarget.style.backgroundColor = '#fff'
+                      }
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{field.label}</span>
+                      {field.auto && (
+                        <Badge variant="secondary" style={{ fontSize: '0.625rem' }}>
+                          auto
+                        </Badge>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#71717a' }}>{field.type}</span>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
           )}
-        </CollapsibleSection>
-      </div>
-    </section>
+        </CardContent>
+      </Card>
+    </aside>
   )
-}
-
-function renderFontSectionDescription(fontCount: number, missingFonts: string[]) {
-  if (fontCount === 0) {
-    return <span className="font-status muted">Load a template to detect fonts</span>
-  }
-
-  if (missingFonts.length > 0) {
-    return <span className="font-status font-status--missing">Missing: {missingFonts.join(', ')}</span>
-  }
-
-  return <span className="font-status font-status--ready">All fonts loaded</span>
 }

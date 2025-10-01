@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react'
 
 import './App.css'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
+import { Badge } from './components/ui/badge'
 import { TemplateSidebar } from './components/TemplateSidebar'
 import { PreviewWorkspace } from './components/PreviewWorkspace'
 import { ExportPage } from './components/ExportPage'
@@ -347,118 +348,138 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <h1>ID Card Maker</h1>
-          <p className="subtitle">Import Illustrator SVG templates, define editable fields, and preview cards.</p>
-        </div>
-        <div className="template-meta">
-          {template ? (
-            <Fragment>
-              <span className="meta-item">Template: {template.name}</span>
-              <span className="meta-item">
-                Size: {template.width} × {template.height} {template.unit}
-              </span>
-              {template.viewBox ? (
-                <span className="meta-item">
+    <div style={{ minHeight: '100vh', backgroundColor: '#fafafa' }}>
+      {/* Header */}
+      <header style={{
+        borderBottom: '1px solid #e4e4e7',
+        backgroundColor: '#fff',
+        padding: '1rem 1.5rem'
+      }}>
+        <div style={{ maxWidth: '100%' }}>
+          <h1 style={{
+            fontSize: '1.25rem',
+            fontWeight: 'bold',
+            marginBottom: '0.25rem',
+            color: '#18181b'
+          }}>
+            ID Card Maker
+          </h1>
+          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+            Import Illustrator SVG templates, define editable fields, and preview cards.
+          </p>
+
+          {/* Template Info Badges */}
+          {template && (
+            <div style={{
+              marginTop: '0.75rem',
+              display: 'flex',
+              gap: '0.5rem',
+              flexWrap: 'wrap',
+              alignItems: 'center'
+            }}>
+              <Badge variant="secondary" style={{ fontSize: '0.75rem' }}>
+                {template.name}
+              </Badge>
+              <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
+                {template.width} × {template.height} {template.unit}
+              </Badge>
+              {template.viewBox && (
+                <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
                   ViewBox: {template.viewBox.width.toFixed(0)} × {template.viewBox.height.toFixed(0)}
-                </span>
-              ) : null}
-              {template.fonts.length ? (
-                <span className="meta-item">Fonts: {template.fonts.join(', ')}</span>
-              ) : null}
-            </Fragment>
-          ) : (
-            <span className="meta-item muted">No template loaded</span>
+                </Badge>
+              )}
+              {template.fonts.length > 0 && (
+                <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
+                  Fonts: {template.fonts.join(', ')}
+                </Badge>
+              )}
+            </div>
           )}
         </div>
       </header>
 
-      <nav className="app-tabs">
-        <button
-          className={`tab ${activeTab === 'design' ? 'active' : ''}`}
-          onClick={() => setActiveTab('design')}
-        >
-          Design
-        </button>
-        <button
-          className={`tab ${activeTab === 'users' ? 'active' : ''}`}
-          onClick={() => setActiveTab('users')}
-        >
-          Users
-        </button>
-        <button
-          className={`tab ${activeTab === 'export' ? 'active' : ''}`}
-          onClick={() => setActiveTab('export')}
-        >
-          Export
-        </button>
-      </nav>
+      {/* Main Content */}
+      <div style={{ padding: '1.5rem' }}>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)}>
+          <TabsList style={{ marginBottom: '1.5rem' }}>
+            <TabsTrigger value="design">Design</TabsTrigger>
+            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="export">Export</TabsTrigger>
+          </TabsList>
 
-      <main className="app-main">
-        {activeTab === 'design' ? (
-          <Fragment>
-            <TemplateSidebar
-              selectedTemplateId={selectedTemplateId}
-              designTemplates={designTemplates}
-              designTemplatesLoading={designTemplatesLoading}
-              designTemplatesError={designTemplatesError}
-              onRefreshDesignTemplates={reloadDesignTemplates}
-              onTemplateSelect={handleTemplateSelect}
-              onTemplateUpload={handleTemplateUpload}
-              onTemplateDelete={handleTemplateDelete}
-              statusMessage={statusMessage}
-              errorMessage={errorMessage}
-              fontList={fontList}
-              missingFonts={missingFonts}
-              onFontUploadClick={handleFontUploadClick}
-              onFontFileSelect={handleFontFileSelect}
-              registerFontInput={registerFontInput}
-              fields={fields}
-              selectedFieldId={selectedFieldId}
-              onFieldSelect={handleFieldSelect}
-              onAddField={handleAddField}
-            />
+          <TabsContent value="design" style={{ marginTop: 0 }}>
+            <div style={{ display: 'flex', gap: '1.5rem', height: 'calc(100vh - 200px)', minHeight: 0 }}>
+              {/* Left Sidebar - Templates, Fonts, Fields */}
+              <div style={{ width: '320px', flexShrink: 0, minHeight: 0, overflow: 'auto' }}>
+                <TemplateSidebar
+                  selectedTemplateId={selectedTemplateId}
+                  designTemplates={designTemplates}
+                  designTemplatesLoading={designTemplatesLoading}
+                  designTemplatesError={designTemplatesError}
+                  onRefreshDesignTemplates={reloadDesignTemplates}
+                  onTemplateSelect={handleTemplateSelect}
+                  onTemplateUpload={handleTemplateUpload}
+                  onTemplateDelete={handleTemplateDelete}
+                  statusMessage={statusMessage}
+                  errorMessage={errorMessage}
+                  fontList={fontList}
+                  missingFonts={missingFonts}
+                  onFontUploadClick={handleFontUploadClick}
+                  onFontFileSelect={handleFontFileSelect}
+                  registerFontInput={registerFontInput}
+                  fields={fields}
+                  selectedFieldId={selectedFieldId}
+                  onFieldSelect={handleFieldSelect}
+                  onAddField={handleAddField}
+                />
+              </div>
 
-            <PreviewWorkspace
+              {/* Main Content Area - Preview & Field Settings */}
+              <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+                <PreviewWorkspace
+                  template={template}
+                  renderedSvg={renderedSvg}
+                  fields={fields}
+                  cardData={cardData}
+                  selectedField={selectedField}
+                  onCardDataChange={handleCardDataChange}
+                  onImageUpload={handleImageUpload}
+                  onImageAdjust={handleImageAdjust}
+                  onFieldChange={handleFieldChange}
+                  onDuplicateField={handleDuplicateField}
+                  onDeleteField={handleDeleteField}
+                  fontOptions={fontOptions}
+                  missingFonts={missingFonts}
+                  onExportPdf={handleExport}
+                  isExporting={isExporting}
+                  previewWidth={previewWidth}
+                  previewHeight={previewHeight}
+                />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="users" style={{ marginTop: 0 }}>
+            <UsersTab />
+          </TabsContent>
+
+          <TabsContent value="export" style={{ marginTop: 0 }}>
+            <ExportPage
               template={template}
-              renderedSvg={renderedSvg}
               fields={fields}
               cardData={cardData}
-              selectedField={selectedField}
-              onCardDataChange={handleCardDataChange}
-              onImageUpload={handleImageUpload}
-              onImageAdjust={handleImageAdjust}
-              onFieldChange={handleFieldChange}
-              onDuplicateField={handleDuplicateField}
-              onDeleteField={handleDeleteField}
-              fontOptions={fontOptions}
-              missingFonts={missingFonts}
-              onExportPdf={handleExport}
+              printTemplates={printTemplates}
+              printTemplatesLoading={printTemplatesLoading}
+              printTemplatesError={printTemplatesError}
+              onRefreshPrintTemplates={reloadPrintTemplates}
+              onPrintLayoutUpload={handlePrintLayoutUpload}
+              onExport={handleExport}
               isExporting={isExporting}
-              previewWidth={previewWidth}
-              previewHeight={previewHeight}
+              renderedSvg={renderedSvg}
             />
-          </Fragment>
-        ) : activeTab === 'users' ? (
-          <UsersTab />
-        ) : (
-          <ExportPage
-            template={template}
-            fields={fields}
-            cardData={cardData}
-            printTemplates={printTemplates}
-            printTemplatesLoading={printTemplatesLoading}
-            printTemplatesError={printTemplatesError}
-            onRefreshPrintTemplates={reloadPrintTemplates}
-            onPrintLayoutUpload={handlePrintLayoutUpload}
-            onExport={handleExport}
-            isExporting={isExporting}
-            renderedSvg={renderedSvg}
-          />
-        )}
-      </main>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
 }

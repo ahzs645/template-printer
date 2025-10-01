@@ -1,4 +1,9 @@
 import { useState, useEffect, type ChangeEvent } from 'react'
+import { FileDown, Upload, RefreshCw } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Label } from './ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import type { TemplateSummary } from '../lib/templates'
 import type { TemplateField } from '../lib/types'
 
@@ -152,77 +157,95 @@ export function ExportPage({
   }, [printLayoutSvg, renderedSvg])
 
   return (
-    <div className="export-page">
-      <aside className="export-sidebar">
-        <div className="section-block">
-          <div className="section-header">
-            <h2>Export Options</h2>
-          </div>
-
-          <div className="export-options">
-            <div className="option-group">
-              <label htmlFor="export-format">Format</label>
-              <select
-                id="export-format"
+    <div style={{ display: 'flex', gap: '1rem', height: '100%', minHeight: 0 }}>
+      {/* Left Sidebar - Export Options */}
+      <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'auto' }}>
+        {/* Export Options Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle style={{ fontSize: '1rem' }}>Export Options</CardTitle>
+            <CardDescription>Configure export format and quality settings</CardDescription>
+          </CardHeader>
+          <CardContent style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Format Selection */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <Label htmlFor="export-format">Format</Label>
+              <Select
                 value={exportOptions.format}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   setExportOptions({
                     ...exportOptions,
-                    format: e.target.value as ExportFormat,
+                    format: value as ExportFormat,
                   })
                 }
               >
-                <option value="pdf">PDF</option>
-                <option value="png">PNG</option>
-                <option value="svg">SVG</option>
-              </select>
+                <SelectTrigger id="export-format">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="png">PNG</SelectItem>
+                  <SelectItem value="svg">SVG</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
+            {/* Resolution for PNG */}
             {exportOptions.format === 'png' && (
-              <div className="option-group">
-                <label htmlFor="export-resolution">Resolution (DPI)</label>
-                <select
-                  id="export-resolution"
-                  value={exportOptions.resolution}
-                  onChange={(e) =>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <Label htmlFor="export-resolution">Resolution (DPI)</Label>
+                <Select
+                  value={exportOptions.resolution.toString()}
+                  onValueChange={(value) =>
                     setExportOptions({
                       ...exportOptions,
-                      resolution: parseInt(e.target.value),
+                      resolution: parseInt(value),
                     })
                   }
                 >
-                  <option value="72">72 DPI (Screen)</option>
-                  <option value="150">150 DPI (Draft)</option>
-                  <option value="300">300 DPI (Print Quality)</option>
-                  <option value="600">600 DPI (High Quality)</option>
-                </select>
+                  <SelectTrigger id="export-resolution">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="72">72 DPI (Screen)</SelectItem>
+                    <SelectItem value="150">150 DPI (Draft)</SelectItem>
+                    <SelectItem value="300">300 DPI (Print Quality)</SelectItem>
+                    <SelectItem value="600">600 DPI (High Quality)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
+            {/* Resolution for PDF (when vectors disabled) */}
             {exportOptions.format === 'pdf' && !exportOptions.maintainVectors && (
-              <div className="option-group">
-                <label htmlFor="export-resolution">Resolution (DPI)</label>
-                <select
-                  id="export-resolution"
-                  value={exportOptions.resolution}
-                  onChange={(e) =>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <Label htmlFor="pdf-resolution">Resolution (DPI)</Label>
+                <Select
+                  value={exportOptions.resolution.toString()}
+                  onValueChange={(value) =>
                     setExportOptions({
                       ...exportOptions,
-                      resolution: parseInt(e.target.value),
+                      resolution: parseInt(value),
                     })
                   }
                 >
-                  <option value="72">72 DPI (Screen)</option>
-                  <option value="150">150 DPI (Draft)</option>
-                  <option value="300">300 DPI (Print Quality)</option>
-                  <option value="600">600 DPI (High Quality)</option>
-                </select>
+                  <SelectTrigger id="pdf-resolution">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="72">72 DPI (Screen)</SelectItem>
+                    <SelectItem value="150">150 DPI (Draft)</SelectItem>
+                    <SelectItem value="300">300 DPI (Print Quality)</SelectItem>
+                    <SelectItem value="600">600 DPI (High Quality)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
+            {/* Vector Graphics Toggle for PDF */}
             {exportOptions.format === 'pdf' && (
-              <div className="option-group">
-                <label className="checkbox-label">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={exportOptions.maintainVectors}
@@ -232,129 +255,174 @@ export function ExportPage({
                         maintainVectors: e.target.checked,
                       })
                     }
+                    style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
                   />
-                  <span>Maintain Vector Graphics</span>
+                  <span style={{ fontWeight: 500 }}>Maintain Vector Graphics</span>
                 </label>
-                <p className="option-hint">
+                <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '-0.25rem' }}>
                   Keep text and shapes as vectors for scalability
                 </p>
               </div>
             )}
 
-            <div className="option-group">
-              <div className="option-header">
-                <label htmlFor="print-layout">Print Layout</label>
-                <div className="option-actions">
-                  <label className="file-button-small">
-                    Upload
+            {/* Print Layout Selection */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Label htmlFor="print-layout">Print Layout</Label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <label>
                     <input
                       type="file"
                       accept=".svg"
                       onChange={onPrintLayoutUpload}
-                      className="file-button__input"
+                      style={{ display: 'none' }}
                     />
+                    <Button variant="outline" size="sm" asChild>
+                      <span style={{ cursor: 'pointer' }}>
+                        <Upload style={{ width: '0.875rem', height: '0.875rem', marginRight: '0.5rem' }} />
+                        Upload
+                      </span>
+                    </Button>
                   </label>
-                  <button
-                    type="button"
-                    className="secondary-small"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={onRefreshPrintTemplates}
                     disabled={printTemplatesLoading}
                   >
-                    ↻
-                  </button>
+                    <RefreshCw style={{ width: '0.875rem', height: '0.875rem' }} />
+                  </Button>
                 </div>
               </div>
-              <select
-                id="print-layout"
-                value={exportOptions.printLayoutId || ''}
-                onChange={(e) =>
+              <Select
+                value={exportOptions.printLayoutId || 'none'}
+                onValueChange={(value) =>
                   setExportOptions({
                     ...exportOptions,
-                    printLayoutId: e.target.value || null,
+                    printLayoutId: value === 'none' ? null : value,
                   })
                 }
                 disabled={!template}
               >
-                <option value="">None (Single Card)</option>
-                {printTemplates.map((layout) => (
-                  <option key={layout.id} value={layout.id}>
-                    {layout.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="print-layout">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (Single Card)</SelectItem>
+                  {printTemplates.map((layout) => (
+                    <SelectItem key={layout.id} value={layout.id}>
+                      {layout.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {printTemplatesError && (
-                <p className="error-message">{printTemplatesError}</p>
+                <p style={{ fontSize: '0.75rem', color: '#dc2626' }}>{printTemplatesError}</p>
               )}
-              {printTemplatesLoading && <p className="loading-message">Loading layouts...</p>}
+              {printTemplatesLoading && (
+                <p style={{ fontSize: '0.75rem', color: '#71717a' }}>Loading layouts...</p>
+              )}
             </div>
 
-            <button
-              className="primary export-button"
+            {/* Export Button */}
+            <Button
               onClick={handleExport}
               disabled={!template || isExporting}
+              style={{ marginTop: '0.5rem' }}
             >
+              <FileDown style={{ width: '1rem', height: '1rem', marginRight: '0.5rem' }} />
               {isExporting ? 'Exporting…' : `Export ${exportOptions.format.toUpperCase()}`}
-            </button>
-          </div>
-        </div>
+            </Button>
+          </CardContent>
+        </Card>
 
+        {/* Card Data Preview */}
         {template && (
-          <div className="section-block">
-            <h3>Card Data Preview</h3>
-            <div className="card-data-preview">
+          <Card>
+            <CardHeader>
+              <CardTitle style={{ fontSize: '1rem' }}>Card Data Preview</CardTitle>
+            </CardHeader>
+            <CardContent>
               {fields.length === 0 ? (
-                <p className="muted-text">No fields defined</p>
+                <p style={{ fontSize: '0.875rem', color: '#71717a' }}>No fields defined</p>
               ) : (
-                <ul className="field-list">
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0, margin: 0 }}>
                   {fields.map((field) => (
-                    <li key={field.id}>
-                      <span className="field-name">{field.id}:</span>
-                      <span className="field-value">
-                        {cardData[field.id] || <em>empty</em>}
+                    <li key={field.id} style={{ fontSize: '0.875rem', display: 'flex', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 500, color: '#3f3f46' }}>{field.id}:</span>
+                      <span style={{ color: '#71717a' }}>
+                        {cardData[field.id] || <em style={{ fontStyle: 'italic' }}>empty</em>}
                       </span>
                     </li>
                   ))}
                 </ul>
               )}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
-      </aside>
+      </div>
 
-      <div className="export-preview">
-        <div className="section-block preview-container">
-          <h2>Export Preview</h2>
+      {/* Right Side - Export Preview */}
+      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <CardHeader>
+          <CardTitle style={{ fontSize: '1rem' }}>Export Preview</CardTitle>
+          <CardDescription>Preview how your export will look</CardDescription>
+        </CardHeader>
+        <CardContent style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
           {!template ? (
-            <div className="empty-state">
+            <div style={{ textAlign: 'center', color: '#71717a' }}>
               <p>Select a card design from the Design tab to preview export</p>
             </div>
           ) : (
-            <div className="preview-content">
+            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
               {selectedPrintLayout && compositePreview ? (
-                <div className="print-layout-preview">
-                  <p className="preview-label">
+                <>
+                  <p style={{ fontSize: '0.875rem', color: '#3f3f46' }}>
                     Print Layout: <strong>{selectedPrintLayout.name}</strong>
                   </p>
-                  <div className="svg-preview print-layout-svg" dangerouslySetInnerHTML={{ __html: compositePreview }} />
-                  <p className="preview-hint">
+                  <div
+                    style={{
+                      flex: 1,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid #e4e4e7',
+                      borderRadius: '0.375rem',
+                      backgroundColor: '#fff',
+                      overflow: 'auto',
+                    }}
+                    dangerouslySetInnerHTML={{ __html: compositePreview }}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: '#71717a' }}>
                     Your card design replicated across the print layout
                   </p>
-                </div>
+                </>
               ) : (
-                <div className="single-card-preview">
-                  <p className="preview-label">Single Card Export</p>
+                <>
+                  <p style={{ fontSize: '0.875rem', color: '#3f3f46' }}>Single Card Export</p>
                   {renderedSvg && (
                     <div
-                      className="svg-preview"
+                      style={{
+                        flex: 1,
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1px solid #e4e4e7',
+                        borderRadius: '0.375rem',
+                        backgroundColor: '#fff',
+                        overflow: 'auto',
+                      }}
                       dangerouslySetInnerHTML={{ __html: renderedSvg }}
                     />
                   )}
-                </div>
+                </>
               )}
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
