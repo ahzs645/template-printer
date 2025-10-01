@@ -129,10 +129,15 @@ export async function exportBatchCards(
 
   for (const user of users) {
     // Convert user data to card data using field mappings
+    // fieldMappings: { svgLayerId: standardFieldName }
+    // We need to find the field with matching sourceId and use that field's ID
     const cardData: CardData = {}
-    Object.entries(fieldMappings).forEach(([fieldId, standardFieldName]) => {
+
+    fields.forEach(field => {
+      // Check if this field has a mapping (check sourceId first, then id as fallback)
+      const standardFieldName = fieldMappings[field.sourceId || ''] || fieldMappings[field.id]
       if (standardFieldName) {
-        cardData[fieldId] = parseField(standardFieldName, user)
+        cardData[field.id] = parseField(standardFieldName, user)
       }
     })
 

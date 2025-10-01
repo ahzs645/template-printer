@@ -532,6 +532,8 @@ function App() {
           <TabsContent value="export" style={{ marginTop: 0 }}>
             <ExportPage
               template={selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
+              templateMeta={template}
+              selectedTemplateId={selectedTemplateId}
               fields={fields}
               cardData={cardData}
               printTemplates={printTemplates}

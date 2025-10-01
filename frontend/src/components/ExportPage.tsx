@@ -115,6 +115,65 @@ export function ExportPage({
     (t) => t.id === exportOptions.printLayoutId
   )
 
+  // Fetch field mappings when template or mode changes
+  const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (exportOptions.mode === 'database' && selectedTemplateId) {
+      getFieldMappings(selectedTemplateId)
+        .then(mappings => {
+          const mappingsMap: Record<string, string> = {}
+          mappings.forEach(m => {
+            mappingsMap[m.svgLayerId] = m.standardFieldName
+          })
+          setFieldMappings(mappingsMap)
+        })
+        .catch(err => {
+          console.error('Failed to load field mappings:', err)
+        })
+    }
+  }, [selectedTemplateId, exportOptions.mode])
+
+  // Generate actual preview for database mode
+  const actualPreviewSvg = useMemo(() => {
+    if (exportOptions.mode === 'quick') {
+      return renderedSvg // Use the quick mode preview
+    }
+
+    // Database mode preview
+    if (!templateMeta || exportOptions.selectedUserIds.length === 0) {
+      return renderedSvg // Fallback to quick mode preview
+    }
+
+    const firstUserId = exportOptions.selectedUserIds[0]
+    const firstUser = users.find(u => u.id === firstUserId)
+
+    if (!firstUser || Object.keys(fieldMappings).length === 0) {
+      return renderedSvg // Fallback if no user or mappings
+    }
+
+    try {
+      // Generate card data from user data using field mappings
+      // fieldMappings: { svgLayerId: standardFieldName }
+      // We need to find the field with matching sourceId (which should match svgLayerId)
+      const previewCardData: CardData = {}
+
+      fields.forEach(field => {
+        // Check if this field has a mapping (check sourceId first, then id as fallback)
+        const standardFieldName = fieldMappings[field.sourceId || ''] || fieldMappings[field.id]
+        if (standardFieldName) {
+          previewCardData[field.id] = parseField(standardFieldName, firstUser)
+        }
+      })
+
+      // Render SVG with the preview data
+      return renderSvgWithData(templateMeta, fields, previewCardData)
+    } catch (error) {
+      console.error('Failed to generate database mode preview:', error)
+      return renderedSvg // Fallback on error
+    }
+  }, [exportOptions.mode, exportOptions.selectedUserIds, templateMeta, users, fieldMappings, fields, renderedSvg])
+
   // Load print layout SVG when selected
   useEffect(() => {
     if (!selectedPrintLayout) {
@@ -212,85 +271,7 @@ export function ExportPage({
       console.error('Failed to create composite preview:', error)
       setCompositePreview(printLayoutSvg)
     }
-  }, [printLayoutSvg, renderedSvg])
-
-  // Generate preview SVG for database mode (first selected user)
-  const databaseModePreviewSvg = useMemo(() => {
-    if (exportOptions.mode !== 'database' || !templateMeta || !selectedTemplateId) {
-      return null
-    }
-
-    if (exportOptions.selectedUserIds.length === 0) {
-      return null
-    }
-
-    // Get the first selected user for preview
-    const firstUserId = exportOptions.selectedUserIds[0]
-    const firstUser = users.find(u => u.id === firstUserId)
-
-    if (!firstUser) {
-      return null
-    }
-
-    // Generate card data from user data using field mappings
-    // We'll need to fetch field mappings synchronously or use a state
-    // For now, let's just return null and implement this properly
-    return null
-  }, [exportOptions.mode, exportOptions.selectedUserIds, templateMeta, selectedTemplateId, users])
-
-  // Fetch field mappings when template or mode changes
-  const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (exportOptions.mode === 'database' && selectedTemplateId) {
-      getFieldMappings(selectedTemplateId)
-        .then(mappings => {
-          const mappingsMap: Record<string, string> = {}
-          mappings.forEach(m => {
-            mappingsMap[m.svgLayerId] = m.standardFieldName
-          })
-          setFieldMappings(mappingsMap)
-        })
-        .catch(err => {
-          console.error('Failed to load field mappings:', err)
-        })
-    }
-  }, [selectedTemplateId, exportOptions.mode])
-
-  // Generate actual preview for database mode
-  const actualPreviewSvg = useMemo(() => {
-    if (exportOptions.mode === 'quick') {
-      return renderedSvg // Use the quick mode preview
-    }
-
-    // Database mode preview
-    if (!templateMeta || exportOptions.selectedUserIds.length === 0) {
-      return renderedSvg // Fallback to quick mode preview
-    }
-
-    const firstUserId = exportOptions.selectedUserIds[0]
-    const firstUser = users.find(u => u.id === firstUserId)
-
-    if (!firstUser || Object.keys(fieldMappings).length === 0) {
-      return renderedSvg // Fallback if no user or mappings
-    }
-
-    try {
-      // Generate card data from user data using field mappings
-      const previewCardData: CardData = {}
-      Object.entries(fieldMappings).forEach(([fieldId, standardFieldName]) => {
-        if (standardFieldName) {
-          previewCardData[fieldId] = parseField(standardFieldName, firstUser)
-        }
-      })
-
-      // Render SVG with the preview data
-      return renderSvgWithData(templateMeta, fields, previewCardData)
-    } catch (error) {
-      console.error('Failed to generate database mode preview:', error)
-      return renderedSvg // Fallback on error
-    }
-  }, [exportOptions.mode, exportOptions.selectedUserIds, templateMeta, users, fieldMappings, fields, renderedSvg])
+  }, [printLayoutSvg, actualPreviewSvg])
 
   return (
     <div style={{ display: 'flex', gap: '1rem', height: '100%', minHeight: 0 }}>
@@ -686,9 +667,9 @@ export function ExportPage({
           <CardDescription>Preview how your export will look</CardDescription>
         </CardHeader>
         <CardContent style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-          {!template ? (
+          {!template && !templateMeta ? (
             <div style={{ textAlign: 'center', color: '#71717a' }}>
-              <p>Select a card design from the Design tab to preview export</p>
+              <p>Select a card design to preview export</p>
             </div>
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
@@ -718,7 +699,7 @@ export function ExportPage({
               ) : (
                 <>
                   <p style={{ fontSize: '0.875rem', color: '#3f3f46' }}>Single Card Export</p>
-                  {renderedSvg && (
+                  {actualPreviewSvg && (
                     <div
                       style={{
                         width: '100%',
@@ -738,7 +719,7 @@ export function ExportPage({
                           maxWidth: '500px',
                           width: '100%',
                         }}
-                        dangerouslySetInnerHTML={{ __html: renderedSvg }}
+                        dangerouslySetInnerHTML={{ __html: actualPreviewSvg }}
                       />
                     </div>
                   )}
