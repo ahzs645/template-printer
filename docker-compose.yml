@@ -11,9 +11,12 @@ services:
       - "${PORT:-3200}:${PORT:-3200}"
     env_file:
       - .env
+    environment:
+      DATA_DIR: /var/lib/template-printer
+      DB_PATH: /var/lib/template-printer/templates.db
     volumes:
       # Persist SQLite database (named volume for proper permissions)
-      - database-data:/app/backend/data
+      - database-data:/var/lib/template-printer
       # Persist uploaded templates
       - template-uploads:/app/backend/uploads
     healthcheck:
