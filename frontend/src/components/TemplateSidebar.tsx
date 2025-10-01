@@ -1,5 +1,5 @@
-import { useRef, useState, type ChangeEvent } from 'react'
-import { Upload, Plus, AlertCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react'
+import { useRef, useState, useEffect, type ChangeEvent } from 'react'
+import { Upload, Plus, AlertCircle, CheckCircle2, RefreshCw, Settings, Link } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
@@ -9,6 +9,7 @@ import { TemplateSelector } from './TemplateSelector'
 import type { FieldDefinition } from '../lib/types'
 import type { FontEntry } from '../hooks/useFontManager'
 import type { TemplateSummary } from '../lib/templates'
+import { getFieldMappings } from '../lib/api'
 
 export type TemplateSidebarProps = {
   selectedTemplateId: string | null
@@ -58,9 +59,34 @@ export function TemplateSidebar({
   onOpenFieldMapping,
 }: TemplateSidebarProps) {
   const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
+
+  // Fetch field mappings when template is selected
+  useEffect(() => {
+    if (selectedTemplateId) {
+      getFieldMappings(selectedTemplateId)
+        .then(mappings => {
+          const mappingsMap: Record<string, string> = {}
+          mappings.forEach(m => {
+            mappingsMap[m.svgLayerId] = m.standardFieldName
+          })
+          setFieldMappings(mappingsMap)
+        })
+        .catch(() => {
+          setFieldMappings({})
+        })
+    } else {
+      setFieldMappings({})
+    }
+  }, [selectedTemplateId])
 
   const handleTemplateUploadClick = () => {
     templateUploadInputRef.current?.click()
+  }
+
+  // Check if a field is mapped
+  const isFieldMapped = (field: FieldDefinition): boolean => {
+    return !!(fieldMappings[field.sourceId || ''] || fieldMappings[field.id])
   }
 
   return (
@@ -258,11 +284,19 @@ export function TemplateSidebar({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                       <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{field.label}</span>
-                      {field.auto && (
-                        <Badge variant="secondary" style={{ fontSize: '0.625rem' }}>
-                          auto
-                        </Badge>
-                      )}
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        {isFieldMapped(field) && (
+                          <Badge variant="default" style={{ fontSize: '0.625rem', backgroundColor: '#10b981', borderColor: '#10b981' }}>
+                            <Link style={{ width: '0.75rem', height: '0.75rem', marginRight: '0.25rem' }} />
+                            mapped
+                          </Badge>
+                        )}
+                        {field.auto && (
+                          <Badge variant="secondary" style={{ fontSize: '0.625rem' }}>
+                            auto
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <span style={{ fontSize: '0.75rem', color: '#71717a' }}>{field.type}</span>
                   </button>
