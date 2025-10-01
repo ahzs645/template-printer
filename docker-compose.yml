@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      pull: true
+      no_cache: false
+    image: template-printer:${IMAGE_TAG:-latest}
     container_name: template-printer
     restart: unless-stopped
     ports:
