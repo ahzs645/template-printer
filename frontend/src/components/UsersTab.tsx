@@ -101,7 +101,7 @@ export function UsersTab({
   const [assigningDesign, setAssigningDesign] = useState(false)
 
   const [preview, setPreview] = useState<PreviewState>(() => createInitialPreviewState())
-  const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front')
+  const [previewSide, setPreviewSide] = useState<'front' | 'back' | 'both'>('front')
 
   const templateCacheRef = useRef<Map<string, { meta: TemplateMeta; fields: FieldDefinition[] }>>(new Map())
   const mappingCacheRef = useRef<Map<string, { mappings: Record<string, string>; customValues: Record<string, string> }>>(new Map())
@@ -271,22 +271,23 @@ export function UsersTab({
         const { meta, fields } = await loadTemplate(templateId, summary)
         const { mappings, customValues } = await loadMappings(templateId)
 
+        let svg: string
         if (Object.keys(mappings).length === 0) {
-          throw new Error('No field mappings configured for this template yet.')
+          svg = meta.rawSvg
+        } else {
+          const cardData: CardData = {}
+
+          fields.forEach((field) => {
+            const layerId = field.sourceId || field.id
+            const standardFieldName = mappings[layerId]
+            if (standardFieldName) {
+              const customValue = customValues[layerId]
+              cardData[field.id] = parseField(standardFieldName, selectedUser, customValue)
+            }
+          })
+
+          svg = renderSvgWithData(meta, fields, cardData)
         }
-
-        const cardData: CardData = {}
-
-        fields.forEach((field) => {
-          const layerId = field.sourceId || field.id
-          const standardFieldName = mappings[layerId]
-          if (standardFieldName) {
-            const customValue = customValues[layerId]
-            cardData[field.id] = parseField(standardFieldName, selectedUser, customValue)
-          }
-        })
-
-        const svg = renderSvgWithData(meta, fields, cardData)
         if (cancelled) return
 
         setPreview((prev) => ({
@@ -557,6 +558,108 @@ export function UsersTab({
     }
   }
 
+  function renderPreviewPane(side: 'front' | 'back', showLabel: boolean) {
+    const pane = preview[side]
+    const templateSummary = side === 'front' ? frontTemplateSummary : backTemplateSummary
+    const label = side === 'front' ? 'Front' : 'Back'
+    const templateName = templateSummary?.name ?? `No ${label.toLowerCase()} template`
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+        {showLabel && (
+          <div style={{ fontSize: '0.8rem', color: '#52525b', textAlign: 'center' }}>
+            {label}: {templateName}
+          </div>
+        )}
+        <div
+          style={{
+            flex: 1,
+            width: '100%',
+            border: '1px dashed #d4d4d8',
+            borderRadius: '0.75rem',
+            padding: '1rem',
+            backgroundColor: '#fafafa',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {pane.loading ? (
+            <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Rendering preview…</p>
+          ) : pane.error ? (
+            <p style={{ color: '#dc2626', fontSize: '0.85rem', textAlign: 'center', maxWidth: '280px' }}>
+              {pane.error}
+            </p>
+          ) : pane.svg ? (
+            <div
+              style={{
+                width: '100%',
+                maxWidth: '420px',
+                borderRadius: '0.5rem',
+                overflow: 'hidden',
+                backgroundColor: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              }}
+              dangerouslySetInnerHTML={{ __html: pane.svg }}
+            />
+          ) : (
+            <p style={{ color: '#71717a', fontSize: '0.9rem', textAlign: 'center' }}>
+              {templateSummary ? 'Preview not available yet.' : `No ${label.toLowerCase()} template assigned.`}
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderPreviewPanels = () => {
+    const sides: Array<'front' | 'back'> =
+      previewSide === 'both'
+        ? ['front', 'back']
+        : previewSide === 'front'
+          ? ['front']
+          : ['back']
+    const isMulti = sides.length > 1
+
+    if (isMulti) {
+      return (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'row',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            alignItems: 'stretch',
+            justifyContent: 'center',
+          }}
+        >
+          {sides.map((side) => (
+            <div key={side} style={{ flex: '1 1 260px', minWidth: '220px', display: 'flex' }}>
+              {renderPreviewPane(side, true)}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ width: '100%', maxWidth: '420px' }}>{renderPreviewPane(sides[0], false)}</div>
+      </div>
+    )
+  }
+
+  const frontTemplateName = frontTemplateSummary?.name ?? 'No front template'
+  const backTemplateName = backTemplateSummary?.name ?? 'No back template'
+
   if (loading) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center', color: '#71717a' }}>
@@ -576,7 +679,6 @@ export function UsersTab({
     )
   }
 
-  const previewPane = preview[previewSide]
 
   return (
     <>
@@ -867,7 +969,7 @@ export function UsersTab({
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                       <Button
                         variant={previewSide === 'front' ? 'default' : 'outline'}
                         size="sm"
@@ -884,54 +986,46 @@ export function UsersTab({
                       >
                         Back
                       </Button>
+                      <Button
+                        variant={previewSide === 'both' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPreviewSide('both')}
+                        disabled={!(selectedDesign?.frontTemplateId && selectedDesign?.backTemplateId)}
+                      >
+                        Both
+                      </Button>
                       {selectedDesign && (
                         <span style={{ fontSize: '0.75rem', color: '#71717a' }}>
                           {previewSide === 'front'
-                            ? frontTemplateSummary?.name ?? 'No front template'
-                            : backTemplateSummary?.name ?? 'No back template'}
+                            ? frontTemplateName
+                            : previewSide === 'back'
+                              ? backTemplateName
+                              : `Front: ${frontTemplateName} • Back: ${backTemplateName}`}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px dashed #d4d4d8',
-                      borderRadius: '0.75rem',
-                      padding: '1rem',
-                      backgroundColor: '#fafafa',
-                    }}
-                  >
-                    {previewPane.loading ? (
-                      <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Rendering preview…</p>
-                    ) : previewPane.error ? (
-                      <p style={{ color: '#dc2626', fontSize: '0.85rem', textAlign: 'center', maxWidth: '280px' }}>
-                        {previewPane.error}
-                      </p>
-                    ) : previewPane.svg ? (
-                      <div
-                        style={{
-                          width: '100%',
-                          maxWidth: '420px',
-                          borderRadius: '0.5rem',
-                          overflow: 'hidden',
-                          backgroundColor: '#fff',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                        }}
-                        dangerouslySetInnerHTML={{ __html: previewPane.svg }}
-                      />
-                    ) : (
+                  {selectedDesign ? (
+                    renderPreviewPanels()
+                  ) : (
+                    <div
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1px dashed #d4d4d8',
+                        borderRadius: '0.75rem',
+                        padding: '1rem',
+                        backgroundColor: '#fafafa',
+                      }}
+                    >
                       <p style={{ color: '#71717a', fontSize: '0.9rem', textAlign: 'center' }}>
-                        {selectedDesign
-                          ? 'Select a side to preview.'
-                          : 'Assign a card design to view a preview.'}
+                        Assign a card design to view a preview.
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div

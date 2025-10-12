@@ -4,7 +4,7 @@ import path from 'path'
 import { Router } from 'express'
 import multer from 'multer'
 
-import { createTemplateRecord, deleteTemplate, listTemplates } from '../db.js'
+import { createTemplateRecord, deleteTemplate, listTemplates, updateTemplateRecord } from '../db.js'
 import { templatesDir } from '../paths.js'
 
 const ACCEPTED_MIME_TYPES = new Set(['image/svg+xml', 'application/xml', 'text/xml'])
@@ -82,6 +82,48 @@ router.post('/', upload.single('file'), (req, res, next) => {
     res.status(201).json(record)
   } catch (error) {
     cleanupUploadedFile(req.file.path)
+    if (isUniqueConstraintError(error)) {
+      res.status(409).json({ error: 'A template with this name already exists. Choose a different name.' })
+      return
+    }
+    next(error)
+  }
+})
+
+router.put('/:id', (req, res, next) => {
+  const { id } = req.params
+  const { name, description } = req.body ?? {}
+
+  const hasName = name !== undefined
+  const hasDescription = description !== undefined
+
+  if (!hasName && !hasDescription) {
+    res.status(400).json({ error: 'No updates provided.' })
+    return
+  }
+
+  if (hasName && typeof name !== 'string') {
+    res.status(400).json({ error: 'Template name must be a string.' })
+    return
+  }
+
+  if (hasDescription && description !== null && typeof description !== 'string') {
+    res.status(400).json({ error: 'Template description must be a string or null.' })
+    return
+  }
+
+  try {
+    const updated = updateTemplateRecord(id, { name, description })
+    if (!updated) {
+      res.status(404).json({ error: 'Template not found.' })
+      return
+    }
+    res.json(updated)
+  } catch (error) {
+    if (error && error.code === 'VALIDATION_ERROR') {
+      res.status(400).json({ error: error.message })
+      return
+    }
     if (isUniqueConstraintError(error)) {
       res.status(409).json({ error: 'A template with this name already exists. Choose a different name.' })
       return

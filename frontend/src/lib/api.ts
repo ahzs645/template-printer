@@ -37,6 +37,34 @@ export async function deleteTemplateFromLibrary(id: string): Promise<void> {
   }
 }
 
+export async function renameTemplateInLibrary(
+  id: string,
+  updates: { name?: string; description?: string | null }
+): Promise<TemplateSummary> {
+  const payload: Record<string, unknown> = {}
+  if (updates.name !== undefined) {
+    payload.name = updates.name
+  }
+  if (updates.description !== undefined) {
+    payload.description = updates.description
+  }
+
+  const response = await fetch(`/api/templates/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to update template (${response.status})`)
+  }
+
+  return await response.json()
+}
+
 async function safeReadErrorMessage(response: Response): Promise<string | null> {
   try {
     const data = await response.json()

@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import { HelpCircle } from 'lucide-react'
 
 import './App.css'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Badge } from './components/ui/badge'
+import { Button } from './components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './components/ui/dialog'
 import { TemplateSidebar } from './components/TemplateSidebar'
 import { PreviewWorkspace } from './components/PreviewWorkspace'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
+import { FieldNamingTab } from './components/FieldNamingTab'
 import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { useUsers } from './hooks/useUsers'
-import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, getFieldMappings } from './lib/api'
+import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, getFieldMappings, renameTemplateInLibrary } from './lib/api'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout } from './lib/exporter'
 import { generateAutoMappings } from './lib/autoMapping'
@@ -43,6 +47,7 @@ function App() {
   const [isExporting, setIsExporting] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [fieldMappingDialogOpen, setFieldMappingDialogOpen] = useState(false)
+  const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -414,6 +419,28 @@ function App() {
     }
   }
 
+  const handleTemplateRename = async (templateSummary: TemplateSummary, nextName: string) => {
+    const trimmed = nextName.trim()
+    if (!trimmed) {
+      throw new Error('Template name cannot be empty.')
+    }
+
+    try {
+      setErrorMessage(null)
+      const updated = await renameTemplateInLibrary(templateSummary.id, { name: trimmed })
+      await reloadDesignTemplates()
+      setStatusMessage(`Renamed template to "${updated.name}".`)
+      if (selectedTemplateId === templateSummary.id) {
+        setTemplate(current => (current ? { ...current, name: updated.name } : current))
+      }
+    } catch (error) {
+      console.error(error)
+      const message = error instanceof Error ? error.message : 'Failed to rename template'
+      setErrorMessage(message)
+      throw new Error(message)
+    }
+  }
+
   const handleTemplateDelete = async (templateSummary: TemplateSummary) => {
     if (!confirm(`Are you sure you want to delete "${templateSummary.name}"?`)) {
       return
@@ -467,51 +494,85 @@ function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#fafafa' }}>
       {/* Header */}
-      <header style={{
-        borderBottom: '1px solid #e4e4e7',
-        backgroundColor: '#fff',
-        padding: '1rem 1.5rem'
-      }}>
-        <div style={{ maxWidth: '100%' }}>
-          <h1 style={{
-            fontSize: '1.25rem',
-            fontWeight: 'bold',
-            marginBottom: '0.25rem',
-            color: '#18181b'
-          }}>
-            ID Card Maker
-          </h1>
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
-            Import Illustrator SVG templates, define editable fields, and preview cards.
-          </p>
+      <header
+        style={{
+          borderBottom: '1px solid #e4e4e7',
+          backgroundColor: '#fff',
+          padding: '1rem 1.5rem',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: '1rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ maxWidth: '100%' }}>
+            <h1
+              style={{
+                fontSize: '1.25rem',
+                fontWeight: 'bold',
+                marginBottom: '0.25rem',
+                color: '#18181b',
+              }}
+            >
+              ID Card Maker
+            </h1>
+            <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+              Import Illustrator SVG templates, define editable fields, and preview cards.
+            </p>
 
-          {/* Template Info Badges */}
-          {template && (
-            <div style={{
-              marginTop: '0.75rem',
-              display: 'flex',
-              gap: '0.5rem',
-              flexWrap: 'wrap',
-              alignItems: 'center'
-            }}>
-              <Badge variant="secondary" style={{ fontSize: '0.75rem' }}>
-                {template.name}
-              </Badge>
-              <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
-                {template.width} × {template.height} {template.unit}
-              </Badge>
-              {template.viewBox && (
-                <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
-                  ViewBox: {template.viewBox.width.toFixed(0)} × {template.viewBox.height.toFixed(0)}
+            {/* Template Info Badges */}
+            {template && (
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  display: 'flex',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                }}
+              >
+                <Badge variant="secondary" style={{ fontSize: '0.75rem' }}>
+                  {template.name}
                 </Badge>
-              )}
-              {template.fonts.length > 0 && (
                 <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
-                  Fonts: {template.fonts.join(', ')}
+                  {template.width} × {template.height} {template.unit}
                 </Badge>
-              )}
-            </div>
-          )}
+                {template.viewBox && (
+                  <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
+                    ViewBox: {template.viewBox.width.toFixed(0)} × {template.viewBox.height.toFixed(0)}
+                  </Badge>
+                )}
+                {template.fonts.length > 0 && (
+                  <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
+                    Fonts: {template.fonts.join(', ')}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setLayerNamingDialogOpen(true)}
+              style={{
+                fontSize: '0.75rem',
+                height: '2.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}
+            >
+              <HelpCircle size={16} />
+              Layer naming help
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -537,6 +598,7 @@ function App() {
                   onTemplateSelect={handleTemplateSelect}
                   onTemplateUpload={handleTemplateUpload}
                   onTemplateDelete={handleTemplateDelete}
+                  onTemplateRename={handleTemplateRename}
                   statusMessage={statusMessage}
                   errorMessage={errorMessage}
                   fontList={fontList}
@@ -623,6 +685,26 @@ function App() {
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
       />
+      <Dialog open={layerNamingDialogOpen} onOpenChange={setLayerNamingDialogOpen}>
+        <DialogContent
+          style={{
+            maxWidth: '960px',
+            width: '95vw',
+            maxHeight: '85vh',
+            overflow: 'auto',
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>SVG Layer Naming Helper</DialogTitle>
+            <DialogDescription>
+              Build layer IDs that follow the convention described in docs/svg-layer-naming.md.
+            </DialogDescription>
+          </DialogHeader>
+          <div style={{ paddingTop: '0.5rem' }}>
+            <FieldNamingTab />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

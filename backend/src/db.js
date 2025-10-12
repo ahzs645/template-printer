@@ -346,6 +346,42 @@ export function deleteTemplate(id) {
   return template
 }
 
+export function updateTemplateRecord(id, updates) {
+  const db = getDatabase()
+  const existing = getTemplateById(id)
+
+  if (!existing) {
+    return null
+  }
+
+  const nextName =
+    updates.name !== undefined
+      ? String(updates.name ?? '').trim()
+      : existing.name
+  const nextDescription =
+    updates.description !== undefined
+      ? updates.description === null
+        ? null
+        : String(updates.description).trim() || null
+      : existing.description
+
+  if (!nextName) {
+    const error = new Error('Template name is required')
+    error.code = 'VALIDATION_ERROR'
+    throw error
+  }
+
+  const updateStmt = db.prepare(`
+    UPDATE templates
+    SET name = ?, description = ?
+    WHERE id = ?
+  `)
+
+  updateStmt.run(nextName, nextDescription, id)
+
+  return getTemplateById(id)
+}
+
 function normalizeTemplatePaths(template) {
   const svgPath = normalizePublicPath(template.svgPath, { required: true })
   const thumbnailPath = normalizePublicPath(template.thumbnailPath, { required: false })

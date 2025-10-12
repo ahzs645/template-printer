@@ -20,6 +20,7 @@ export type TemplateSidebarProps = {
   onTemplateSelect: (template: TemplateSummary) => void
   onTemplateUpload: (event: ChangeEvent<HTMLInputElement>) => void
   onTemplateDelete: (template: TemplateSummary) => void
+  onTemplateRename: (template: TemplateSummary, name: string) => Promise<void> | void
   statusMessage: string | null
   errorMessage: string | null
   fontList: FontEntry[]
@@ -45,6 +46,7 @@ export function TemplateSidebar({
   onTemplateSelect,
   onTemplateUpload,
   onTemplateDelete,
+  onTemplateRename,
   statusMessage,
   errorMessage,
   fontList,
@@ -118,6 +120,7 @@ export function TemplateSidebar({
             onRetry={onRefreshDesignTemplates}
             onUploadClick={handleTemplateUploadClick}
             onDelete={onTemplateDelete}
+            onRename={onTemplateRename}
           />
           <input
             ref={templateUploadInputRef}
