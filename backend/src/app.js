@@ -6,6 +6,7 @@ import path from 'path'
 import { getDatabase } from './db.js'
 import { clientDistDir, templatesDir } from './paths.js'
 import templatesRouter from './routes/templates.js'
+import cardDesignsRouter from './routes/cardDesigns.js'
 import usersRouter from './routes/users.js'
 import fieldMappingsRouter from './routes/fieldMappings.js'
 import fontsRouter from './routes/fonts.js'
@@ -25,6 +26,7 @@ export function createApp() {
 
   app.use('/api/templates', templatesRouter)
   app.use('/api/templates', fieldMappingsRouter)
+  app.use('/api/card-designs', cardDesignsRouter)
   app.use('/api/users', usersRouter)
   app.use('/api/fonts', fontsRouter)
 

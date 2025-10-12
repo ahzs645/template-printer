@@ -1,5 +1,5 @@
 import express from 'express'
-import { listUsers, getUserById, createUser, updateUser, deleteUser } from '../db.js'
+import { listUsers, getUserById, createUser, updateUser, deleteUser, getCardDesignById } from '../db.js'
 import multer from 'multer'
 
 const router = express.Router()
@@ -41,7 +41,16 @@ router.post('/', (req, res, next) => {
       return
     }
 
-    const newUser = createUser(userData)
+    const cardDesignId = normalizeCardDesignId(userData.cardDesignId)
+    if (cardDesignId) {
+      const design = getCardDesignById(cardDesignId)
+      if (!design) {
+        res.status(400).json({ error: 'Invalid card design.' })
+        return
+      }
+    }
+
+    const newUser = createUser({ ...userData, cardDesignId })
     res.status(201).json(newUser)
   } catch (error) {
     next(error)
@@ -58,6 +67,18 @@ router.put('/:id', (req, res, next) => {
     if (!existing) {
       res.status(404).json({ error: 'User not found.' })
       return
+    }
+
+    if (Object.prototype.hasOwnProperty.call(userData, 'cardDesignId')) {
+      const cardDesignId = normalizeCardDesignId(userData.cardDesignId)
+      if (cardDesignId) {
+        const design = getCardDesignById(cardDesignId)
+        if (!design) {
+          res.status(400).json({ error: 'Invalid card design.' })
+          return
+        }
+      }
+      userData.cardDesignId = cardDesignId
     }
 
     // Validate required fields if they are being updated
@@ -219,6 +240,7 @@ router.get('/export-csv', (req, res, next) => {
       'phoneNumber',
       'address',
       'emergencyContact',
+      'cardDesignId',
       'issueDate',
       'expiryDate',
       'birthDate'
@@ -248,3 +270,11 @@ router.get('/export-csv', (req, res, next) => {
 })
 
 export default router
+
+function normalizeCardDesignId(value) {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const trimmed = String(value).trim()
+  if (!trimmed) return null
+  return trimmed
+}

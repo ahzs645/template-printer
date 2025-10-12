@@ -1,3 +1,5 @@
+import type { TemplateSummary } from './templates'
+
 export type FieldType = 'text' | 'image' | 'barcode' | 'date'
 
 export type TemplateMeta = {
@@ -47,4 +49,16 @@ export type CardData = Record<string, CardDataValue>
 export type TemplateExtractionResult = {
   metadata: TemplateMeta
   autoFields: FieldDefinition[]
+}
+
+export type CardDesign = {
+  id: string
+  name: string
+  description?: string | null
+  frontTemplateId: string | null
+  backTemplateId: string | null
+  frontTemplate?: TemplateSummary | null
+  backTemplate?: TemplateSummary | null
+  createdAt?: string | null
+  updatedAt?: string | null
 }

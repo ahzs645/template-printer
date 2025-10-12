@@ -1,4 +1,4 @@
-import type { TemplateMeta } from './types'
+import type { CardDesign, TemplateMeta } from './types'
 import type { TemplateSummary, TemplateType } from './templates'
 
 export async function uploadTemplateToLibrary(
@@ -86,6 +86,70 @@ export async function saveFieldMappings(
   }
 
   return await response.json()
+}
+
+// Card Design API
+export interface CardDesignPayload {
+  name: string
+  description?: string | null
+  frontTemplateId?: string | null
+  backTemplateId?: string | null
+}
+
+export async function listCardDesigns(): Promise<CardDesign[]> {
+  const response = await fetch('/api/card-designs')
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to list card designs (${response.status})`)
+  }
+
+  return await response.json()
+}
+
+export async function createCardDesign(payload: CardDesignPayload): Promise<CardDesign> {
+  const response = await fetch('/api/card-designs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to create card design (${response.status})`)
+  }
+
+  return await response.json()
+}
+
+export async function updateCardDesign(id: string, payload: Partial<CardDesignPayload>): Promise<CardDesign> {
+  const response = await fetch(`/api/card-designs/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to update card design (${response.status})`)
+  }
+
+  return await response.json()
+}
+
+export async function deleteCardDesign(id: string): Promise<void> {
+  const response = await fetch(`/api/card-designs/${id}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const message = await safeReadErrorMessage(response)
+    throw new Error(message ?? `Failed to delete card design (${response.status})`)
+  }
 }
 
 // Font API

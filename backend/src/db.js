@@ -87,6 +87,7 @@ function createSchema(db) {
       phoneNumber TEXT,
       address TEXT,
       emergencyContact TEXT,
+      cardDesignId TEXT,
       photoPath TEXT,
       signaturePath TEXT,
       issueDate TEXT,
@@ -94,7 +95,8 @@ function createSchema(db) {
       birthDate TEXT,
       metadata TEXT,
       createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (cardDesignId) REFERENCES card_designs(id) ON DELETE SET NULL
     )
   `
 
@@ -120,6 +122,20 @@ function createSchema(db) {
     )
   `
 
+  const createCardDesignsTable = `
+    CREATE TABLE IF NOT EXISTS card_designs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      frontTemplateId TEXT,
+      backTemplateId TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (frontTemplateId) REFERENCES templates(id) ON DELETE SET NULL,
+      FOREIGN KEY (backTemplateId) REFERENCES templates(id) ON DELETE SET NULL
+    )
+  `
+
   const createUniqueIndex = `
     CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_name ON templates(name)
   `
@@ -133,6 +149,7 @@ function createSchema(db) {
   db.exec(createUsersTable)
   db.exec(createFieldMappingsTable)
   db.exec(createFontsTable)
+  db.exec(createCardDesignsTable)
   db.exec(createUniqueIndex)
   db.exec(createFieldMappingIndex)
 
@@ -151,6 +168,15 @@ function createSchema(db) {
     db.exec(`ALTER TABLE template_field_mappings ADD COLUMN customValue TEXT`)
   } catch (error) {
     // Column already exists, ignore error
+    if (!error.message.includes('duplicate column name')) {
+      throw error
+    }
+  }
+
+  // Migration: Add cardDesignId column to users if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN cardDesignId TEXT`)
+  } catch (error) {
     if (!error.message.includes('duplicate column name')) {
       throw error
     }
@@ -350,6 +376,193 @@ function normalizePublicPath(value, { required }) {
 }
 
 // ============================================
+// CARD DESIGN OPERATIONS
+// ============================================
+
+export function listCardDesigns() {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT
+      cd.id,
+      cd.name,
+      cd.description,
+      cd.frontTemplateId,
+      cd.backTemplateId,
+      cd.createdAt,
+      cd.updatedAt,
+      ft.name AS frontTemplateName,
+      ft.description AS frontTemplateDescription,
+      ft.svg_path AS frontTemplateSvgPath,
+      ft.thumbnail_path AS frontTemplateThumbnailPath,
+      ft.template_type AS frontTemplateType,
+      ft.created_at AS frontTemplateCreatedAt,
+      bt.name AS backTemplateName,
+      bt.description AS backTemplateDescription,
+      bt.svg_path AS backTemplateSvgPath,
+      bt.thumbnail_path AS backTemplateThumbnailPath,
+      bt.template_type AS backTemplateType,
+      bt.created_at AS backTemplateCreatedAt
+    FROM card_designs cd
+    LEFT JOIN templates ft ON ft.id = cd.frontTemplateId
+    LEFT JOIN templates bt ON bt.id = cd.backTemplateId
+    ORDER BY cd.name
+  `)
+
+  return stmt.all().map(mapCardDesignRow)
+}
+
+export function getCardDesignById(id) {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT
+      cd.id,
+      cd.name,
+      cd.description,
+      cd.frontTemplateId,
+      cd.backTemplateId,
+      cd.createdAt,
+      cd.updatedAt,
+      ft.name AS frontTemplateName,
+      ft.description AS frontTemplateDescription,
+      ft.svg_path AS frontTemplateSvgPath,
+      ft.thumbnail_path AS frontTemplateThumbnailPath,
+      ft.template_type AS frontTemplateType,
+      ft.created_at AS frontTemplateCreatedAt,
+      bt.name AS backTemplateName,
+      bt.description AS backTemplateDescription,
+      bt.svg_path AS backTemplateSvgPath,
+      bt.thumbnail_path AS backTemplateThumbnailPath,
+      bt.template_type AS backTemplateType,
+      bt.created_at AS backTemplateCreatedAt
+    FROM card_designs cd
+    LEFT JOIN templates ft ON ft.id = cd.frontTemplateId
+    LEFT JOIN templates bt ON bt.id = cd.backTemplateId
+    WHERE cd.id = ?
+  `)
+
+  const row = stmt.get(id)
+  return row ? mapCardDesignRow(row) : null
+}
+
+export function createCardDesign({ name, description, frontTemplateId, backTemplateId }) {
+  const db = getDatabase()
+
+  const cleanedName = (name ?? '').trim()
+  if (!cleanedName) {
+    throw Object.assign(new Error('Card design name is required'), { status: 400 })
+  }
+
+  const cleanedDescription = description ? description.trim() : null
+  const frontId = frontTemplateId || null
+  const backId = backTemplateId || null
+
+  const id = `card-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+
+  const stmt = db.prepare(`
+    INSERT INTO card_designs (id, name, description, frontTemplateId, backTemplateId)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+
+  stmt.run(id, cleanedName, cleanedDescription, frontId, backId)
+
+  return getCardDesignById(id)
+}
+
+export function updateCardDesign(id, updates) {
+  const db = getDatabase()
+  const existing = getCardDesignById(id)
+
+  if (!existing) {
+    return null
+  }
+
+  const hasNameUpdate = Object.prototype.hasOwnProperty.call(updates, 'name')
+  const hasDescriptionUpdate = Object.prototype.hasOwnProperty.call(updates, 'description')
+  const hasFrontUpdate = Object.prototype.hasOwnProperty.call(updates, 'frontTemplateId')
+  const hasBackUpdate = Object.prototype.hasOwnProperty.call(updates, 'backTemplateId')
+
+  const nextNameRaw = hasNameUpdate ? updates.name : existing.name
+  const nextName = (nextNameRaw ?? '').toString().trim()
+  if (!nextName) {
+    throw Object.assign(new Error('Card design name is required'), { status: 400 })
+  }
+
+  const nextDescription = hasDescriptionUpdate
+    ? (updates.description ? updates.description.toString().trim() : null)
+    : existing.description
+
+  const nextFront = hasFrontUpdate ? (updates.frontTemplateId || null) : existing.frontTemplateId
+  const nextBack = hasBackUpdate ? (updates.backTemplateId || null) : existing.backTemplateId
+
+  const stmt = db.prepare(`
+    UPDATE card_designs
+    SET name = ?, description = ?, frontTemplateId = ?, backTemplateId = ?, updatedAt = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `)
+
+  stmt.run(nextName, nextDescription, nextFront, nextBack, id)
+
+  return getCardDesignById(id)
+}
+
+export function deleteCardDesign(id) {
+  const db = getDatabase()
+  const existing = getCardDesignById(id)
+  if (!existing) {
+    return null
+  }
+
+  const stmt = db.prepare(`DELETE FROM card_designs WHERE id = ?`)
+  stmt.run(id)
+
+  return existing
+}
+
+function mapCardDesignRow(row) {
+  if (!row) return null
+
+  const base = {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? null,
+    frontTemplateId: row.frontTemplateId ?? null,
+    backTemplateId: row.backTemplateId ?? null,
+    createdAt: row.createdAt ?? null,
+    updatedAt: row.updatedAt ?? null,
+  }
+
+  const frontTemplate = row.frontTemplateId
+    ? {
+        id: row.frontTemplateId,
+        name: row.frontTemplateName ?? null,
+        description: row.frontTemplateDescription ?? null,
+        svgPath: row.frontTemplateSvgPath ?? null,
+        thumbnailPath: row.frontTemplateThumbnailPath ?? null,
+        templateType: row.frontTemplateType ?? null,
+        createdAt: row.frontTemplateCreatedAt ?? null,
+      }
+    : null
+
+  const backTemplate = row.backTemplateId
+    ? {
+        id: row.backTemplateId,
+        name: row.backTemplateName ?? null,
+        description: row.backTemplateDescription ?? null,
+        svgPath: row.backTemplateSvgPath ?? null,
+        thumbnailPath: row.backTemplateThumbnailPath ?? null,
+        templateType: row.backTemplateType ?? null,
+        createdAt: row.backTemplateCreatedAt ?? null,
+      }
+    : null
+
+  return {
+    ...base,
+    frontTemplate,
+    backTemplate,
+  }
+}
+
+// ============================================
 // USER CRUD OPERATIONS
 // ============================================
 
@@ -375,8 +588,8 @@ export function createUser(userData) {
     INSERT INTO users (
       id, firstName, lastName, middleName, studentId, department,
       position, grade, email, phoneNumber, address, emergencyContact,
-      photoPath, signaturePath, issueDate, expiryDate, birthDate, metadata
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cardDesignId, photoPath, signaturePath, issueDate, expiryDate, birthDate, metadata
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   stmt.run(
@@ -392,6 +605,7 @@ export function createUser(userData) {
     userData.phoneNumber || null,
     userData.address || null,
     userData.emergencyContact || null,
+    userData.cardDesignId || null,
     userData.photoPath || null,
     userData.signaturePath || null,
     userData.issueDate || null,
@@ -423,6 +637,7 @@ export function updateUser(id, userData) {
       phoneNumber = ?,
       address = ?,
       emergencyContact = ?,
+      cardDesignId = ?,
       photoPath = ?,
       signaturePath = ?,
       issueDate = ?,
@@ -445,6 +660,9 @@ export function updateUser(id, userData) {
     userData.phoneNumber ?? existing.phoneNumber,
     userData.address ?? existing.address,
     userData.emergencyContact ?? existing.emergencyContact,
+    Object.prototype.hasOwnProperty.call(userData, 'cardDesignId')
+      ? userData.cardDesignId || null
+      : existing.cardDesignId || null,
     userData.photoPath ?? existing.photoPath,
     userData.signaturePath ?? existing.signaturePath,
     userData.issueDate ?? existing.issueDate,

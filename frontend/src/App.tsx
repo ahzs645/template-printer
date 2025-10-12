@@ -33,7 +33,7 @@ type ActiveTab = 'design' | 'users' | 'export'
 const PREVIEW_BASE_WIDTH = 420
 
 function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('design')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('users')
   const [template, setTemplate] = useState<TemplateMeta | null>(null)
   const [fields, setFields] = useState<FieldDefinition[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
@@ -519,8 +519,8 @@ function App() {
       <div style={{ padding: '1.5rem' }}>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)}>
           <TabsList style={{ marginBottom: '1.5rem' }}>
-            <TabsTrigger value="design">Design</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="design">Design</TabsTrigger>
             <TabsTrigger value="export">Export</TabsTrigger>
           </TabsList>
 
@@ -580,7 +580,12 @@ function App() {
           </TabsContent>
 
           <TabsContent value="users" style={{ marginTop: 0 }}>
-            <UsersTab />
+            <UsersTab
+              designTemplates={designTemplates}
+              designTemplatesLoading={designTemplatesLoading}
+              designTemplatesError={designTemplatesError}
+              onRefreshDesignTemplates={reloadDesignTemplates}
+            />
           </TabsContent>
 
           <TabsContent value="export" style={{ marginTop: 0 }}>

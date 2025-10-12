@@ -31,6 +31,7 @@ export interface UserData {
   phoneNumber?: string | null
   address?: string | null
   emergencyContact?: string | null
+  cardDesignId?: string | null
   photoPath?: string | null
   signaturePath?: string | null
   issueDate?: string | null
