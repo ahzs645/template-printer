@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { CardData, FieldDefinition } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import { parseField } from '../lib/fieldParser'
@@ -50,6 +50,42 @@ export function useExportPreview({
     }
   }, [selectedTemplateId, mode])
 
+  const renderCardForUser = useCallback(
+    (userId: string | null | undefined): string | null => {
+      if (mode === 'quick') {
+        return renderedSvg
+      }
+
+      if (!templateMeta || !userId) {
+        return renderedSvg
+      }
+
+      const user = users.find(u => u.id === userId)
+      if (!user || Object.keys(fieldMappings).length === 0) {
+        return renderedSvg
+      }
+
+      try {
+        const cardData: CardData = {}
+
+        fields.forEach(field => {
+          const layerId = field.sourceId || field.id
+          const standardFieldName = fieldMappings[layerId]
+          if (standardFieldName) {
+            const customValue = customValues[layerId]
+            cardData[field.id] = parseField(standardFieldName, user, customValue)
+          }
+        })
+
+        return renderSvgWithData(templateMeta, fields, cardData)
+      } catch (error) {
+        console.error('Failed to render card for user:', error)
+        return renderedSvg
+      }
+    },
+    [mode, templateMeta, users, fieldMappings, customValues, fields, renderedSvg],
+  )
+
   // Generate preview SVG
   const previewSvg = useMemo(() => {
     if (mode === 'quick') {
@@ -62,30 +98,8 @@ export function useExportPreview({
     }
 
     const firstUserId = selectedUserIds[0]
-    const firstUser = users.find(u => u.id === firstUserId)
+    return renderCardForUser(firstUserId)
+  }, [mode, selectedUserIds, renderCardForUser])
 
-    if (!firstUser || Object.keys(fieldMappings).length === 0) {
-      return renderedSvg
-    }
-
-    try {
-      const previewCardData: CardData = {}
-
-      fields.forEach(field => {
-        const layerId = field.sourceId || field.id
-        const standardFieldName = fieldMappings[layerId]
-        if (standardFieldName) {
-          const customValue = customValues[layerId]
-          previewCardData[field.id] = parseField(standardFieldName, firstUser, customValue)
-        }
-      })
-
-      return renderSvgWithData(templateMeta, fields, previewCardData)
-    } catch (error) {
-      console.error('Failed to generate database mode preview:', error)
-      return renderedSvg
-    }
-  }, [mode, selectedUserIds, templateMeta, users, fieldMappings, customValues, fields, renderedSvg])
-
-  return { previewSvg }
+  return { previewSvg, renderCardForUser }
 }

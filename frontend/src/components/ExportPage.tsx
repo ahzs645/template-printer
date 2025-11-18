@@ -21,6 +21,7 @@ export type ExportOptions = {
   printLayoutId: string | null
   mode: ExportMode
   selectedUserIds: string[]
+  slotUserIds: string[]
 }
 
 export type ExportPageProps = {
@@ -73,12 +74,16 @@ export function ExportPage({
     printLayoutId: null,
     mode: 'quick',
     selectedUserIds: [],
+    slotUserIds: [],
   })
   const [printLayoutSvg, setPrintLayoutSvg] = useState<string | null>(null)
   const [compositePreview, setCompositePreview] = useState<string | null>(null)
+  const [layoutPreviewSvg, setLayoutPreviewSvg] = useState<string | null>(null)
+  const [showLayoutInspector, setShowLayoutInspector] = useState(false)
+  const [layoutSlotCount, setLayoutSlotCount] = useState(0)
 
   // Use custom hook for preview generation
-  const { previewSvg } = useExportPreview({
+  const { previewSvg, renderCardForUser } = useExportPreview({
     mode: exportOptions.mode,
     templateMeta,
     selectedTemplateId,
@@ -96,6 +101,11 @@ export function ExportPage({
   useEffect(() => {
     if (!selectedPrintLayout) {
       setPrintLayoutSvg(null)
+      setLayoutPreviewSvg(null)
+      setCompositePreview(null)
+      setShowLayoutInspector(false)
+      setLayoutSlotCount(0)
+      setExportOptions((prev) => ({ ...prev, slotUserIds: [] }))
       return
     }
 
@@ -105,42 +115,30 @@ export function ExportPage({
       .catch((err) => {
         console.error('Failed to load print layout:', err)
         setPrintLayoutSvg(null)
+        setLayoutPreviewSvg(null)
+        setCompositePreview(null)
+        setShowLayoutInspector(false)
+        setLayoutSlotCount(0)
       })
   }, [selectedPrintLayout])
 
-  // Create composite preview with cards in print layout slots
+  // Layout-only preview: highlight detected card slots (Card 1 / Card 2)
   useEffect(() => {
-    if (!printLayoutSvg || !previewSvg) {
-      setCompositePreview(null)
+    if (!printLayoutSvg) {
+      setLayoutPreviewSvg(null)
+      setLayoutSlotCount(0)
       return
     }
 
     try {
       const parser = new DOMParser()
       const layoutDoc = parser.parseFromString(printLayoutSvg, 'image/svg+xml')
-      const cardDoc = parser.parseFromString(previewSvg, 'image/svg+xml')
-
       const layoutSvg = layoutDoc.documentElement
-      const cardSvg = cardDoc.documentElement
 
       const placeholderGroups = ['Topcard', 'Bottomcard']
+      let slotIndex = 0
 
-      const cardViewBox = cardSvg.getAttribute('viewBox')
-      let cardNaturalWidth = 100
-      let cardNaturalHeight = 100
-
-      if (cardViewBox) {
-        const [, , vbW, vbH] = cardViewBox.split(/\s+/).map(parseFloat)
-        cardNaturalWidth = vbW
-        cardNaturalHeight = vbH
-      } else {
-        const cardWidth = cardSvg.getAttribute('width')
-        const cardHeight = cardSvg.getAttribute('height')
-        if (cardWidth) cardNaturalWidth = parseFloat(cardWidth)
-        if (cardHeight) cardNaturalHeight = parseFloat(cardHeight)
-      }
-
-      placeholderGroups.forEach((groupId) => {
+      placeholderGroups.forEach((groupId, index) => {
         const group = layoutDoc.getElementById(groupId)
         if (!group) return
 
@@ -153,6 +151,162 @@ export function ExportPage({
         const slotWidth = parseFloat(targetRect.getAttribute('width') || '0')
         const slotHeight = parseFloat(targetRect.getAttribute('height') || '0')
 
+        const overlayRect = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'rect')
+        overlayRect.setAttribute('x', String(slotX))
+        overlayRect.setAttribute('y', String(slotY))
+        overlayRect.setAttribute('width', String(slotWidth))
+        overlayRect.setAttribute('height', String(slotHeight))
+        overlayRect.setAttribute('fill', '#3b82f6')
+        overlayRect.setAttribute('fill-opacity', '0.06')
+        overlayRect.setAttribute('stroke', '#3b82f6')
+        overlayRect.setAttribute('stroke-dasharray', '3 2')
+        overlayRect.setAttribute('stroke-width', '0.7')
+
+        const label = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'text')
+        label.textContent = `Card ${index + 1}`
+        label.setAttribute('x', String(slotX + slotWidth / 2))
+        label.setAttribute('y', String(slotY + slotHeight / 2))
+        label.setAttribute('text-anchor', 'middle')
+        label.setAttribute('dominant-baseline', 'middle')
+        label.setAttribute('font-size', '10')
+        label.setAttribute('fill', '#111827')
+        label.setAttribute('opacity', '0.9')
+
+        group.parentNode?.appendChild(overlayRect)
+        group.parentNode?.appendChild(label)
+        slotIndex += 1
+      })
+
+      const serializer = new XMLSerializer()
+      const layoutPreview = serializer.serializeToString(layoutSvg)
+      setLayoutPreviewSvg(layoutPreview)
+      setLayoutSlotCount(slotIndex)
+    } catch (error) {
+      console.error('Failed to create layout preview:', error)
+      setLayoutPreviewSvg(printLayoutSvg)
+      setLayoutSlotCount(0)
+    }
+  }, [printLayoutSvg])
+
+  // Create composite preview with cards in print layout slots
+  useEffect(() => {
+    if (!printLayoutSvg) {
+      setCompositePreview(null)
+      return
+    }
+
+    try {
+      const parser = new DOMParser()
+      const layoutDoc = parser.parseFromString(printLayoutSvg, 'image/svg+xml')
+      const layoutSvg = layoutDoc.documentElement
+      const placeholderGroups = ['Topcard', 'Bottomcard']
+
+      // Helper to prefix IDs inside a cloned card SVG to avoid collisions
+      const prefixSvgIds = (root: Element, prefix: string) => {
+        const idMap = new Map<string, string>()
+
+        // First pass: collect and rename IDs
+        root.querySelectorAll('[id]').forEach((el) => {
+          const oldId = el.getAttribute('id')
+          if (!oldId) return
+          const newId = `${prefix}${oldId}`
+          idMap.set(oldId, newId)
+          el.setAttribute('id', newId)
+        })
+
+        if (idMap.size === 0) return
+
+        // Second pass: update references to IDs (url(#id), href="#id", xlink:href="#id", style="...url(#id)...")
+        const updateAttrValue = (value: string | null) => {
+          if (!value) return value
+
+          // Replace url(#id) patterns
+          let updated = value.replace(/url\(#([^)]+)\)/g, (_, id: string) => {
+            const mapped = idMap.get(id)
+            return `url(#${mapped ?? id})`
+          })
+
+          return updated
+        }
+
+        root.querySelectorAll('*').forEach((el) => {
+          Array.from(el.attributes).forEach((attr) => {
+            const name = attr.name
+            let value = attr.value
+
+            // href / xlink:href that reference an ID
+            if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
+              const id = value.slice(1)
+              const mapped = idMap.get(id)
+              if (mapped) {
+                el.setAttribute(name, `#${mapped}`)
+              }
+              return
+            }
+
+            // style or other attributes containing url(#id)
+            if (value.includes('url(#')) {
+              value = updateAttrValue(value) as string
+              el.setAttribute(name, value)
+            }
+          })
+        })
+      }
+
+      placeholderGroups.forEach((groupId, index) => {
+        const group = layoutDoc.getElementById(groupId)
+        if (!group) return
+
+        const rects = Array.from(group.querySelectorAll('rect'))
+        const targetRect = rects[rects.length - 1]
+        if (!targetRect) return
+
+        const slotX = parseFloat(targetRect.getAttribute('x') || '0')
+        const slotY = parseFloat(targetRect.getAttribute('y') || '0')
+        const slotWidth = parseFloat(targetRect.getAttribute('width') || '0')
+        const slotHeight = parseFloat(targetRect.getAttribute('height') || '0')
+
+        // Determine which card SVG to use for this slot
+        let cardMarkup: string | null = previewSvg
+        if (exportOptions.mode === 'database') {
+          const slotUserIds = exportOptions.slotUserIds
+          let userIdForSlot: string | null = null
+
+          if (slotUserIds && slotUserIds[index]) {
+            userIdForSlot = slotUserIds[index]
+          } else if (exportOptions.selectedUserIds.length > 0) {
+            // Fallback: use selected users in order
+            userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
+          }
+
+          if (userIdForSlot) {
+            const renderedForUser = renderCardForUser(userIdForSlot)
+            if (renderedForUser) {
+              cardMarkup = renderedForUser
+            }
+          }
+        }
+
+        if (!cardMarkup) return
+
+        const cardDoc = parser.parseFromString(cardMarkup, 'image/svg+xml')
+        const cardSvg = cardDoc.documentElement
+
+        const cardViewBox = cardSvg.getAttribute('viewBox')
+        let cardNaturalWidth = 100
+        let cardNaturalHeight = 100
+
+        if (cardViewBox) {
+          const [, , vbW, vbH] = cardViewBox.split(/\s+/).map(parseFloat)
+          cardNaturalWidth = vbW
+          cardNaturalHeight = vbH
+        } else {
+          const cardWidth = cardSvg.getAttribute('width')
+          const cardHeight = cardSvg.getAttribute('height')
+          if (cardWidth) cardNaturalWidth = parseFloat(cardWidth)
+          if (cardHeight) cardNaturalHeight = parseFloat(cardHeight)
+        }
+
         const scale = Math.min(slotWidth / cardNaturalWidth, slotHeight / cardNaturalHeight)
         const scaledWidth = cardNaturalWidth * scale
         const scaledHeight = cardNaturalHeight * scale
@@ -160,10 +314,18 @@ export function ExportPage({
         const offsetX = slotX + (slotWidth - scaledWidth) / 2
         const offsetY = slotY + (slotHeight - scaledHeight) / 2
 
+        // Create a group with proper transform matrix: scale first, then translate
+        // Using matrix(a, b, c, d, e, f) where a,d = scale, e,f = translate
         const cardGroup = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'g')
-        cardGroup.setAttribute('transform', `translate(${offsetX}, ${offsetY}) scale(${scale})`)
+        cardGroup.setAttribute('transform', `matrix(${scale}, 0, 0, ${scale}, ${offsetX}, ${offsetY})`)
 
-        Array.from(cardSvg.children).forEach((child) => {
+        // Clone the entire card SVG so we can safely prefix IDs,
+        // then move its children into the layout's group
+        const cardClone = cardSvg.cloneNode(true) as Element
+        const prefix = `slot${index + 1}-`
+        prefixSvgIds(cardClone, prefix)
+
+        Array.from(cardClone.children).forEach((child) => {
           const clonedChild = child.cloneNode(true)
           cardGroup.appendChild(clonedChild)
         })
@@ -178,7 +340,14 @@ export function ExportPage({
       console.error('Failed to create composite preview:', error)
       setCompositePreview(printLayoutSvg)
     }
-  }, [printLayoutSvg, previewSvg])
+  }, [
+    printLayoutSvg,
+    previewSvg,
+    exportOptions.mode,
+    exportOptions.selectedUserIds,
+    exportOptions.slotUserIds,
+    renderCardForUser,
+  ])
 
   const handleExport = () => {
     onExport(exportOptions)
@@ -187,11 +356,18 @@ export function ExportPage({
   const toggleUserSelection = (userId: string) => {
     setExportOptions((prev) => {
       const isSelected = prev.selectedUserIds.includes(userId)
+      const selectedUserIds = isSelected
+        ? prev.selectedUserIds.filter((id) => id !== userId)
+        : [...prev.selectedUserIds, userId]
+
+      const slotUserIds = prev.slotUserIds.filter(
+        (id) => !id || selectedUserIds.includes(id),
+      )
+
       return {
         ...prev,
-        selectedUserIds: isSelected
-          ? prev.selectedUserIds.filter((id) => id !== userId)
-          : [...prev.selectedUserIds, userId],
+        selectedUserIds,
+        slotUserIds,
       }
     })
   }
@@ -200,6 +376,7 @@ export function ExportPage({
     setExportOptions((prev) => ({
       ...prev,
       selectedUserIds: users.map((u) => u.id!),
+      slotUserIds: prev.slotUserIds.filter((id) => !id || users.some((u) => u.id === id)),
     }))
   }
 
@@ -207,6 +384,7 @@ export function ExportPage({
     setExportOptions((prev) => ({
       ...prev,
       selectedUserIds: [],
+      slotUserIds: [],
     }))
   }
 
@@ -243,6 +421,22 @@ export function ExportPage({
             users={users}
             selectedUserIds={exportOptions.selectedUserIds}
             loading={usersLoading}
+            mode={exportOptions.mode}
+            layoutSlotCount={layoutSlotCount}
+            hasPrintLayout={!!exportOptions.printLayoutId}
+            slotUserIds={exportOptions.slotUserIds}
+            onSlotUserChange={(slotIndex, userId) => {
+              setExportOptions((prev) => {
+                const next = [...prev.slotUserIds]
+                next[slotIndex] = userId ?? ''
+                const derivedSelected = Array.from(new Set(next.filter((id) => id))) as string[]
+                return {
+                  ...prev,
+                  slotUserIds: next,
+                  selectedUserIds: derivedSelected,
+                }
+              })
+            }}
             onToggleUser={toggleUserSelection}
             onSelectAll={selectAllUsers}
             onDeselectAll={deselectAllUsers}
@@ -257,9 +451,11 @@ export function ExportPage({
           printTemplatesLoading={printTemplatesLoading}
           printTemplatesError={printTemplatesError}
           isExporting={isExporting}
+          showLayoutInspector={showLayoutInspector}
           onOptionsChange={updateExportOptions}
           onPrintLayoutUpload={onPrintLayoutUpload}
           onRefreshPrintTemplates={onRefreshPrintTemplates}
+          onSetLayoutInspectorOpen={setShowLayoutInspector}
           onExport={handleExport}
         />
 
@@ -295,6 +491,9 @@ export function ExportPage({
         templateMeta={templateMeta}
         previewSvg={previewSvg}
         compositeSvg={selectedPrintLayout && compositePreview ? compositePreview : null}
+        layoutSvg={selectedPrintLayout && layoutPreviewSvg ? layoutPreviewSvg : null}
+        showLayoutInspector={showLayoutInspector}
+        onSetLayoutInspectorOpen={setShowLayoutInspector}
         printLayoutName={selectedPrintLayout?.name}
       />
     </div>

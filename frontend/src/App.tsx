@@ -349,8 +349,17 @@ function App() {
           throw new Error('No field mappings defined. Use "Map Fields" button in Design tab.')
         }
 
-        // Get selected users
+        // Get selected users (base set)
         const selectedUsers = users.filter((u) => options.selectedUserIds.includes(u.id!))
+
+        // Determine export order: if slot assignments are defined for a print layout,
+        // respect that order for the cards we generate.
+        const slotUserIds = options.slotUserIds
+        const orderedUsers: typeof users = options.printLayoutId && slotUserIds && slotUserIds.length > 0
+          ? slotUserIds
+              .map((id) => users.find((u) => u.id === id))
+              .filter((u): u is typeof users[number] => !!u)
+          : selectedUsers
 
         if (options.format === 'pdf') {
           // Check if print layout is selected
@@ -362,13 +371,13 @@ function App() {
             await exportBatchCardsWithPrintLayout(
               template,
               fields,
-              selectedUsers,
+              orderedUsers,
               fieldMappingsMap,
               printLayout.svgPath,
               options.resolution,
               customValuesMap
             )
-            setStatusMessage(`Exported ${selectedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
+            setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
           } else {
             await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution, customValuesMap)
             setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
@@ -493,98 +502,77 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#fafafa' }}>
-      {/* Header */}
-      <header
-        style={{
-          borderBottom: '1px solid #e4e4e7',
-          backgroundColor: '#fff',
-          padding: '1rem 1.5rem',
-        }}
-      >
-        <div
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)}>
+        {/* Header */}
+        <header
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '1rem',
-            flexWrap: 'wrap',
+            borderBottom: '1px solid #e4e4e7',
+            backgroundColor: '#fff',
+            padding: '1rem 1.5rem 0.75rem 1.5rem',
           }}
         >
-          <div style={{ maxWidth: '100%' }}>
-            <h1
-              style={{
-                fontSize: '1.25rem',
-                fontWeight: 'bold',
-                marginBottom: '0.25rem',
-                color: '#18181b',
-              }}
-            >
-              ID Card Maker
-            </h1>
-            <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
-              Import Illustrator SVG templates, define editable fields, and preview cards.
-            </p>
-
-            {/* Template Info Badges */}
-            {template && (
-              <div
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: '1rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ maxWidth: '100%' }}>
+              <h1
                 style={{
-                  marginTop: '0.75rem',
-                  display: 'flex',
-                  gap: '0.5rem',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
+                  fontSize: '1.25rem',
+                  fontWeight: 'bold',
+                  marginBottom: '0.25rem',
+                  color: '#18181b',
                 }}
               >
-                <Badge variant="secondary" style={{ fontSize: '0.75rem' }}>
-                  {template.name}
-                </Badge>
-                <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
-                  {template.width} × {template.height} {template.unit}
-                </Badge>
-                {template.viewBox && (
-                  <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
-                    ViewBox: {template.viewBox.width.toFixed(0)} × {template.viewBox.height.toFixed(0)}
-                  </Badge>
-                )}
-                {template.fonts.length > 0 && (
-                  <Badge variant="outline" style={{ fontSize: '0.75rem' }}>
-                    Fonts: {template.fonts.join(', ')}
-                  </Badge>
-                )}
-              </div>
-            )}
-          </div>
+                ID Card Maker
+              </h1>
+              <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+                Import Illustrator SVG templates, define editable fields, and preview cards.
+              </p>
+            </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setLayerNamingDialogOpen(true)}
+            <div
               style={{
-                fontSize: '0.75rem',
-                height: '2.25rem',
                 display: 'flex',
+                flexDirection: 'row',
                 alignItems: 'center',
-                gap: '0.25rem',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
               }}
             >
-              <HelpCircle size={16} />
-              Layer naming help
-            </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setLayerNamingDialogOpen(true)}
+                style={{
+                  fontSize: '0.75rem',
+                  height: '2.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                }}
+              >
+                <HelpCircle size={16} />
+                Layer naming help
+              </Button>
+
+              <TabsList>
+                <TabsTrigger value="users">Users</TabsTrigger>
+                <TabsTrigger value="design">Design</TabsTrigger>
+                <TabsTrigger value="export">Export</TabsTrigger>
+              </TabsList>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <div style={{ padding: '1.5rem' }}>
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)}>
-          <TabsList style={{ marginBottom: '1.5rem' }}>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="design">Design</TabsTrigger>
-            <TabsTrigger value="export">Export</TabsTrigger>
-          </TabsList>
-
+        {/* Main Content */}
+        <div style={{ padding: '1.5rem' }}>
           <TabsContent value="design" style={{ marginTop: 0 }}>
             <div style={{ display: 'flex', gap: '1.5rem', height: 'calc(100vh - 200px)', minHeight: 0 }}>
               {/* Left Sidebar - Templates, Fonts, Fields */}
@@ -673,8 +661,8 @@ function App() {
               onCardDataChange={handleCardDataChange}
             />
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
+      </Tabs>
 
       {/* Field Mapping Dialog */}
       <FieldMappingDialog

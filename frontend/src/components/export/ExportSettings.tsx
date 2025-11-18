@@ -1,9 +1,10 @@
 import type { ChangeEvent } from 'react'
-import { FileDown, RefreshCw, Upload } from 'lucide-react'
+import { FileDown, RefreshCw, Upload, Check, Settings } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Switch } from '../ui/switch'
 import type { ExportFormat, ExportMode, ExportOptions } from '../ExportPage'
 import type { TemplateSummary } from '../../lib/templates'
 
@@ -15,9 +16,11 @@ type ExportSettingsProps = {
   printTemplatesLoading: boolean
   printTemplatesError: string | null
   isExporting: boolean
+  showLayoutInspector: boolean
   onOptionsChange: (options: Partial<ExportOptions>) => void
   onPrintLayoutUpload: (event: ChangeEvent<HTMLInputElement>) => void
   onRefreshPrintTemplates: () => void
+  onSetLayoutInspectorOpen: (open: boolean) => void
   onExport: () => void
 }
 
@@ -29,39 +32,41 @@ export function ExportSettings({
   printTemplatesLoading,
   printTemplatesError,
   isExporting,
+   showLayoutInspector,
   onOptionsChange,
   onPrintLayoutUpload,
   onRefreshPrintTemplates,
+  onSetLayoutInspectorOpen,
   onExport,
 }: ExportSettingsProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle style={{ fontSize: '1rem' }}>Export Settings</CardTitle>
+    <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg font-semibold">Export Settings</CardTitle>
         <CardDescription>Configure export format and quality</CardDescription>
       </CardHeader>
-      <CardContent style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <CardContent className="space-y-6">
         {/* Format Selection */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="space-y-2">
           <Label htmlFor="export-format">Format</Label>
           <Select
             value={options.format}
             onValueChange={(value) => onOptionsChange({ format: value as ExportFormat })}
           >
-            <SelectTrigger id="export-format">
+            <SelectTrigger id="export-format" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="pdf">PDF</SelectItem>
-              <SelectItem value="png">PNG</SelectItem>
-              <SelectItem value="svg">SVG</SelectItem>
+              <SelectItem value="pdf">PDF Document</SelectItem>
+              <SelectItem value="png">PNG Image</SelectItem>
+              <SelectItem value="svg">SVG Vector</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {/* Resolution for PNG */}
         {options.format === 'png' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="space-y-2">
             <Label htmlFor="export-resolution">Resolution (DPI)</Label>
             <Select
               value={options.resolution.toString()}
@@ -82,7 +87,7 @@ export function ExportSettings({
 
         {/* Resolution for PDF (when vectors disabled) */}
         {options.format === 'pdf' && !options.maintainVectors && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="space-y-2">
             <Label htmlFor="pdf-resolution">Resolution (DPI)</Label>
             <Select
               value={options.resolution.toString()}
@@ -103,48 +108,57 @@ export function ExportSettings({
 
         {/* Vector Graphics Toggle for PDF */}
         {options.format === 'pdf' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={options.maintainVectors}
-                onChange={(e) => onOptionsChange({ maintainVectors: e.target.checked })}
-                style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
-              />
-              <span style={{ fontWeight: 500 }}>Maintain Vector Graphics</span>
-            </label>
-            <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '-0.25rem' }}>
-              Keep text and shapes as vectors for scalability
-            </p>
+          <div className="flex items-center justify-between space-x-2 border p-3 rounded-md border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            <div className="space-y-0.5">
+              <Label htmlFor="maintain-vectors" className="text-base">Maintain Vectors</Label>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Keep text and shapes as vectors for infinite scalability
+              </p>
+            </div>
+            <Switch
+              id="maintain-vectors"
+              checked={options.maintainVectors}
+              onCheckedChange={(checked) => onOptionsChange({ maintainVectors: checked })}
+            />
           </div>
         )}
 
         {/* Print Layout Selection */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
             <Label htmlFor="print-layout">Print Layout</Label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => onSetLayoutInspectorOpen(!showLayoutInspector)}
+                disabled={!options.printLayoutId}
+                title={showLayoutInspector ? 'Hide layout details' : 'Show layout details'}
+              >
+                <Settings className="h-3 w-3" />
+              </Button>
+              <label className="cursor-pointer">
                 <input
                   type="file"
                   accept=".svg"
                   onChange={onPrintLayoutUpload}
-                  style={{ display: 'none' }}
+                  className="hidden"
                 />
-                <Button variant="outline" size="sm" asChild>
-                  <span style={{ cursor: 'pointer' }}>
-                    <Upload style={{ width: '0.875rem', height: '0.875rem', marginRight: '0.5rem' }} />
-                    Upload
-                  </span>
-                </Button>
+                <div className="inline-flex h-8 items-center justify-center rounded-md border border-zinc-200 bg-white px-3 text-xs font-medium shadow-sm hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-300">
+                  <Upload className="mr-2 h-3 w-3" />
+                  Upload
+                </div>
               </label>
               <Button
                 variant="outline"
                 size="sm"
+                className="h-8 w-8 p-0"
                 onClick={onRefreshPrintTemplates}
                 disabled={printTemplatesLoading}
               >
-                <RefreshCw style={{ width: '0.875rem', height: '0.875rem' }} />
+                <RefreshCw className="h-3 w-3" />
               </Button>
             </div>
           </div>
@@ -166,32 +180,41 @@ export function ExportSettings({
             </SelectContent>
           </Select>
           {printTemplatesError && (
-            <p style={{ fontSize: '0.75rem', color: '#dc2626' }}>{printTemplatesError}</p>
+            <p className="text-xs text-red-500">{printTemplatesError}</p>
           )}
           {printTemplatesLoading && (
-            <p style={{ fontSize: '0.75rem', color: '#71717a' }}>Loading layouts...</p>
+            <p className="text-xs text-zinc-500">Loading layouts...</p>
           )}
         </div>
 
         {/* Export Button */}
         <Button
+          className="w-full"
+          size="lg"
           onClick={onExport}
           disabled={
             !template ||
             isExporting ||
             (mode === 'database' && options.selectedUserIds.length === 0)
           }
-          style={{ marginTop: '0.5rem' }}
         >
-          <FileDown style={{ width: '1rem', height: '1rem', marginRight: '0.5rem' }} />
-          {isExporting
-            ? 'Exporting…'
-            : mode === 'database'
-            ? `Export ${options.selectedUserIds.length} ${options.selectedUserIds.length === 1 ? 'Card' : 'Cards'}`
-            : `Export ${options.format.toUpperCase()}`}
+          {isExporting ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Exporting...
+            </>
+          ) : (
+            <>
+              <FileDown className="mr-2 h-4 w-4" />
+              {mode === 'database'
+                ? `Export ${options.selectedUserIds.length} ${options.selectedUserIds.length === 1 ? 'Card' : 'Cards'}`
+                : `Export ${options.format.toUpperCase()}`}
+            </>
+          )}
         </Button>
+
         {mode === 'database' && options.selectedUserIds.length === 0 && (
-          <p style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '-0.5rem' }}>
+          <p className="text-xs text-center text-red-500">
             Select at least one user to export
           </p>
         )}

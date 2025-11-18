@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import type { TemplateSummary } from '../../lib/templates'
 
 type ExportPreviewProps = {
@@ -6,6 +7,9 @@ type ExportPreviewProps = {
   templateMeta: any
   previewSvg: string | null
   compositeSvg: string | null
+  layoutSvg: string | null
+  showLayoutInspector: boolean
+  onSetLayoutInspectorOpen: (open: boolean) => void
   printLayoutName?: string
 }
 
@@ -14,17 +18,20 @@ export function ExportPreview({
   templateMeta,
   previewSvg,
   compositeSvg,
+  layoutSvg,
+  showLayoutInspector,
+  onSetLayoutInspectorOpen,
   printLayoutName,
 }: ExportPreviewProps) {
   if (!template && !templateMeta) {
     return (
-      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <Card className="flex flex-1 flex-col border-zinc-200 dark:border-zinc-800">
         <CardHeader>
-          <CardTitle style={{ fontSize: '1rem' }}>Export Preview</CardTitle>
+          <CardTitle className="text-lg">Export Preview</CardTitle>
           <CardDescription>Preview how your export will look</CardDescription>
         </CardHeader>
-        <CardContent style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-          <div style={{ textAlign: 'center', color: '#71717a' }}>
+        <CardContent className="flex flex-1 items-center justify-center p-6">
+          <div className="text-center text-zinc-500">
             <p>Select a card design to preview export</p>
           </div>
         </CardContent>
@@ -33,67 +40,61 @@ export function ExportPreview({
   }
 
   return (
-    <Card style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <CardHeader>
-        <CardTitle style={{ fontSize: '1rem' }}>Export Preview</CardTitle>
-        <CardDescription>Preview how your export will look</CardDescription>
-      </CardHeader>
-      <CardContent style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-          {compositeSvg && printLayoutName ? (
-            <>
-              <p style={{ fontSize: '0.875rem', color: '#3f3f46' }}>
-                Print Layout: <strong>{printLayoutName}</strong>
-              </p>
+    <div className="flex flex-1 flex-col gap-3">
+      {/* Summary / header card */}
+      <Card className="border-zinc-200 dark:border-zinc-800">
+        <CardHeader>
+          <CardTitle className="text-lg">Export Preview</CardTitle>
+          <CardDescription>
+            {compositeSvg && printLayoutName
+              ? 'Preview of how your card fills the selected print layout.'
+              : 'Preview of a single exported card.'}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      {/* Main visual preview: composite print layout or single card */}
+      {compositeSvg && printLayoutName ? (
+        <Card className="border-zinc-200 dark:border-zinc-800 self-start w-full max-w-[640px]">
+          <CardContent className="flex items-center justify-center p-4">
+            <div
+              className="export-preview-svg w-full"
+              dangerouslySetInnerHTML={{ __html: compositeSvg }}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-zinc-200 dark:border-zinc-800 self-start w-full max-w-[520px]">
+          <CardContent className="flex items-center justify-center p-4">
+            {previewSvg && (
               <div
-                style={{
-                  flex: 1,
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid #e4e4e7',
-                  borderRadius: '0.375rem',
-                  backgroundColor: '#fff',
-                  overflow: 'auto',
-                }}
-                dangerouslySetInnerHTML={{ __html: compositeSvg }}
+                className="export-preview-svg w-full max-w-[700px]"
+                dangerouslySetInnerHTML={{ __html: previewSvg }}
               />
-              <p style={{ fontSize: '0.75rem', color: '#71717a' }}>
-                Your card design replicated across the print layout
-              </p>
-            </>
-          ) : (
-            <>
-              <p style={{ fontSize: '0.875rem', color: '#3f3f46' }}>Single Card Export</p>
-              {previewSvg && (
-                <div
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid #e4e4e7',
-                    borderRadius: '0.375rem',
-                    backgroundColor: '#fff',
-                    overflow: 'auto',
-                    padding: '1rem',
-                  }}
-                >
-                  <div
-                    className="export-preview-svg"
-                    style={{
-                      maxWidth: '500px',
-                      width: '100%',
-                    }}
-                    dangerouslySetInnerHTML={{ __html: previewSvg }}
-                  />
-                </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Layout details inspector in a modal */}
+      {layoutSvg && (
+        <Dialog open={showLayoutInspector} onOpenChange={onSetLayoutInspectorOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Print layout preview</DialogTitle>
+              {printLayoutName && (
+                <DialogDescription>{printLayoutName}</DialogDescription>
               )}
-            </>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            </DialogHeader>
+            <div className="mt-2 rounded-md bg-zinc-100 p-3">
+              <div
+                className="export-preview-svg w-full"
+                dangerouslySetInnerHTML={{ __html: layoutSvg }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   )
 }

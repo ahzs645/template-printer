@@ -102,6 +102,7 @@ export function UsersTab({
 
   const [preview, setPreview] = useState<PreviewState>(() => createInitialPreviewState())
   const [previewSide, setPreviewSide] = useState<'front' | 'back' | 'both'>('front')
+  const [previewLayout, setPreviewLayout] = useState<'side-by-side' | 'stacked'>('side-by-side')
 
   const templateCacheRef = useRef<Map<string, { meta: TemplateMeta; fields: FieldDefinition[] }>>(new Map())
   const mappingCacheRef = useRef<Map<string, { mappings: Record<string, string>; customValues: Record<string, string> }>>(new Map())
@@ -622,6 +623,27 @@ export function UsersTab({
     const isMulti = sides.length > 1
 
     if (isMulti) {
+      if (previewLayout === 'stacked') {
+        return (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+            }}
+          >
+            {sides.map((side) => (
+              <div key={side} style={{ width: '100%', maxWidth: '420px' }}>
+                {renderPreviewPane(side, true)}
+              </div>
+            ))}
+          </div>
+        )
+      }
+
       return (
         <div
           style={{
@@ -630,12 +652,19 @@ export function UsersTab({
             flexDirection: 'row',
             gap: '1rem',
             flexWrap: 'wrap',
-            alignItems: 'stretch',
+            alignItems: 'flex-start',
             justifyContent: 'center',
           }}
         >
           {sides.map((side) => (
-            <div key={side} style={{ flex: '1 1 260px', minWidth: '220px', display: 'flex' }}>
+            <div
+              key={side}
+              style={{
+                flex: '1 1 320px',
+                minWidth: '260px',
+                maxWidth: '360px',
+              }}
+            >
               {renderPreviewPane(side, true)}
             </div>
           ))}
@@ -994,6 +1023,25 @@ export function UsersTab({
                       >
                         Both
                       </Button>
+                      {previewSide === 'both' && (
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#71717a' }}>Layout:</span>
+                          <Button
+                            variant={previewLayout === 'side-by-side' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setPreviewLayout('side-by-side')}
+                          >
+                            Side by side
+                          </Button>
+                          <Button
+                            variant={previewLayout === 'stacked' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setPreviewLayout('stacked')}
+                          >
+                            Stacked
+                          </Button>
+                        </div>
+                      )}
                       {selectedDesign && (
                         <span style={{ fontSize: '0.75rem', color: '#71717a' }}>
                           {previewSide === 'front'

@@ -190,9 +190,9 @@ export async function exportBatchCardsWithPrintLayout(
   const pdfDoc = await PDFDocument.create()
   const { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
 
-  // Render each user's card
+  // Pre-render each user's card as a PDF image
+  const cardImages = []
   for (const user of users) {
-    // Convert user data to card data using field mappings
     const cardData: CardData = {}
     fields.forEach(field => {
       const layerId = field.sourceId || field.id
@@ -203,15 +203,21 @@ export async function exportBatchCardsWithPrintLayout(
       }
     })
 
-    // Render this user's card
     const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+    const cardImage = await pdfDoc.embedPng(cardPngBytes)
+    cardImages.push(cardImage)
+  }
 
-    // Create a new page with the print layout
+  const layoutPngBytes = await svgMarkupToPngBytes(layout.backgroundSvg)
+  const layoutImage = await pdfDoc.embedPng(layoutPngBytes)
+
+  const slotsPerPage = layout.placeholders.length || 1
+  let cardIndex = 0
+
+  while (cardIndex < cardImages.length) {
     const page = pdfDoc.addPage([layout.widthPoints, layout.heightPoints])
 
-    // Draw the print layout background
-    const layoutPngBytes = await svgMarkupToPngBytes(layout.backgroundSvg)
-    const layoutImage = await pdfDoc.embedPng(layoutPngBytes)
     page.drawImage(layoutImage, {
       x: 0,
       y: 0,
@@ -219,12 +225,10 @@ export async function exportBatchCardsWithPrintLayout(
       height: layout.heightPoints,
     })
 
-    // Convert card to image
-    const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
-    const cardImage = await pdfDoc.embedPng(cardPngBytes)
+    for (const slot of layout.placeholders) {
+      if (cardIndex >= cardImages.length) break
+      const cardImage = cardImages[cardIndex++]
 
-    // Place the card in each placeholder slot
-    layout.placeholders.forEach((slot) => {
       const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
       const drawWidth = cardWidthPoints * scale
       const drawHeight = cardHeightPoints * scale
@@ -237,7 +241,7 @@ export async function exportBatchCardsWithPrintLayout(
         width: drawWidth,
         height: drawHeight,
       })
-    })
+    }
   }
 
   const pdfBytes = await pdfDoc.save()

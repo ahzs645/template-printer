@@ -35,14 +35,11 @@
       <rect class="st0" x="45.1" y="176.6" width="252" height="162"/>
     </clipPath>
   </defs>
-  <g id="Card_With_Bleed_Guides">
-    <g class="st5">
-      <image class="st1" width="2017" height="1290" transform="translate(45.1 6.7) scale(.1)" xlink:href="Canon MP Tray Template - 120x120mm fixed ID template-1.png"/>
-    </g>
-    <g class="st2">
-      <image class="st1" width="2017" height="1292" transform="translate(45.1 176.8) scale(.1)" xlink:href="Canon MP Tray Template - 120x120mm fixed ID template-2.png"/>
-    </g>
-  </g>
+  <!-- Card_With_Bleed_Guides group removed: original file embedded
+       reference card PNGs here, which would otherwise be printed on
+       top of the user's design. The actual card slots are defined by
+       the Topcard/Bottomcard groups below, which are what the app
+       uses as placement placeholders. -->
   <g id="Layer_4">
     <g id="Topcard">
       <rect class="st4" x="45.1" y="6.3" width="252" height="162"/>
