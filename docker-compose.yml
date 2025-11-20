@@ -8,7 +8,8 @@ services:
     container_name: template-printer
     restart: unless-stopped
     ports:
-      - "${PORT:-3200}:${PORT:-3200}"
+      # Host port is configurable separately so Komodo/rootless Docker doesn't try to bind privileged ports
+      - "${PUBLIC_PORT:-3200}:${PORT:-3200}"
     env_file:
       - .env
     environment:

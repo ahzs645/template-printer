@@ -23,6 +23,8 @@ docker run -p 3000:3000 template-printer
 
 The container serves the compiled React app and API from Express on port 3000.
 
+When using `docker compose` (or Komodo), set `PUBLIC_PORT` to a value >= 1024 (3200 by default) because rootless Docker daemons cannot publish privileged ports. The application inside the container still listens on `PORT`.
+
 ## Project Layout
 
 - `backend/` – Express API, SQLite database, and static asset hosting.
