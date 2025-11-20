@@ -25,8 +25,8 @@ FROM node:20-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Install su-exec for dropping privileges
-RUN apk add --no-cache su-exec
+# Install su-exec for dropping privileges and wget for healthcheck
+RUN apk add --no-cache su-exec wget
 
 # Add non-root user for security
 RUN addgroup -g 1001 -S nodejs \
