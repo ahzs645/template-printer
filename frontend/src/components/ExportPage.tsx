@@ -1,15 +1,15 @@
 import { useState, useEffect, type ChangeEvent } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen } from 'lucide-react'
+import { DockablePanel, PanelSection } from './ui/dockable-panel'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
+import { Label } from './ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Switch } from './ui/switch'
 import type { TemplateSummary } from '../lib/templates'
 import type { FieldDefinition, CardData } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import { useExportPreview } from '../hooks/useExportPreview'
-import { TemplateSelector } from './export/TemplateSelector'
-import { ExportModeToggle } from './export/ExportModeToggle'
-import { QuickModeFields } from './export/QuickModeFields'
-import { UserSelector } from './export/UserSelector'
-import { ExportSettings } from './export/ExportSettings'
-import { ExportPreview } from './export/ExportPreview'
+import { cn } from '../lib/utils'
 
 export type ExportFormat = 'pdf' | 'png' | 'svg'
 export type ExportMode = 'quick' | 'database'
@@ -82,7 +82,6 @@ export function ExportPage({
   const [showLayoutInspector, setShowLayoutInspector] = useState(false)
   const [layoutSlotCount, setLayoutSlotCount] = useState(0)
 
-  // Use custom hook for preview generation
   const { previewSvg, renderCardForUser } = useExportPreview({
     mode: exportOptions.mode,
     templateMeta,
@@ -122,7 +121,7 @@ export function ExportPage({
       })
   }, [selectedPrintLayout])
 
-  // Layout-only preview: highlight detected card slots (Card 1 / Card 2)
+  // Layout-only preview: highlight detected card slots
   useEffect(() => {
     if (!printLayoutSvg) {
       setLayoutPreviewSvg(null)
@@ -201,11 +200,8 @@ export function ExportPage({
       const layoutSvg = layoutDoc.documentElement
       const placeholderGroups = ['Topcard', 'Bottomcard']
 
-      // Helper to prefix IDs inside a cloned card SVG to avoid collisions
       const prefixSvgIds = (root: Element, prefix: string) => {
         const idMap = new Map<string, string>()
-
-        // First pass: collect and rename IDs
         root.querySelectorAll('[id]').forEach((el) => {
           const oldId = el.getAttribute('id')
           if (!oldId) return
@@ -216,16 +212,12 @@ export function ExportPage({
 
         if (idMap.size === 0) return
 
-        // Second pass: update references to IDs (url(#id), href="#id", xlink:href="#id", style="...url(#id)...")
         const updateAttrValue = (value: string | null) => {
           if (!value) return value
-
-          // Replace url(#id) patterns
           let updated = value.replace(/url\(#([^)]+)\)/g, (_, id: string) => {
             const mapped = idMap.get(id)
             return `url(#${mapped ?? id})`
           })
-
           return updated
         }
 
@@ -233,8 +225,6 @@ export function ExportPage({
           Array.from(el.attributes).forEach((attr) => {
             const name = attr.name
             let value = attr.value
-
-            // href / xlink:href that reference an ID
             if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
               const id = value.slice(1)
               const mapped = idMap.get(id)
@@ -243,8 +233,6 @@ export function ExportPage({
               }
               return
             }
-
-            // style or other attributes containing url(#id)
             if (value.includes('url(#')) {
               value = updateAttrValue(value) as string
               el.setAttribute(name, value)
@@ -266,7 +254,6 @@ export function ExportPage({
         const slotWidth = parseFloat(targetRect.getAttribute('width') || '0')
         const slotHeight = parseFloat(targetRect.getAttribute('height') || '0')
 
-        // Determine which card SVG to use for this slot
         let cardMarkup: string | null = previewSvg
         if (exportOptions.mode === 'database') {
           const slotUserIds = exportOptions.slotUserIds
@@ -275,7 +262,6 @@ export function ExportPage({
           if (slotUserIds && slotUserIds[index]) {
             userIdForSlot = slotUserIds[index]
           } else if (exportOptions.selectedUserIds.length > 0) {
-            // Fallback: use selected users in order
             userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
           }
 
@@ -314,13 +300,9 @@ export function ExportPage({
         const offsetX = slotX + (slotWidth - scaledWidth) / 2
         const offsetY = slotY + (slotHeight - scaledHeight) / 2
 
-        // Create a group with proper transform matrix: scale first, then translate
-        // Using matrix(a, b, c, d, e, f) where a,d = scale, e,f = translate
         const cardGroup = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'g')
         cardGroup.setAttribute('transform', `matrix(${scale}, 0, 0, ${scale}, ${offsetX}, ${offsetY})`)
 
-        // Clone the entire card SVG so we can safely prefix IDs,
-        // then move its children into the layout's group
         const cardClone = cardSvg.cloneNode(true) as Element
         const prefix = `slot${index + 1}-`
         prefixSvgIds(cardClone, prefix)
@@ -364,11 +346,7 @@ export function ExportPage({
         (id) => !id || selectedUserIds.includes(id),
       )
 
-      return {
-        ...prev,
-        selectedUserIds,
-        slotUserIds,
-      }
+      return { ...prev, selectedUserIds, slotUserIds }
     })
   }
 
@@ -381,11 +359,7 @@ export function ExportPage({
   }
 
   const deselectAllUsers = () => {
-    setExportOptions((prev) => ({
-      ...prev,
-      selectedUserIds: [],
-      slotUserIds: [],
-    }))
+    setExportOptions((prev) => ({ ...prev, selectedUserIds: [], slotUserIds: [] }))
   }
 
   const updateExportOptions = (updates: Partial<ExportOptions>) => {
@@ -393,109 +367,287 @@ export function ExportPage({
   }
 
   return (
-    <div style={{ display: 'flex', gap: '1rem', height: '100%', minHeight: 0 }}>
-      {/* Left Sidebar - Export Options */}
-      <div style={{ width: '350px', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'auto' }}>
-        <TemplateSelector
-          template={template}
-          templates={designTemplates}
-          loading={designTemplatesLoading}
-          onSelect={onTemplateSelect}
-        />
+    <div className="app-content" style={{ height: '100%' }}>
+      {/* Left Panel - Export Options */}
+      <DockablePanel title="Export Options" side="left" width={300}>
+        {/* Template Selection */}
+        <PanelSection title="Card Design">
+          {designTemplatesLoading ? (
+            <p className="empty-state__text">Loading templates...</p>
+          ) : designTemplates.length === 0 ? (
+            <p className="empty-state__text">No templates. Upload one in Design tab.</p>
+          ) : (
+            <div className="field-list">
+              {designTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={cn('field-item', template?.id === t.id && 'field-item--selected')}
+                  onClick={() => onTemplateSelect(t)}
+                >
+                  <div className="field-item__name">{t.name}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </PanelSection>
 
-        <ExportModeToggle
-          mode={exportOptions.mode}
-          onModeChange={(mode) => updateExportOptions({ mode })}
-        />
+        {/* Export Mode */}
+        <PanelSection title="Export Mode">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={cn('btn', exportOptions.mode === 'quick' ? 'btn-primary' : 'btn-secondary')}
+              onClick={() => updateExportOptions({ mode: 'quick' })}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <Zap size={14} />
+              Quick
+            </button>
+            <button
+              type="button"
+              className={cn('btn', exportOptions.mode === 'database' ? 'btn-primary' : 'btn-secondary')}
+              onClick={() => updateExportOptions({ mode: 'database' })}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <Database size={14} />
+              Batch
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+            {exportOptions.mode === 'quick'
+              ? 'Export single card with manual data entry'
+              : 'Export multiple cards from user database'}
+          </p>
+        </PanelSection>
 
-        {exportOptions.mode === 'quick' && template && (
-          <QuickModeFields
-            fields={fields}
-            cardData={cardData}
-            onCardDataChange={onCardDataChange}
-          />
+        {/* Quick Mode - Card Data Entry */}
+        {exportOptions.mode === 'quick' && template && fields.length > 0 && (
+          <PanelSection title="Card Data">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {fields.map((field) => (
+                <div key={field.id} className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{field.label || field.id}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={(cardData[field.id] as string) || ''}
+                    onChange={(e) => onCardDataChange(field.id, e.target.value)}
+                    placeholder={`Enter ${field.label || field.id}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </PanelSection>
         )}
 
+        {/* Database Mode - User Selection */}
         {exportOptions.mode === 'database' && (
-          <UserSelector
-            users={users}
-            selectedUserIds={exportOptions.selectedUserIds}
-            loading={usersLoading}
-            mode={exportOptions.mode}
-            layoutSlotCount={layoutSlotCount}
-            hasPrintLayout={!!exportOptions.printLayoutId}
-            slotUserIds={exportOptions.slotUserIds}
-            onSlotUserChange={(slotIndex, userId) => {
-              setExportOptions((prev) => {
-                const next = [...prev.slotUserIds]
-                next[slotIndex] = userId ?? ''
-                const derivedSelected = Array.from(new Set(next.filter((id) => id))) as string[]
-                return {
-                  ...prev,
-                  slotUserIds: next,
-                  selectedUserIds: derivedSelected,
-                }
-              })
-            }}
-            onToggleUser={toggleUserSelection}
-            onSelectAll={selectAllUsers}
-            onDeselectAll={deselectAllUsers}
-          />
+          <PanelSection title={`Users (${exportOptions.selectedUserIds.length}/${users.length})`}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={selectAllUsers}>
+                Select All
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={deselectAllUsers}>
+                Clear
+              </button>
+            </div>
+            {usersLoading ? (
+              <p className="empty-state__text">Loading users...</p>
+            ) : users.length === 0 ? (
+              <p className="empty-state__text">No users in database</p>
+            ) : (
+              <div className="field-list" style={{ maxHeight: 200, overflow: 'auto' }}>
+                {users.map((user) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    className={cn('field-item', exportOptions.selectedUserIds.includes(user.id!) && 'field-item--selected')}
+                    onClick={() => toggleUserSelection(user.id!)}
+                  >
+                    <div className="field-item__name">{`${user.firstName} ${user.lastName}` || user.id}</div>
+                    {user.position && <div className="field-item__type">{user.position}</div>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </PanelSection>
         )}
 
-        <ExportSettings
-          options={exportOptions}
-          mode={exportOptions.mode}
-          template={template}
-          printTemplates={printTemplates}
-          printTemplatesLoading={printTemplatesLoading}
-          printTemplatesError={printTemplatesError}
-          isExporting={isExporting}
-          showLayoutInspector={showLayoutInspector}
-          onOptionsChange={updateExportOptions}
-          onPrintLayoutUpload={onPrintLayoutUpload}
-          onRefreshPrintTemplates={onRefreshPrintTemplates}
-          onSetLayoutInspectorOpen={setShowLayoutInspector}
-          onExport={handleExport}
-        />
+        {/* Print Layout Selection */}
+        <PanelSection title="Print Layout" defaultOpen={false}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+              <Upload size={14} style={{ marginRight: 4 }} />
+              Upload
+              <input
+                type="file"
+                accept=".svg"
+                onChange={onPrintLayoutUpload}
+                style={{ display: 'none' }}
+              />
+            </label>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={onRefreshPrintTemplates}>
+              <RefreshCw size={14} />
+            </button>
+          </div>
+          <Select
+            value={exportOptions.printLayoutId || 'none'}
+            onValueChange={(value) => updateExportOptions({ printLayoutId: value === 'none' ? null : value })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None (Single Card)</SelectItem>
+              {printTemplates.map((layout) => (
+                <SelectItem key={layout.id} value={layout.id}>
+                  {layout.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </PanelSection>
+      </DockablePanel>
 
-        {/* Card Data Preview */}
-        {template && (
-          <Card>
-            <CardHeader>
-              <CardTitle style={{ fontSize: '1rem' }}>Card Data Preview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {fields.length === 0 ? (
-                <p style={{ fontSize: '0.875rem', color: '#71717a' }}>No fields defined</p>
-              ) : (
-                <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0, margin: 0 }}>
-                  {fields.map((field) => (
-                    <li key={field.id} style={{ fontSize: '0.875rem', display: 'flex', gap: '0.5rem' }}>
-                      <span style={{ fontWeight: 500, color: '#3f3f46' }}>{field.id}:</span>
-                      <span style={{ color: '#71717a' }}>
-                        {typeof cardData[field.id] === 'string' ? (cardData[field.id] as string) : (typeof cardData[field.id] === 'object' ? '[Image]' : <em style={{ fontStyle: 'italic' }}>empty</em>)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        )}
+      {/* Main Canvas - Preview */}
+      <div className="app-workspace">
+        <div className="canvas-container">
+          {!template && !templateMeta ? (
+            <div className="empty-state">
+              <FolderOpen size={48} className="empty-state__icon" />
+              <p className="empty-state__text">Select a card design to preview export</p>
+            </div>
+          ) : compositePreview && selectedPrintLayout ? (
+            <div
+              className="export-preview-svg"
+              style={{ maxWidth: 600, width: '100%' }}
+              dangerouslySetInnerHTML={{ __html: compositePreview }}
+            />
+          ) : previewSvg ? (
+            <div
+              className="canvas-preview"
+              style={{ maxWidth: 420, width: '100%' }}
+              dangerouslySetInnerHTML={{ __html: previewSvg }}
+            />
+          ) : (
+            <div className="empty-state">
+              <FileText size={48} className="empty-state__icon" />
+              <p className="empty-state__text">No preview available</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Right Side - Export Preview */}
-      <ExportPreview
-        template={template}
-        templateMeta={templateMeta}
-        previewSvg={previewSvg}
-        compositeSvg={selectedPrintLayout && compositePreview ? compositePreview : null}
-        layoutSvg={selectedPrintLayout && layoutPreviewSvg ? layoutPreviewSvg : null}
-        showLayoutInspector={showLayoutInspector}
-        onSetLayoutInspectorOpen={setShowLayoutInspector}
-        printLayoutName={selectedPrintLayout?.name}
-      />
+      {/* Right Panel - Export Settings */}
+      <DockablePanel title="Settings" side="right" width={240}>
+        <PanelSection title="Format">
+          <Select
+            value={exportOptions.format}
+            onValueChange={(value) => updateExportOptions({ format: value as ExportFormat })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pdf">PDF Document</SelectItem>
+              <SelectItem value="png">PNG Image</SelectItem>
+              <SelectItem value="svg">SVG Vector</SelectItem>
+            </SelectContent>
+          </Select>
+        </PanelSection>
+
+        {/* Resolution for PNG or non-vector PDF */}
+        {(exportOptions.format === 'png' || (exportOptions.format === 'pdf' && !exportOptions.maintainVectors)) && (
+          <PanelSection title="Resolution">
+            <Select
+              value={exportOptions.resolution.toString()}
+              onValueChange={(value) => updateExportOptions({ resolution: parseInt(value) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="72">72 DPI (Screen)</SelectItem>
+                <SelectItem value="150">150 DPI (Draft)</SelectItem>
+                <SelectItem value="300">300 DPI (Print)</SelectItem>
+                <SelectItem value="600">600 DPI (High)</SelectItem>
+              </SelectContent>
+            </Select>
+          </PanelSection>
+        )}
+
+        {/* Vector Toggle for PDF */}
+        {exportOptions.format === 'pdf' && (
+          <PanelSection title="Options">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>Vectors</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Scalable text/shapes</div>
+              </div>
+              <Switch
+                checked={exportOptions.maintainVectors}
+                onCheckedChange={(checked) => updateExportOptions({ maintainVectors: checked })}
+              />
+            </div>
+          </PanelSection>
+        )}
+
+        {/* Export Button */}
+        <PanelSection title="Export">
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={handleExport}
+            disabled={
+              !template ||
+              isExporting ||
+              (exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0)
+            }
+          >
+            {isExporting ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" style={{ marginRight: 6 }} />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <FileDown size={16} style={{ marginRight: 6 }} />
+                {exportOptions.mode === 'database'
+                  ? `Export ${exportOptions.selectedUserIds.length} Card${exportOptions.selectedUserIds.length !== 1 ? 's' : ''}`
+                  : `Export ${exportOptions.format.toUpperCase()}`}
+              </>
+            )}
+          </button>
+          {exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0 && (
+            <p style={{ fontSize: 11, color: 'var(--danger)', textAlign: 'center', marginTop: 8 }}>
+              Select at least one user
+            </p>
+          )}
+        </PanelSection>
+      </DockablePanel>
+
+      {/* Layout Details Modal */}
+      {layoutPreviewSvg && (
+        <Dialog open={showLayoutInspector} onOpenChange={setShowLayoutInspector}>
+          <DialogContent style={{ maxWidth: 720 }}>
+            <DialogHeader>
+              <DialogTitle>Print Layout Preview</DialogTitle>
+              {selectedPrintLayout?.name && (
+                <DialogDescription>{selectedPrintLayout.name}</DialogDescription>
+              )}
+            </DialogHeader>
+            <div style={{ marginTop: 8, padding: 12, background: 'var(--bg-surface-alt)', borderRadius: 'var(--radius)' }}>
+              <div
+                className="export-preview-svg"
+                style={{ width: '100%' }}
+                dangerouslySetInnerHTML={{ __html: layoutPreviewSvg }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "seed:demo": "node scripts/seed-demo.js",
+    "dev:demo": "pnpm run seed:demo && pnpm run dev",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js"
   },

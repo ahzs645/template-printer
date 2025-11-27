@@ -8,6 +8,7 @@ Full-stack tool for managing ID card SVG templates, editing fields, and exportin
    - Backend: `cd backend && pnpm install`
    - Frontend: `cd frontend && pnpm install`
 2. Start the backend API: `pnpm dev` inside `backend/` (defaults to port 3000).
+   - Use `pnpm dev:demo` to pre-seed sample card designs and users before the server starts, which keeps the frontend from hitting empty lists while you explore the UI.
 3. Start the Vite frontend: `pnpm dev` inside `frontend/` (defaults to port 5173).
    - The dev server proxies `/api` and `/templates` to the backend, so ensure the backend is running first.
 4. Lint the frontend: `pnpm lint` inside `frontend/`.

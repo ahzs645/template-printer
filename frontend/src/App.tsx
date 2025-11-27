@@ -1,14 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { HelpCircle } from 'lucide-react'
+import {
+  Upload,
+  Plus,
+  FileDown,
+  Settings,
+  Copy,
+  Trash2,
+  HelpCircle,
+  Link,
+  FolderOpen,
+} from 'lucide-react'
 
 import './App.css'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
-import { Badge } from './components/ui/badge'
-import { Button } from './components/ui/button'
+import { IconNav } from './components/IconNav'
+import { Ribbon, RibbonGroup, RibbonButton, RibbonDivider } from './components/Ribbon'
+import { DockablePanel, PanelSection } from './components/ui/dockable-panel'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './components/ui/dialog'
-import { TemplateSidebar } from './components/TemplateSidebar'
-import { PreviewWorkspace } from './components/PreviewWorkspace'
+import { Badge } from './components/ui/badge'
+import { TemplateSelector } from './components/TemplateSelector'
+import { PreviewField } from './components/PreviewField'
+import { CardDataPanel } from './components/CardDataPanel'
+import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
 import { FieldNamingTab } from './components/FieldNamingTab'
@@ -20,7 +33,8 @@ import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, 
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout } from './lib/exporter'
 import { generateAutoMappings } from './lib/autoMapping'
-import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
+import { isAutoMappable } from './lib/autoMapping'
+import type { CardData, CardDataValue, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import {
   getDefaultField,
   nextFieldId,
@@ -31,6 +45,7 @@ import {
 import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
+import { cn } from './lib/utils'
 
 type ActiveTab = 'design' | 'users' | 'export'
 
@@ -49,8 +64,10 @@ function App() {
   const [fieldMappingDialogOpen, setFieldMappingDialogOpen] = useState(false)
   const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
+  const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
 
   const {
     templates: designTemplates,
@@ -94,6 +111,25 @@ function App() {
     }
   }, [])
 
+  // Fetch field mappings when template is selected
+  useEffect(() => {
+    if (selectedTemplateId && fields.length > 0) {
+      getFieldMappings(selectedTemplateId)
+        .then(mappings => {
+          const mappingsMap: Record<string, string> = {}
+          mappings.forEach(m => {
+            mappingsMap[m.svgLayerId] = m.standardFieldName
+          })
+          setFieldMappings(mappingsMap)
+        })
+        .catch(() => {
+          setFieldMappings({})
+        })
+    } else {
+      setFieldMappings({})
+    }
+  }, [selectedTemplateId, fields, fieldMappingsVersion])
+
   const selectedField = useMemo(
     () => fields.find((field) => field.id === selectedFieldId) ?? null,
     [fields, selectedFieldId],
@@ -112,6 +148,14 @@ function App() {
       return template.rawSvg
     }
   }, [template, fields, cardData])
+
+  // Check if a field is mapped
+  const isFieldMapped = (field: FieldDefinition): boolean => {
+    const sourceIdMapped = fieldMappings[field.sourceId || '']
+    const idMapped = fieldMappings[field.id]
+    if (sourceIdMapped || idMapped) return true
+    return isAutoMappable(field)
+  }
 
   const handleTemplateUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -141,7 +185,6 @@ function App() {
         setSelectedTemplateId(savedTemplate.id)
         await reloadDesignTemplates()
 
-        // Automatically generate and save field mappings
         const autoMappings = generateAutoMappings(nextFields)
         if (autoMappings.length > 0) {
           await saveFieldMappings(savedTemplate.id, autoMappings)
@@ -197,7 +240,6 @@ function App() {
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
 
-      // Check if field mappings exist, if not, auto-generate and save them
       const existingMappings = await getFieldMappings(templateSummary.id)
       if (existingMappings.length === 0 && nextFields.length > 0) {
         const autoMappings = generateAutoMappings(nextFields)
@@ -324,7 +366,6 @@ function App() {
     setErrorMessage(null)
 
     try {
-      // Database mode - batch export for multiple users
       if (options.mode === 'database') {
         if (options.selectedUserIds.length === 0) {
           throw new Error('Select at least one user to export')
@@ -334,7 +375,6 @@ function App() {
           throw new Error('Template must be saved to use database mode')
         }
 
-        // Get field mappings for this template
         const mappings = await getFieldMappings(selectedTemplateId)
         const fieldMappingsMap: Record<string, string> = {}
         const customValuesMap: Record<string, string> = {}
@@ -349,11 +389,8 @@ function App() {
           throw new Error('No field mappings defined. Use "Map Fields" button in Design tab.')
         }
 
-        // Get selected users (base set)
         const selectedUsers = users.filter((u) => options.selectedUserIds.includes(u.id!))
 
-        // Determine export order: if slot assignments are defined for a print layout,
-        // respect that order for the cards we generate.
         const slotUserIds = options.slotUserIds
         const orderedUsers: typeof users = options.printLayoutId && slotUserIds && slotUserIds.length > 0
           ? slotUserIds
@@ -362,7 +399,6 @@ function App() {
           : selectedUsers
 
         if (options.format === 'pdf') {
-          // Check if print layout is selected
           if (options.printLayoutId) {
             const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
             if (!printLayout) {
@@ -386,7 +422,6 @@ function App() {
           throw new Error(`${options.format.toUpperCase()} export is not yet implemented for batch mode`)
         }
       }
-      // Quick mode - single card export
       else {
         if (options.format === 'pdf') {
           if (options.printLayoutId) {
@@ -459,7 +494,6 @@ function App() {
       setErrorMessage(null)
       await deleteTemplateFromLibrary(templateSummary.id)
 
-      // If the deleted template was selected, clear the current template
       if (selectedTemplateId === templateSummary.id) {
         setTemplate(null)
         setFields([])
@@ -489,7 +523,6 @@ function App() {
     try {
       await saveFieldMappings(selectedTemplateId, mappings)
       setStatusMessage(`Saved ${mappings.length} field mapping${mappings.length !== 1 ? 's' : ''}.`)
-      // Trigger refresh of field mappings in sidebar
       setFieldMappingsVersion(v => v + 1)
       setTimeout(() => {
         setStatusMessage(null)
@@ -500,169 +533,304 @@ function App() {
     }
   }
 
+  const handleTemplateUploadClick = () => {
+    templateUploadInputRef.current?.click()
+  }
+
+  // Render Design Tab ribbon
+  const renderDesignRibbon = () => (
+    <Ribbon>
+      <RibbonGroup title="Template">
+        <RibbonButton
+          icon={<FolderOpen size={18} />}
+          label="Open"
+          onClick={handleTemplateUploadClick}
+        />
+        <input
+          ref={templateUploadInputRef}
+          type="file"
+          accept="image/svg+xml"
+          onChange={handleTemplateUpload}
+          style={{ display: 'none' }}
+        />
+      </RibbonGroup>
+
+      <RibbonGroup title="Field">
+        <RibbonButton
+          icon={<Plus size={18} />}
+          label="Add"
+          onClick={handleAddField}
+        />
+        <RibbonButton
+          icon={<Copy size={18} />}
+          label="Duplicate"
+          onClick={() => selectedField && handleDuplicateField(selectedField.id)}
+          disabled={!selectedField}
+        />
+        <RibbonButton
+          icon={<Trash2 size={18} />}
+          label="Delete"
+          onClick={() => selectedField && handleDeleteField(selectedField.id)}
+          disabled={!selectedField}
+        />
+        <RibbonDivider />
+        <RibbonButton
+          icon={<Settings size={18} />}
+          label="Map Fields"
+          onClick={handleOpenFieldMapping}
+          disabled={!selectedTemplateId || !template?.rawSvg}
+        />
+      </RibbonGroup>
+
+      <RibbonGroup title="Export">
+        <RibbonButton
+          icon={<FileDown size={18} />}
+          label="Quick PDF"
+          onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [] })}
+          disabled={!template || isExporting}
+          size="large"
+        />
+      </RibbonGroup>
+
+      <div style={{ flex: 1 }} />
+
+      <RibbonButton
+        icon={<HelpCircle size={16} />}
+        label="Layer Help"
+        onClick={() => setLayerNamingDialogOpen(true)}
+      />
+    </Ribbon>
+  )
+
+  // Render Users Tab ribbon
+  const renderUsersRibbon = () => (
+    <Ribbon>
+      <RibbonGroup title="Users">
+        <RibbonButton
+          icon={<Plus size={18} />}
+          label="Add User"
+          disabled
+        />
+        <RibbonButton
+          icon={<Upload size={18} />}
+          label="Import CSV"
+          disabled
+        />
+      </RibbonGroup>
+    </Ribbon>
+  )
+
+  // No ribbon for Export tab - it uses dockable panels
+
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#fafafa' }}>
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)}>
-        {/* Header */}
-        <header
-          style={{
-            borderBottom: '1px solid #e4e4e7',
-            backgroundColor: '#fff',
-            padding: '1rem 1.5rem 0.75rem 1.5rem',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: '1rem',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ maxWidth: '100%' }}>
-              <h1
-                style={{
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
-                  marginBottom: '0.25rem',
-                  color: '#18181b',
-                }}
-              >
-                ID Card Maker
-              </h1>
-              <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
-                Import Illustrator SVG templates, define editable fields, and preview cards.
-              </p>
-            </div>
+    <div className="app-layout">
+      {/* Icon Navigation */}
+      <IconNav activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab as ActiveTab)} />
 
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setLayerNamingDialogOpen(true)}
-                style={{
-                  fontSize: '0.75rem',
-                  height: '2.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                }}
-              >
-                <HelpCircle size={16} />
-                Layer naming help
-              </Button>
+      {/* Main Content Area */}
+      <div className="app-main">
+        {/* Ribbon Toolbar */}
+        {activeTab === 'design' && renderDesignRibbon()}
+        {activeTab === 'users' && renderUsersRibbon()}
 
-              <TabsList>
-                <TabsTrigger value="users">Users</TabsTrigger>
-                <TabsTrigger value="design">Design</TabsTrigger>
-                <TabsTrigger value="export">Export</TabsTrigger>
-              </TabsList>
-            </div>
-          </div>
-        </header>
+        {/* Content */}
+        <div className="app-content">
+          {activeTab === 'design' && (
+            <>
+              {/* Left Panel - Templates & Fields */}
+              <DockablePanel title="Templates" side="left" width={280}>
+                <PanelSection title="Card Templates">
+                  <TemplateSelector
+                    title=""
+                    templates={designTemplates}
+                    selectedId={selectedTemplateId}
+                    isLoading={designTemplatesLoading}
+                    error={designTemplatesError}
+                    onSelect={handleTemplateSelect}
+                    onRetry={reloadDesignTemplates}
+                    onUploadClick={handleTemplateUploadClick}
+                    onDelete={handleTemplateDelete}
+                    onRename={handleTemplateRename}
+                  />
+                </PanelSection>
 
-        {/* Main Content */}
-        <div style={{ padding: '1.5rem' }}>
-          <TabsContent value="design" style={{ marginTop: 0 }}>
-            <div style={{ display: 'flex', gap: '1.5rem', height: 'calc(100vh - 200px)', minHeight: 0 }}>
-              {/* Left Sidebar - Templates, Fonts, Fields */}
-              <div style={{ width: '320px', flexShrink: 0, minHeight: 0, overflow: 'auto' }}>
-                <TemplateSidebar
-                  selectedTemplateId={selectedTemplateId}
-                  designTemplates={designTemplates}
-                  designTemplatesLoading={designTemplatesLoading}
-                  designTemplatesError={designTemplatesError}
-                  onRefreshDesignTemplates={reloadDesignTemplates}
-                  onTemplateSelect={handleTemplateSelect}
-                  onTemplateUpload={handleTemplateUpload}
-                  onTemplateDelete={handleTemplateDelete}
-                  onTemplateRename={handleTemplateRename}
-                  statusMessage={statusMessage}
-                  errorMessage={errorMessage}
-                  fontList={fontList}
-                  missingFonts={missingFonts}
-                  onFontUploadClick={handleFontUploadClick}
-                  onFontFileSelect={handleFontFileSelect}
-                  registerFontInput={registerFontInput}
-                  fields={fields}
-                  selectedFieldId={selectedFieldId}
-                  onFieldSelect={handleFieldSelect}
-                  onAddField={handleAddField}
-                  templateSvg={template?.rawSvg ?? null}
-                  onOpenFieldMapping={handleOpenFieldMapping}
-                  fieldMappingsVersion={fieldMappingsVersion}
-                />
+                <PanelSection title={`Fonts (${fontList.length})`} defaultOpen={missingFonts.length > 0}>
+                  {fontList.length === 0 ? (
+                    <p className="empty-state__text">Load a template to detect fonts</p>
+                  ) : (
+                    <div>
+                      {fontList.map((font) => (
+                        <div key={font.name} className="font-item">
+                          <div className="font-item__info">
+                            <div className="font-item__name">{font.name}</div>
+                          </div>
+                          <span className={cn('font-item__status', font.status === 'loaded' ? 'font-item__status--loaded' : 'font-item__status--missing')}>
+                            {font.status === 'loaded' ? 'OK' : 'Missing'}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm btn-icon"
+                            style={{ marginLeft: 4 }}
+                            onClick={() => handleFontUploadClick(font.name)}
+                            title={font.status === 'loaded' ? 'Replace font' : 'Upload font'}
+                          >
+                            <Upload size={14} />
+                          </button>
+                          <input
+                            ref={(element) => registerFontInput(font.name, element)}
+                            type="file"
+                            accept=".ttf,.otf,.woff,.woff2"
+                            onChange={(event) => handleFontFileSelect(font.name, event)}
+                            style={{ display: 'none' }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </PanelSection>
+
+                <PanelSection title={`Fields (${fields.length})`}>
+                  {fields.length === 0 ? (
+                    <p className="empty-state__text">Upload a template or add a new field</p>
+                  ) : (
+                    <div className="field-list">
+                      {fields.map((field) => (
+                        <button
+                          key={field.id}
+                          type="button"
+                          className={cn('field-item', field.id === selectedFieldId && 'field-item--selected')}
+                          onClick={() => handleFieldSelect(field.id)}
+                        >
+                          <div>
+                            <div className="field-item__name">{field.label}</div>
+                            <div className="field-item__type">{field.type}</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {isFieldMapped(field) && (
+                              <Badge variant="default" style={{ fontSize: '0.625rem', backgroundColor: 'var(--success)' }}>
+                                <Link size={10} style={{ marginRight: 2 }} />
+                                mapped
+                              </Badge>
+                            )}
+                            {field.auto && (
+                              <Badge variant="secondary" style={{ fontSize: '0.625rem' }}>
+                                auto
+                              </Badge>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </PanelSection>
+
+                {/* Status Messages */}
+                {statusMessage && (
+                  <div className="status-message status-message--success" style={{ margin: '8px 0' }}>
+                    {statusMessage}
+                  </div>
+                )}
+                {errorMessage && (
+                  <div className="status-message status-message--error" style={{ margin: '8px 0' }}>
+                    {errorMessage}
+                  </div>
+                )}
+              </DockablePanel>
+
+              {/* Main Canvas */}
+              <div className="app-workspace">
+                <div className="canvas-container">
+                  {template && renderedSvg ? (
+                    <div
+                      className="canvas-preview"
+                      style={{ width: previewWidth, height: previewHeight }}
+                    >
+                      <div style={{ position: 'absolute', inset: 0 }} dangerouslySetInnerHTML={{ __html: renderedSvg }} />
+                      {fields.map((field) => (
+                        <PreviewField
+                          key={`preview-${field.id}`}
+                          field={field}
+                          value={cardData[field.id] as CardDataValue}
+                          width={previewWidth}
+                          height={previewHeight}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state">
+                      <FolderOpen size={48} className="empty-state__icon" />
+                      <p className="empty-state__text">
+                        Upload an SVG template to see the live preview
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Main Content Area - Preview & Field Settings */}
-              <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-                <PreviewWorkspace
-                  template={template}
-                  renderedSvg={renderedSvg}
-                  fields={fields}
-                  cardData={cardData}
-                  selectedField={selectedField}
-                  onCardDataChange={handleCardDataChange}
-                  onImageUpload={handleImageUpload}
-                  onImageAdjust={handleImageAdjust}
-                  onFieldChange={handleFieldChange}
-                  onDuplicateField={handleDuplicateField}
-                  onDeleteField={handleDeleteField}
-                  fontOptions={fontOptions}
-                  missingFonts={missingFonts}
-                  onExportPdf={handleExport}
-                  isExporting={isExporting}
-                  previewWidth={previewWidth}
-                  previewHeight={previewHeight}
-                />
-              </div>
+              {/* Right Panel - Card Data & Field Settings */}
+              <DockablePanel title="Properties" side="right" width={260}>
+                <PanelSection title="Card Data">
+                  <CardDataPanel
+                    fields={fields}
+                    cardData={cardData}
+                    onTextChange={handleCardDataChange}
+                    onImageUpload={handleImageUpload}
+                    onImageAdjust={handleImageAdjust}
+                  />
+                </PanelSection>
+
+                <PanelSection title="Field Settings">
+                  {selectedField ? (
+                    <FieldEditorPanel
+                      field={selectedField}
+                      onChange={handleFieldChange}
+                      fontOptions={fontOptions}
+                      missingFonts={missingFonts}
+                    />
+                  ) : (
+                    <p className="empty-state__text">Select a field to edit its properties</p>
+                  )}
+                </PanelSection>
+              </DockablePanel>
+            </>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="app-workspace" style={{ padding: 16 }}>
+              <UsersTab
+                designTemplates={designTemplates}
+                designTemplatesLoading={designTemplatesLoading}
+                designTemplatesError={designTemplatesError}
+                onRefreshDesignTemplates={reloadDesignTemplates}
+              />
             </div>
-          </TabsContent>
+          )}
 
-          <TabsContent value="users" style={{ marginTop: 0 }}>
-            <UsersTab
-              designTemplates={designTemplates}
-              designTemplatesLoading={designTemplatesLoading}
-              designTemplatesError={designTemplatesError}
-              onRefreshDesignTemplates={reloadDesignTemplates}
-            />
-          </TabsContent>
-
-          <TabsContent value="export" style={{ marginTop: 0 }}>
+          {activeTab === 'export' && (
             <ExportPage
-              template={selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
-              templateMeta={template}
-              selectedTemplateId={selectedTemplateId}
-              fields={fields}
-              cardData={cardData}
-              printTemplates={printTemplates}
-              printTemplatesLoading={printTemplatesLoading}
-              printTemplatesError={printTemplatesError}
-              onRefreshPrintTemplates={reloadPrintTemplates}
-              onPrintLayoutUpload={handlePrintLayoutUpload}
-              onExport={handleExport}
-              isExporting={isExporting}
-              renderedSvg={renderedSvg}
-              users={users}
-              usersLoading={usersLoading}
-              designTemplates={designTemplates}
-              designTemplatesLoading={designTemplatesLoading}
-              onTemplateSelect={handleTemplateSelect}
-              onCardDataChange={handleCardDataChange}
-            />
-          </TabsContent>
+                template={selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
+                templateMeta={template}
+                selectedTemplateId={selectedTemplateId}
+                fields={fields}
+                cardData={cardData}
+                printTemplates={printTemplates}
+                printTemplatesLoading={printTemplatesLoading}
+                printTemplatesError={printTemplatesError}
+                onRefreshPrintTemplates={reloadPrintTemplates}
+                onPrintLayoutUpload={handlePrintLayoutUpload}
+                onExport={handleExport}
+                isExporting={isExporting}
+                renderedSvg={renderedSvg}
+                users={users}
+                usersLoading={usersLoading}
+                designTemplates={designTemplates}
+                designTemplatesLoading={designTemplatesLoading}
+                onTemplateSelect={handleTemplateSelect}
+                onCardDataChange={handleCardDataChange}
+              />
+          )}
         </div>
-      </Tabs>
+      </div>
 
       {/* Field Mapping Dialog */}
       <FieldMappingDialog
@@ -673,6 +841,8 @@ function App() {
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
       />
+
+      {/* Layer Naming Helper Dialog */}
       <Dialog open={layerNamingDialogOpen} onOpenChange={setLayerNamingDialogOpen}>
         <DialogContent
           style={{
