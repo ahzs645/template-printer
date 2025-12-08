@@ -10,6 +10,10 @@ import {
   HelpCircle,
   Link,
   FolderOpen,
+  Palette,
+  ScanLine,
+  Settings2,
+  Download,
 } from 'lucide-react'
 
 import './App.css'
@@ -24,7 +28,7 @@ import { CardDataPanel } from './components/CardDataPanel'
 import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
-import { CalibrationTab } from './components/calibration'
+import { CalibrationTab, type CalibrationMode } from './components/calibration'
 import { FieldNamingTab } from './components/FieldNamingTab'
 import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
@@ -54,6 +58,7 @@ const PREVIEW_BASE_WIDTH = 420
 
 function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('users')
+  const [calibrationMode, setCalibrationMode] = useState<CalibrationMode>('swatch')
   const [template, setTemplate] = useState<TemplateMeta | null>(null)
   const [fields, setFields] = useState<FieldDefinition[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
@@ -656,6 +661,69 @@ function App() {
     </Ribbon>
   )
 
+  // Render Calibration Tab ribbon
+  const renderCalibrationRibbon = () => (
+    <Ribbon>
+      <RibbonGroup title="Mode">
+        <RibbonButton
+          icon={<Palette size={18} />}
+          label="Swatch"
+          onClick={() => setCalibrationMode('swatch')}
+          active={calibrationMode === 'swatch'}
+        />
+        <RibbonButton
+          icon={<ScanLine size={18} />}
+          label="Compare"
+          onClick={() => setCalibrationMode('compare')}
+          active={calibrationMode === 'compare'}
+        />
+        <RibbonButton
+          icon={<Settings2 size={18} />}
+          label="Profiles"
+          onClick={() => setCalibrationMode('profiles')}
+          active={calibrationMode === 'profiles'}
+        />
+      </RibbonGroup>
+
+      <RibbonDivider />
+
+      <RibbonGroup title="Actions">
+        {calibrationMode === 'swatch' && (
+          <>
+            <RibbonButton
+              icon={<Download size={18} />}
+              label="PDF"
+              size="large"
+            />
+            <RibbonButton
+              icon={<FileDown size={18} />}
+              label="SVG"
+            />
+          </>
+        )}
+        {calibrationMode === 'compare' && (
+          <RibbonButton
+            icon={<Upload size={18} />}
+            label="Upload"
+            size="large"
+          />
+        )}
+        {calibrationMode === 'profiles' && (
+          <>
+            <RibbonButton
+              icon={<Upload size={18} />}
+              label="Import"
+            />
+            <RibbonButton
+              icon={<Download size={18} />}
+              label="Export"
+            />
+          </>
+        )}
+      </RibbonGroup>
+    </Ribbon>
+  )
+
   return (
     <div className="app-layout">
       {/* Icon Navigation */}
@@ -667,6 +735,7 @@ function App() {
         {activeTab === 'design' && renderDesignRibbon()}
         {activeTab === 'users' && renderUsersRibbon()}
         {activeTab === 'export' && renderExportRibbon()}
+        {activeTab === 'calibration' && renderCalibrationRibbon()}
 
         {/* Content */}
         <div className="app-content">
@@ -864,9 +933,10 @@ function App() {
           )}
 
           {activeTab === 'calibration' && (
-            <div className="app-workspace" style={{ overflow: 'auto' }}>
-              <CalibrationTab />
-            </div>
+            <CalibrationTab
+              mode={calibrationMode}
+              onModeChange={setCalibrationMode}
+            />
           )}
         </div>
       </div>
