@@ -1,5 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from 'react'
-import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen } from 'lucide-react'
+import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Label } from './ui/label'
@@ -8,6 +8,7 @@ import { Switch } from './ui/switch'
 import type { TemplateSummary } from '../lib/templates'
 import type { FieldDefinition, CardData } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
+import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
 import { cn } from '../lib/utils'
 
@@ -22,6 +23,7 @@ export type ExportOptions = {
   mode: ExportMode
   selectedUserIds: string[]
   slotUserIds: string[]
+  colorProfileId: string | null
 }
 
 export type ExportPageProps = {
@@ -44,6 +46,8 @@ export type ExportPageProps = {
   designTemplatesLoading: boolean
   onTemplateSelect: (template: TemplateSummary) => void
   onCardDataChange: (fieldId: string, value: string) => void
+  colorProfiles: ColorProfile[]
+  colorProfilesLoading: boolean
 }
 
 export function ExportPage({
@@ -66,6 +70,8 @@ export function ExportPage({
   designTemplatesLoading,
   onTemplateSelect,
   onCardDataChange,
+  colorProfiles,
+  colorProfilesLoading,
 }: ExportPageProps) {
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     format: 'pdf',
@@ -75,6 +81,7 @@ export function ExportPage({
     mode: 'quick',
     selectedUserIds: [],
     slotUserIds: [],
+    colorProfileId: null,
   })
   const [printLayoutSvg, setPrintLayoutSvg] = useState<string | null>(null)
   const [compositePreview, setCompositePreview] = useState<string | null>(null)
@@ -541,6 +548,44 @@ export function ExportPage({
 
       {/* Right Panel - Export Settings */}
       <DockablePanel title="Settings" side="right" width={240}>
+        {/* Color Profile */}
+        <PanelSection title="Color Profile">
+          <Select
+            value={exportOptions.colorProfileId || 'none'}
+            onValueChange={(value) => updateExportOptions({ colorProfileId: value === 'none' ? null : value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="No color correction" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  None (No correction)
+                </span>
+              </SelectItem>
+              {colorProfiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Palette size={12} />
+                    {profile.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {exportOptions.colorProfileId && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              Colors will be adjusted for{' '}
+              {colorProfiles.find(p => p.id === exportOptions.colorProfileId)?.device || 'printer'}
+            </p>
+          )}
+          {colorProfiles.length === 0 && !colorProfilesLoading && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              Create profiles in the Calibration tab
+            </p>
+          )}
+        </PanelSection>
+
         <PanelSection title="Format">
           <Select
             value={exportOptions.format}

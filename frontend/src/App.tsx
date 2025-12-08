@@ -29,6 +29,7 @@ import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
 import { CalibrationTab, type CalibrationMode } from './components/calibration'
+import { useColorProfiles } from './hooks/calibration'
 import { FieldNamingTab } from './components/FieldNamingTab'
 import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
@@ -59,6 +60,7 @@ const PREVIEW_BASE_WIDTH = 420
 function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('users')
   const [calibrationMode, setCalibrationMode] = useState<CalibrationMode>('swatch')
+  const { profiles: colorProfiles, loading: colorProfilesLoading } = useColorProfiles()
   const [template, setTemplate] = useState<TemplateMeta | null>(null)
   const [fields, setFields] = useState<FieldDefinition[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
@@ -929,6 +931,8 @@ function App() {
                 designTemplatesLoading={designTemplatesLoading}
                 onTemplateSelect={handleTemplateSelect}
                 onCardDataChange={handleCardDataChange}
+                colorProfiles={colorProfiles}
+                colorProfilesLoading={colorProfilesLoading}
               />
           )}
 
