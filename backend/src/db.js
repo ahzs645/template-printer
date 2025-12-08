@@ -122,6 +122,17 @@ function createSchema(db) {
     )
   `
 
+  const createColorProfilesTable = `
+    CREATE TABLE IF NOT EXISTS color_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      device TEXT NOT NULL,
+      adjustments TEXT NOT NULL,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `
+
   const createCardDesignsTable = `
     CREATE TABLE IF NOT EXISTS card_designs (
       id TEXT PRIMARY KEY,
@@ -149,6 +160,7 @@ function createSchema(db) {
   db.exec(createUsersTable)
   db.exec(createFieldMappingsTable)
   db.exec(createFontsTable)
+  db.exec(createColorProfilesTable)
   db.exec(createCardDesignsTable)
   db.exec(createUniqueIndex)
   db.exec(createFieldMappingIndex)
@@ -823,4 +835,103 @@ export function deleteFont(fontName) {
   stmt.run(fontName)
 
   return font
+}
+
+// ============================================
+// COLOR PROFILE OPERATIONS
+// ============================================
+
+export function listColorProfiles() {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT id, name, device, adjustments, createdAt, updatedAt
+    FROM color_profiles
+    ORDER BY name
+  `)
+  return stmt.all().map(row => ({
+    ...row,
+    adjustments: JSON.parse(row.adjustments)
+  }))
+}
+
+export function getColorProfileById(id) {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT id, name, device, adjustments, createdAt, updatedAt
+    FROM color_profiles
+    WHERE id = ?
+  `)
+  const row = stmt.get(id)
+  if (!row) return null
+  return {
+    ...row,
+    adjustments: JSON.parse(row.adjustments)
+  }
+}
+
+export function createColorProfile({ name, device, adjustments }) {
+  const db = getDatabase()
+  const id = `profile-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+  const cleanedName = (name ?? '').trim()
+  if (!cleanedName) {
+    throw Object.assign(new Error('Profile name is required'), { status: 400 })
+  }
+
+  const cleanedDevice = (device ?? '').trim()
+  if (!cleanedDevice) {
+    throw Object.assign(new Error('Device name is required'), { status: 400 })
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO color_profiles (id, name, device, adjustments)
+    VALUES (?, ?, ?, ?)
+  `)
+
+  stmt.run(id, cleanedName, cleanedDevice, JSON.stringify(adjustments || {}))
+
+  return getColorProfileById(id)
+}
+
+export function updateColorProfile(id, updates) {
+  const db = getDatabase()
+  const existing = getColorProfileById(id)
+  if (!existing) return null
+
+  const hasNameUpdate = Object.prototype.hasOwnProperty.call(updates, 'name')
+  const hasDeviceUpdate = Object.prototype.hasOwnProperty.call(updates, 'device')
+  const hasAdjustmentsUpdate = Object.prototype.hasOwnProperty.call(updates, 'adjustments')
+
+  const nextName = hasNameUpdate ? (updates.name ?? '').toString().trim() : existing.name
+  if (!nextName) {
+    throw Object.assign(new Error('Profile name is required'), { status: 400 })
+  }
+
+  const nextDevice = hasDeviceUpdate ? (updates.device ?? '').toString().trim() : existing.device
+  if (!nextDevice) {
+    throw Object.assign(new Error('Device name is required'), { status: 400 })
+  }
+
+  const nextAdjustments = hasAdjustmentsUpdate ? updates.adjustments : existing.adjustments
+
+  const stmt = db.prepare(`
+    UPDATE color_profiles
+    SET name = ?, device = ?, adjustments = ?, updatedAt = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `)
+
+  stmt.run(nextName, nextDevice, JSON.stringify(nextAdjustments), id)
+
+  return getColorProfileById(id)
+}
+
+export function deleteColorProfile(id) {
+  const db = getDatabase()
+  const existing = getColorProfileById(id)
+  if (!existing) return null
+
+  const stmt = db.prepare(`DELETE FROM color_profiles WHERE id = ?`)
+  stmt.run(id)
+
+  return existing
 }

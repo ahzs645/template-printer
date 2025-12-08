@@ -24,6 +24,7 @@ import { CardDataPanel } from './components/CardDataPanel'
 import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
+import { CalibrationTab } from './components/calibration'
 import { FieldNamingTab } from './components/FieldNamingTab'
 import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
@@ -47,7 +48,7 @@ import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from
 import { labelFromId } from './lib/fields'
 import { cn } from './lib/utils'
 
-type ActiveTab = 'design' | 'users' | 'export'
+type ActiveTab = 'design' | 'users' | 'export' | 'calibration'
 
 const PREVIEW_BASE_WIDTH = 420
 
@@ -620,7 +621,40 @@ function App() {
     </Ribbon>
   )
 
-  // No ribbon for Export tab - it uses dockable panels
+  // Render Export Tab ribbon
+  const renderExportRibbon = () => (
+    <Ribbon>
+      <RibbonGroup title="Template">
+        <RibbonButton
+          icon={<FolderOpen size={18} />}
+          label="Select"
+          onClick={() => setActiveTab('design')}
+        />
+      </RibbonGroup>
+
+      <RibbonGroup title="Mode">
+        <RibbonButton
+          icon={<FileDown size={18} />}
+          label="Quick"
+          active={false}
+        />
+        <RibbonButton
+          icon={<Upload size={18} />}
+          label="Batch"
+          active={false}
+        />
+      </RibbonGroup>
+
+      <RibbonGroup title="Export">
+        <RibbonButton
+          icon={<FileDown size={18} />}
+          label="Export PDF"
+          disabled={!template || isExporting}
+          size="large"
+        />
+      </RibbonGroup>
+    </Ribbon>
+  )
 
   return (
     <div className="app-layout">
@@ -632,6 +666,7 @@ function App() {
         {/* Ribbon Toolbar */}
         {activeTab === 'design' && renderDesignRibbon()}
         {activeTab === 'users' && renderUsersRibbon()}
+        {activeTab === 'export' && renderExportRibbon()}
 
         {/* Content */}
         <div className="app-content">
@@ -796,14 +831,12 @@ function App() {
           )}
 
           {activeTab === 'users' && (
-            <div className="app-workspace" style={{ padding: 16 }}>
-              <UsersTab
+            <UsersTab
                 designTemplates={designTemplates}
                 designTemplatesLoading={designTemplatesLoading}
                 designTemplatesError={designTemplatesError}
                 onRefreshDesignTemplates={reloadDesignTemplates}
               />
-            </div>
           )}
 
           {activeTab === 'export' && (
@@ -828,6 +861,12 @@ function App() {
                 onTemplateSelect={handleTemplateSelect}
                 onCardDataChange={handleCardDataChange}
               />
+          )}
+
+          {activeTab === 'calibration' && (
+            <div className="app-workspace" style={{ overflow: 'auto' }}>
+              <CalibrationTab />
+            </div>
           )}
         </div>
       </div>

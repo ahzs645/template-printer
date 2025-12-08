@@ -1,4 +1,4 @@
-import { Users, Palette, FileDown, Settings, Sun, Moon, CreditCard } from 'lucide-react'
+import { Users, Palette, FileDown, Settings, Sun, Moon, CreditCard, SlidersHorizontal } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 import { cn } from '../lib/utils'
 
@@ -12,6 +12,7 @@ const navItems: NavItem[] = [
   { id: 'users', icon: Users, label: 'Users' },
   { id: 'design', icon: Palette, label: 'Design' },
   { id: 'export', icon: FileDown, label: 'Export' },
+  { id: 'calibration', icon: SlidersHorizontal, label: 'Calibration' },
 ]
 
 type IconNavProps = {
