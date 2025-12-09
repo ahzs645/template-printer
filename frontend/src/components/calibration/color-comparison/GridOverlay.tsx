@@ -41,10 +41,14 @@ export function GridOverlay({
         // Use transform if available, otherwise fallback to basic positioning
         const transform = analysisResult?.transform
         if (transform && transform.transformPoint && analysisResult?.canvasDimensions) {
-          // Use the perspective transform - sample position in card coordinates
-          const sampleX = gridPos.x + gridPos.width / 2
-          const sampleY = gridPos.y + gridPos.height / 2
-          const transformed = transform.transformPoint(sampleX, sampleY)
+          // Transform all 4 corners of the cell using actual card coordinates
+          // The bilinear transform maps card coords → image coords
+          const corners = [
+            transform.transformPoint(gridPos.x, gridPos.y),                                   // top-left
+            transform.transformPoint(gridPos.x + gridPos.width, gridPos.y),                   // top-right
+            transform.transformPoint(gridPos.x, gridPos.y + gridPos.height),                  // bottom-left
+            transform.transformPoint(gridPos.x + gridPos.width, gridPos.y + gridPos.height)   // bottom-right
+          ]
 
           // Convert from canvas coordinates to display coordinates
           const canvasWidth = analysisResult.canvasDimensions.width
@@ -52,16 +56,21 @@ export function GridOverlay({
           const scaleX = imageDimensions.width / canvasWidth
           const scaleY = imageDimensions.height / canvasHeight
 
-          // Position overlay square centered on the sampling point
-          const displayX = transformed.x * scaleX
-          const displayY = transformed.y * scaleY
-          const displayWidth = gridPos.width * transform.scale * scaleX
-          const displayHeight = gridPos.height * transform.scale * scaleY
+          // Debug: log for corner cells
+          if (gridIndex === 0 || gridIndex === 10 || gridIndex === 66 || gridIndex === 76) {
+            console.log(`Grid ${gridIndex}: card(${gridPos.x.toFixed(1)},${gridPos.y.toFixed(1)}) -> canvas(${corners[0].x.toFixed(1)},${corners[0].y.toFixed(1)}) -> display(${(corners[0].x * scaleX).toFixed(1)},${(corners[0].y * scaleY).toFixed(1)}) scale=${scaleX.toFixed(3)}`);
+          }
 
-          left = displayX - displayWidth / 2
-          top = displayY - displayHeight / 2
-          width = displayWidth
-          height = displayHeight
+          // Find bounding box of transformed corners
+          const minX = Math.min(...corners.map(c => c.x)) * scaleX
+          const maxX = Math.max(...corners.map(c => c.x)) * scaleX
+          const minY = Math.min(...corners.map(c => c.y)) * scaleY
+          const maxY = Math.max(...corners.map(c => c.y)) * scaleY
+
+          left = minX
+          top = minY
+          width = maxX - minX
+          height = maxY - minY
         } else {
           // Fallback positioning using simple scaling
           const cardAspect = cardLayout.cardWidth / cardLayout.cardHeight
@@ -135,6 +144,27 @@ export function GridOverlay({
             {swatchIndex}
           </div>
         )
+      })}
+
+      {/* Debug: show actual detected marker centers as dots */}
+      {analysisResult?.detectedMarkers && analysisResult.canvasDimensions && analysisResult.detectedMarkers.map((marker, idx) => {
+        const center = marker.corners.reduce(
+          (acc, c) => ({ x: acc.x + c.x / 4, y: acc.y + c.y / 4 }),
+          { x: 0, y: 0 }
+        );
+        const scaleX = imageDimensions.width / analysisResult.canvasDimensions!.width;
+        const scaleY = imageDimensions.height / analysisResult.canvasDimensions!.height;
+        return (
+          <div
+            key={`marker-center-${idx}`}
+            className="absolute w-3 h-3 bg-yellow-400 rounded-full border-2 border-black"
+            style={{
+              left: `${center.x * scaleX - 6}px`,
+              top: `${center.y * scaleY - 6}px`,
+            }}
+            title={`M${marker.id}: (${center.x.toFixed(0)}, ${center.y.toFixed(0)})`}
+          />
+        );
       })}
 
       {/* Show accuracy indicator */}

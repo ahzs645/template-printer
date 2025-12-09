@@ -71,6 +71,10 @@ export function CardPreview({
               const markerData = cardLayout.markerPositions.find(m => m.gridIndex === gridIndex)
               if (!markerData) return null
 
+              const marker = generateArucoMarker(markerData.id)
+              const matrixSize = marker.matrix.length // 7x7 for 5x5 pattern + border
+              const totalCells = matrixSize * matrixSize
+
               return (
                 <div
                   key={`marker-${gridIndex}`}
@@ -82,11 +86,17 @@ export function CardPreview({
                     height: `${(gridPos.height / cardLayout.cardHeight) * 100}%`,
                   }}
                 >
-                  <div className="w-full h-full grid grid-cols-6 grid-rows-6 border border-black">
-                    {Array.from({ length: 36 }).map((_, cellIdx) => {
-                      const row = Math.floor(cellIdx / 6)
-                      const col = cellIdx % 6
-                      const marker = generateArucoMarker(markerData.id)
+                  <div
+                    className="w-full h-full border border-black"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${matrixSize}, 1fr)`,
+                      gridTemplateRows: `repeat(${matrixSize}, 1fr)`,
+                    }}
+                  >
+                    {Array.from({ length: totalCells }).map((_, cellIdx) => {
+                      const row = Math.floor(cellIdx / matrixSize)
+                      const col = cellIdx % matrixSize
                       const isBlack = marker.matrix[row] && marker.matrix[row][col] === 0
                       return (
                         <div

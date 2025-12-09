@@ -67,6 +67,11 @@ export function ImageContainer({
               </div>
             </div>
           </div>
+          {(!analysisResult.detectedMarkers || analysisResult.detectedMarkers.length < 4) && (
+            <div className="mt-3 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800">
+              <strong>Low marker detection:</strong> For accurate color sampling, print a new calibration card from the Swatch Generator tab. The markers enable precise alignment.
+            </div>
+          )}
         </div>
       )}
     </div>

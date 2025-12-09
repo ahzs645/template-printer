@@ -5,39 +5,53 @@ export interface ArucoMarker {
   matrix: number[][];
 }
 
-// ArUco 4x4 dictionary patterns (simplified subset)
-const ARUCO_4X4_PATTERNS: { [key: number]: number[][] } = {
+// ArUco patterns for ARUCO_MIP_36h12 dictionary
+// These 5x5 bit patterns are detected with these IDs in js-aruco2's ARUCO_MIP_36h12 dictionary:
+// Pattern 0 → detected as ID 72
+// Pattern 1 → detected as ID 151 (checkerboard pattern - unique!)
+// Pattern 2 → detected as ID 27
+// Pattern 3 → detected as ID 164
+const ARUCO_5X5_PATTERNS: { [key: number]: number[][] } = {
+  // ID 0 - detected as ID 72 in ARUCO_MIP_36h12
   0: [
-    [1, 0, 1, 1],
-    [1, 1, 0, 0],
-    [0, 1, 1, 1],
-    [0, 0, 1, 0]
+    [0, 0, 1, 1, 1],
+    [1, 0, 0, 1, 0],
+    [0, 1, 0, 1, 0],
+    [0, 0, 1, 0, 0],
+    [1, 0, 1, 1, 1]
   ],
+  // ID 1 - detected as ID 151 in ARUCO_MIP_36h12 (checkerboard pattern)
   1: [
-    [1, 0, 0, 1],
-    [1, 1, 1, 1],
-    [1, 1, 0, 0],
-    [0, 1, 0, 0]
+    [0, 1, 0, 1, 0],
+    [1, 0, 1, 0, 1],
+    [0, 1, 0, 1, 0],
+    [1, 0, 1, 0, 1],
+    [0, 1, 0, 1, 0]
   ],
+  // ID 2 - detected as ID 27 in ARUCO_MIP_36h12
   2: [
-    [0, 1, 0, 0],
-    [1, 0, 1, 1],
-    [1, 1, 1, 0],
-    [0, 1, 1, 1]
+    [0, 0, 0, 1, 1],
+    [1, 0, 0, 1, 0],
+    [0, 1, 1, 0, 0],
+    [0, 1, 0, 1, 0],
+    [0, 1, 0, 0, 1]
   ],
+  // ID 3 - detected as ID 164 in ARUCO_MIP_36h12
   3: [
-    [1, 1, 1, 0],
-    [0, 0, 1, 1],
-    [0, 1, 0, 1],
-    [1, 0, 1, 0]
+    [1, 0, 0, 0, 1],
+    [0, 1, 0, 0, 0],
+    [0, 0, 1, 1, 0],
+    [1, 0, 1, 0, 0],
+    [1, 1, 0, 0, 1]
   ]
 };
 
 export function generateArucoMarker(id: number, size: number = 100): ArucoMarker {
-  const pattern = ARUCO_4X4_PATTERNS[id] || ARUCO_4X4_PATTERNS[0];
+  const pattern = ARUCO_5X5_PATTERNS[id] || ARUCO_5X5_PATTERNS[0];
 
   // Add border (ArUco markers have a black border)
-  const matrixSize = 6; // 4x4 pattern + 1-pixel border on each side
+  // 5x5 pattern + 1-pixel border on each side = 7x7 total
+  const matrixSize = 7;
   const matrix: number[][] = [];
 
   for (let i = 0; i < matrixSize; i++) {
@@ -47,7 +61,7 @@ export function generateArucoMarker(id: number, size: number = 100): ArucoMarker
       if (i === 0 || i === matrixSize - 1 || j === 0 || j === matrixSize - 1) {
         matrix[i][j] = 0;
       } else {
-        // Inner 4x4 pattern
+        // Inner 5x5 pattern
         matrix[i][j] = pattern[i - 1][j - 1];
       }
     }
