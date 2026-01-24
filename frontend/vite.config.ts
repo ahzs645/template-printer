@@ -5,13 +5,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 const API_PROXY_TARGET = process.env.VITE_API_PROXY ?? 'http://localhost:3000'
 
-// For GitHub Pages deployment, set base to repo name
-const isGitHubPages = process.env.GITHUB_PAGES === 'true'
-
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: isGitHubPages ? '/template-printer/' : '/',
+  base: '/template-printer/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
