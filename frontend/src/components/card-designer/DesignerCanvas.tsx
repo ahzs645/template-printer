@@ -15,6 +15,7 @@ type DesignerCanvasProps = {
   onCanvasChange?: (json: string) => void
   showGrid?: boolean
   gridSize?: number // mm
+  snapToGrid?: boolean
   canvasRef?: React.MutableRefObject<ReturnType<typeof useFabricCanvas> | null>
 }
 
@@ -27,6 +28,7 @@ export function DesignerCanvas({
   onCanvasChange,
   showGrid = true,
   gridSize = 5,
+  snapToGrid = false,
   canvasRef: externalCanvasRef,
 }: DesignerCanvasProps) {
   const canvasElementRef = useRef<HTMLCanvasElement>(null)
@@ -41,6 +43,8 @@ export function DesignerCanvas({
     cardHeight,
     onSelectionChange,
     onCanvasChange: handleCanvasChange,
+    snapToGrid,
+    gridSize,
   })
 
   const { canvas, loadFromJSON, toJSON } = fabricCanvas

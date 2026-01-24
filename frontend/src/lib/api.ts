@@ -122,6 +122,12 @@ export interface CardDesignPayload {
   description?: string | null
   frontTemplateId?: string | null
   backTemplateId?: string | null
+  // Canvas designer fields
+  designerMode?: 'template' | 'canvas'
+  frontCanvasData?: string | null
+  backCanvasData?: string | null
+  cardWidth?: number
+  cardHeight?: number
 }
 
 export async function listCardDesigns(): Promise<CardDesign[]> {

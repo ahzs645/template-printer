@@ -795,10 +795,23 @@ function App() {
         <div className="app-content">
           {activeTab === 'design' && designMode === 'designer' && (
             <CardDesignerTab
-              onSave={(data) => {
-                console.log('Design saved:', data)
-                // TODO: Save to storage and create template
-                setStatusMessage(`Saved design "${data.name}"`)
+              onSave={async (data) => {
+                try {
+                  setErrorMessage(null)
+                  const design = await storage.createCardDesign({
+                    name: data.name,
+                    designerMode: 'canvas',
+                    frontCanvasData: data.frontCanvasData,
+                    backCanvasData: data.backCanvasData,
+                    cardWidth: data.cardWidth,
+                    cardHeight: data.cardHeight,
+                  })
+                  setStatusMessage(`Saved design "${design.name}"`)
+                  setDesignMode('import')
+                } catch (error) {
+                  console.error('Failed to save design:', error)
+                  setErrorMessage(error instanceof Error ? error.message : 'Failed to save design')
+                }
               }}
               onCancel={() => {
                 setDesignMode('import')

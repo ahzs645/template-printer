@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { FabricObject } from 'fabric'
-import { Save, X, FlipHorizontal } from 'lucide-react'
+import { Save, X } from 'lucide-react'
 
 import { DockablePanel, PanelSection } from '../ui/dockable-panel'
 import { Button } from '../ui/button'
@@ -10,6 +10,7 @@ import { Label } from '../ui/label'
 import { DesignerCanvas } from './DesignerCanvas'
 import { DesignerToolbar } from './DesignerToolbar'
 import { PropertiesPanel } from './PropertiesPanel'
+import { useDesignerHistory } from './hooks/useDesignerHistory'
 import type { CardSide, DesignerObjectData } from './types'
 import type { useFabricCanvas } from './hooks/useFabricCanvas'
 
@@ -57,6 +58,7 @@ export function CardDesignerTab({
 
   // View settings
   const [showGrid, setShowGrid] = useState(true)
+  const [snapToGrid, setSnapToGrid] = useState(false)
 
   // Canvas refs
   const frontCanvasRef = useRef<ReturnType<typeof useFabricCanvas> | null>(null)
@@ -64,6 +66,15 @@ export function CardDesignerTab({
 
   // Get current canvas based on active side
   const currentCanvas = activeSide === 'front' ? frontCanvasRef.current : backCanvasRef.current
+
+  // History for undo/redo
+  const frontHistory = useDesignerHistory({
+    canvas: frontCanvasRef.current?.canvas ?? null,
+  })
+  const backHistory = useDesignerHistory({
+    canvas: backCanvasRef.current?.canvas ?? null,
+  })
+  const currentHistory = activeSide === 'front' ? frontHistory : backHistory
 
   // Handle selection change
   const handleSelectionChange = useCallback((objects: FabricObject[]) => {
@@ -106,6 +117,16 @@ export function CardDesignerTab({
     currentCanvas?.addLine()
   }, [currentCanvas])
 
+  const handleAddBarcode = useCallback(() => {
+    const fieldId = `barcode_${Date.now()}`
+    currentCanvas?.addBarcode(fieldId, 'code128')
+  }, [currentCanvas])
+
+  const handleAddQrCode = useCallback(() => {
+    const fieldId = `qrcode_${Date.now()}`
+    currentCanvas?.addBarcode(fieldId, 'qrcode')
+  }, [currentCanvas])
+
   const handleDelete = useCallback(() => {
     currentCanvas?.deleteSelected()
   }, [currentCanvas])
@@ -120,6 +141,10 @@ export function CardDesignerTab({
 
   const handleToggleGrid = useCallback(() => {
     setShowGrid((prev) => !prev)
+  }, [])
+
+  const handleToggleSnap = useCallback(() => {
+    setSnapToGrid((prev) => !prev)
   }, [])
 
   const handleCardSizeChange = useCallback((width: number, height: number) => {
@@ -256,11 +281,19 @@ export function CardDesignerTab({
         onAddRectangle={handleAddRectangle}
         onAddCircle={handleAddCircle}
         onAddLine={handleAddLine}
+        onAddBarcode={handleAddBarcode}
+        onAddQrCode={handleAddQrCode}
         onDelete={handleDelete}
         onBringToFront={handleBringToFront}
         onSendToBack={handleSendToBack}
         showGrid={showGrid}
         onToggleGrid={handleToggleGrid}
+        snapToGrid={snapToGrid}
+        onToggleSnap={handleToggleSnap}
+        onUndo={currentHistory.undo}
+        onRedo={currentHistory.redo}
+        canUndo={currentHistory.canUndo}
+        canRedo={currentHistory.canRedo}
         cardWidth={cardWidth}
         cardHeight={cardHeight}
         onCardSizeChange={handleCardSizeChange}
@@ -330,6 +363,7 @@ export function CardDesignerTab({
               onSelectionChange={handleSelectionChange}
               onCanvasChange={handleFrontCanvasChange}
               showGrid={showGrid}
+              snapToGrid={snapToGrid}
               canvasRef={frontCanvasRef}
             />
           </div>
@@ -342,6 +376,7 @@ export function CardDesignerTab({
               onSelectionChange={handleSelectionChange}
               onCanvasChange={handleBackCanvasChange}
               showGrid={showGrid}
+              snapToGrid={snapToGrid}
               canvasRef={backCanvasRef}
             />
           </div>

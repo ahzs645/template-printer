@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Canvas, FabricObject, Textbox, Rect, Circle, Line, Group, FabricText } from 'fabric'
+import { Canvas, FabricObject, Textbox, Rect, Circle, Line, Group, FabricText, FabricImage } from 'fabric'
 import type { DesignerObjectData, CardSide } from '../types'
 import {
   DEFAULT_TEXT_PROPS,
   DEFAULT_SHAPE_PROPS,
   DEFAULT_IMAGE_PLACEHOLDER_PROPS,
 } from '../types'
+import { generateBarcodePreview, type BarcodeType } from '../utils/barcodeGenerator'
 
 // Pixels per mm at 96 DPI (standard screen)
 const PX_PER_MM = 96 / 25.4
@@ -15,16 +16,27 @@ type UseFabricCanvasOptions = {
   cardHeight: number // mm
   onSelectionChange?: (objects: FabricObject[]) => void
   onCanvasChange?: () => void
+  snapToGrid?: boolean
+  gridSize?: number  // mm
 }
 
 export function useFabricCanvas(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseFabricCanvasOptions
 ) {
-  const { cardWidth, cardHeight, onSelectionChange, onCanvasChange } = options
+  const { cardWidth, cardHeight, onSelectionChange, onCanvasChange, snapToGrid = false, gridSize = 5 } = options
   const [canvas, setCanvas] = useState<Canvas | null>(null)
   const [selectedObjects, setSelectedObjects] = useState<FabricObject[]>([])
   const isInitializedRef = useRef(false)
+  const alignmentLinesRef = useRef<Line[]>([])
+  const snapEnabledRef = useRef(snapToGrid)
+  const gridSizeRef = useRef(gridSize)
+
+  // Update refs when options change
+  useEffect(() => {
+    snapEnabledRef.current = snapToGrid
+    gridSizeRef.current = gridSize
+  }, [snapToGrid, gridSize])
 
   // Convert mm to canvas pixels
   const mmToPx = useCallback((mm: number) => mm * PX_PER_MM, [])
@@ -59,12 +71,86 @@ export function useFabricCanvas(
       onCanvasChange?.()
     }
 
+    // Snap to grid during object movement
+    const handleObjectMoving = (e: { target: FabricObject }) => {
+      if (!snapEnabledRef.current || !e.target) return
+
+      const obj = e.target
+      const gridPx = mmToPx(gridSizeRef.current)
+
+      // Get object bounds
+      const objLeft = obj.left ?? 0
+      const objTop = obj.top ?? 0
+
+      // Snap to grid
+      const snappedLeft = Math.round(objLeft / gridPx) * gridPx
+      const snappedTop = Math.round(objTop / gridPx) * gridPx
+
+      obj.set({
+        left: snappedLeft,
+        top: snappedTop,
+      })
+
+      // Show alignment lines for center guides
+      clearAlignmentLines(fabricCanvas)
+      const canvasWidth = fabricCanvas.width ?? 0
+      const canvasHeight = fabricCanvas.height ?? 0
+      const objWidth = (obj.width ?? 0) * (obj.scaleX ?? 1)
+      const objHeight = (obj.height ?? 0) * (obj.scaleY ?? 1)
+      const objCenterX = snappedLeft + objWidth / 2
+      const objCenterY = snappedTop + objHeight / 2
+      const canvasCenterX = canvasWidth / 2
+      const canvasCenterY = canvasHeight / 2
+
+      // Show vertical center line when near center
+      if (Math.abs(objCenterX - canvasCenterX) < gridPx) {
+        const centerLine = new Line([canvasCenterX, 0, canvasCenterX, canvasHeight], {
+          stroke: '#ff6b6b',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5],
+        })
+        centerLine.set('data', { isAlignmentLine: true })
+        alignmentLinesRef.current.push(centerLine)
+        fabricCanvas.add(centerLine)
+      }
+
+      // Show horizontal center line when near center
+      if (Math.abs(objCenterY - canvasCenterY) < gridPx) {
+        const centerLine = new Line([0, canvasCenterY, canvasWidth, canvasCenterY], {
+          stroke: '#ff6b6b',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [5, 5],
+        })
+        centerLine.set('data', { isAlignmentLine: true })
+        alignmentLinesRef.current.push(centerLine)
+        fabricCanvas.add(centerLine)
+      }
+    }
+
+    const handleObjectModifiedWithCleanup = () => {
+      clearAlignmentLines(fabricCanvas)
+      onCanvasChange?.()
+    }
+
+    // Helper to clear alignment lines
+    const clearAlignmentLines = (canvas: Canvas) => {
+      alignmentLinesRef.current.forEach((line) => {
+        canvas.remove(line)
+      })
+      alignmentLinesRef.current = []
+    }
+
     fabricCanvas.on('selection:created', handleSelection)
     fabricCanvas.on('selection:updated', handleSelection)
     fabricCanvas.on('selection:cleared', handleSelectionCleared)
-    fabricCanvas.on('object:modified', handleObjectModified)
+    fabricCanvas.on('object:modified', handleObjectModifiedWithCleanup)
     fabricCanvas.on('object:added', handleObjectModified)
     fabricCanvas.on('object:removed', handleObjectModified)
+    fabricCanvas.on('object:moving', handleObjectMoving)
 
     setCanvas(fabricCanvas)
     isInitializedRef.current = true
@@ -73,9 +159,11 @@ export function useFabricCanvas(
       fabricCanvas.off('selection:created', handleSelection)
       fabricCanvas.off('selection:updated', handleSelection)
       fabricCanvas.off('selection:cleared', handleSelectionCleared)
-      fabricCanvas.off('object:modified', handleObjectModified)
+      fabricCanvas.off('object:modified', handleObjectModifiedWithCleanup)
       fabricCanvas.off('object:added', handleObjectModified)
       fabricCanvas.off('object:removed', handleObjectModified)
+      fabricCanvas.off('object:moving', handleObjectMoving)
+      clearAlignmentLines(fabricCanvas)
       fabricCanvas.dispose()
       isInitializedRef.current = false
     }
@@ -259,6 +347,82 @@ export function useFabricCanvas(
     return placeholder
   }, [canvas, mmToPx, generateId])
 
+  // Add barcode element
+  const addBarcode = useCallback(async (
+    fieldId: string,
+    barcodeType: BarcodeType = 'code128'
+  ) => {
+    if (!canvas) return null
+
+    const width = mmToPx(35)
+    const height = barcodeType === 'qrcode' ? mmToPx(20) : mmToPx(15)
+
+    try {
+      // Generate a preview barcode image
+      const dataUrl = await generateBarcodePreview(barcodeType, width, height)
+
+      // Create image from data URL
+      const imgElement = new Image()
+      imgElement.src = dataUrl
+
+      await new Promise((resolve, reject) => {
+        imgElement.onload = resolve
+        imgElement.onerror = reject
+      })
+
+      const fabricImage = new FabricImage(imgElement, {
+        left: mmToPx(10),
+        top: mmToPx(10),
+      })
+
+      const data: DesignerObjectData = {
+        elementType: 'barcode',
+        fieldId,
+        barcodeConfig: {
+          fieldId,
+          barcodeType,
+        },
+      }
+      fabricImage.set('data', data)
+      fabricImage.set('id', generateId())
+
+      canvas.add(fabricImage)
+      canvas.setActiveObject(fabricImage)
+      canvas.renderAll()
+      return fabricImage
+    } catch (error) {
+      console.error('Failed to add barcode:', error)
+
+      // Fallback: add a placeholder rectangle
+      const placeholder = new Rect({
+        left: mmToPx(10),
+        top: mmToPx(10),
+        width,
+        height,
+        fill: '#f5f5f5',
+        stroke: '#999999',
+        strokeWidth: 1,
+        strokeDashArray: [3, 3],
+      })
+
+      const data: DesignerObjectData = {
+        elementType: 'barcode',
+        fieldId,
+        barcodeConfig: {
+          fieldId,
+          barcodeType,
+        },
+      }
+      placeholder.set('data', data)
+      placeholder.set('id', generateId())
+
+      canvas.add(placeholder)
+      canvas.setActiveObject(placeholder)
+      canvas.renderAll()
+      return placeholder
+    }
+  }, [canvas, mmToPx, generateId])
+
   // Delete selected objects
   const deleteSelected = useCallback(() => {
     if (!canvas) return
@@ -375,6 +539,7 @@ export function useFabricCanvas(
     addCircle,
     addLine,
     addImagePlaceholder,
+    addBarcode,
     // Object operations
     deleteSelected,
     bringToFront,

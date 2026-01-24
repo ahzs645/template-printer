@@ -4,6 +4,7 @@ import {
   Square,
   Circle,
   Minus,
+  Barcode,
   QrCode,
   Trash2,
   ArrowUpToLine,
@@ -12,6 +13,7 @@ import {
   Undo2,
   Redo2,
   Variable,
+  Magnet,
 } from 'lucide-react'
 import { Button } from '../ui/button'
 import {
@@ -31,6 +33,8 @@ type DesignerToolbarProps = {
   onAddRectangle: () => void
   onAddCircle: () => void
   onAddLine: () => void
+  onAddBarcode?: () => void
+  onAddQrCode?: () => void
   // Object actions
   onDelete: () => void
   onBringToFront: () => void
@@ -38,6 +42,8 @@ type DesignerToolbarProps = {
   // View actions
   showGrid: boolean
   onToggleGrid: () => void
+  snapToGrid: boolean
+  onToggleSnap: () => void
   // History actions
   onUndo?: () => void
   onRedo?: () => void
@@ -58,11 +64,15 @@ export function DesignerToolbar({
   onAddRectangle,
   onAddCircle,
   onAddLine,
+  onAddBarcode,
+  onAddQrCode,
   onDelete,
   onBringToFront,
   onSendToBack,
   showGrid,
   onToggleGrid,
+  snapToGrid,
+  onToggleSnap,
   onUndo,
   onRedo,
   canUndo = false,
@@ -187,6 +197,53 @@ export function DesignerToolbar({
         </Button>
       </div>
 
+      {/* Barcode Group */}
+      {(onAddBarcode || onAddQrCode) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            borderLeft: '1px solid var(--border-color, #e5e5e5)',
+            paddingLeft: 16,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginRight: 4,
+              textTransform: 'uppercase',
+              fontWeight: 500,
+            }}
+          >
+            Codes
+          </span>
+          {onAddBarcode && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onAddBarcode}
+              title="Add Barcode (Code128)"
+              style={{ padding: '6px 8px' }}
+            >
+              <Barcode size={16} />
+            </Button>
+          )}
+          {onAddQrCode && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onAddQrCode}
+              title="Add QR Code"
+              style={{ padding: '6px 8px' }}
+            >
+              <QrCode size={16} />
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Object Actions Group */}
       <div
         style={{
@@ -237,7 +294,7 @@ export function DesignerToolbar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 4,
           borderLeft: '1px solid var(--border-color, #e5e5e5)',
           paddingLeft: 16,
         }}
@@ -250,6 +307,15 @@ export function DesignerToolbar({
           style={{ padding: '6px 8px' }}
         >
           <Grid3X3 size={16} />
+        </Button>
+        <Button
+          variant={snapToGrid ? 'secondary' : 'ghost'}
+          size="sm"
+          onClick={onToggleSnap}
+          title="Snap to Grid"
+          style={{ padding: '6px 8px' }}
+        >
+          <Magnet size={16} />
         </Button>
       </div>
 
