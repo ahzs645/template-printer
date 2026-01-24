@@ -37,25 +37,21 @@ export function DockablePanel({
     >
       <button
         type="button"
-        className="dockable-panel__toggle"
+        className={cn(
+          'dockable-panel__toggle',
+          isOpen && 'dockable-panel__toggle--header'
+        )}
         onClick={() => setIsOpen(!isOpen)}
         title={isOpen ? `Collapse ${title}` : `Expand ${title}`}
       >
         <ChevronIcon size={16} />
-        {!isOpen && (
-          <span className="dockable-panel__toggle-label">{title}</span>
-        )}
+        <span className="dockable-panel__toggle-label">{title}</span>
       </button>
 
       {isOpen && (
-        <>
-          <div className="dockable-panel__header">
-            <span className="dockable-panel__title">{title}</span>
-          </div>
-          <div className="dockable-panel__content">
-            {children}
-          </div>
-        </>
+        <div className="dockable-panel__content">
+          {children}
+        </div>
       )}
     </div>
   )

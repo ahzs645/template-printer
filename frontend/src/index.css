@@ -353,6 +353,21 @@ textarea {
   color: var(--text-primary);
 }
 
+.dockable-panel__toggle--header {
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.dockable-panel--left .dockable-panel__toggle--header {
+  flex-direction: row-reverse;
+}
+
+.dockable-panel__toggle--header .dockable-panel__toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .dockable-panel--closed .dockable-panel__toggle {
   flex-direction: column;
   padding: 12px 4px;
@@ -366,20 +381,6 @@ textarea {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.dockable-panel__header {
-  padding: 10px 12px;
-  background: var(--bg-surface-alt);
-  border-bottom: 1px solid var(--border-default);
-}
-
-.dockable-panel__title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-primary);
 }
 
 .dockable-panel__content {
