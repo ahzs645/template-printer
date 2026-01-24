@@ -1,0 +1,6 @@
+export { CardDesignerTab } from './CardDesignerTab'
+export { DesignerCanvas } from './DesignerCanvas'
+export { DesignerToolbar } from './DesignerToolbar'
+export { PropertiesPanel } from './PropertiesPanel'
+export { useFabricCanvas } from './hooks/useFabricCanvas'
+export * from './types'

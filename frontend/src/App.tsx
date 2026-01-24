@@ -29,6 +29,7 @@ import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
 import { CalibrationTab, type CalibrationMode } from './components/calibration'
+import { CardDesignerTab } from './components/card-designer'
 import { useColorProfiles } from './hooks/calibration'
 import { FieldNamingTab } from './components/FieldNamingTab'
 import type { ExportOptions } from './components/ExportPage'
@@ -55,12 +56,14 @@ import { labelFromId } from './lib/fields'
 import { cn } from './lib/utils'
 
 type ActiveTab = 'design' | 'users' | 'export' | 'calibration'
+type DesignMode = 'import' | 'designer'
 
 const PREVIEW_BASE_WIDTH = 420
 
 function App() {
   const storage = useStorage()
   const [activeTab, setActiveTab] = useState<ActiveTab>('users')
+  const [designMode, setDesignMode] = useState<DesignMode>('import')
   const [calibrationMode, setCalibrationMode] = useState<CalibrationMode>('swatch')
   const { profiles: colorProfiles, loading: colorProfilesLoading } = useColorProfiles()
   const [template, setTemplate] = useState<TemplateMeta | null>(null)
@@ -546,65 +549,116 @@ function App() {
   // Render Design Tab ribbon
   const renderDesignRibbon = () => (
     <Ribbon>
-      <RibbonGroup title="Template">
-        <RibbonButton
-          icon={<FolderOpen size={18} />}
-          label="Open"
-          onClick={handleTemplateUploadClick}
-        />
-        <input
-          ref={templateUploadInputRef}
-          type="file"
-          accept="image/svg+xml"
-          onChange={handleTemplateUpload}
-          style={{ display: 'none' }}
-        />
+      {/* Mode Toggle */}
+      <RibbonGroup title="Mode">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            padding: '2px',
+            backgroundColor: 'var(--bg-surface-alt)',
+            borderRadius: 6,
+          }}
+        >
+          <button
+            onClick={() => setDesignMode('import')}
+            style={{
+              padding: '4px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              backgroundColor: designMode === 'import' ? 'var(--bg-surface)' : 'transparent',
+              color: designMode === 'import' ? 'var(--text-primary)' : 'var(--text-muted)',
+              boxShadow: designMode === 'import' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+            }}
+          >
+            Import SVG
+          </button>
+          <button
+            onClick={() => setDesignMode('designer')}
+            style={{
+              padding: '4px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              backgroundColor: designMode === 'designer' ? 'var(--bg-surface)' : 'transparent',
+              color: designMode === 'designer' ? 'var(--text-primary)' : 'var(--text-muted)',
+              boxShadow: designMode === 'designer' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+            }}
+          >
+            Card Designer
+          </button>
+        </div>
       </RibbonGroup>
 
-      <RibbonGroup title="Field">
-        <RibbonButton
-          icon={<Plus size={18} />}
-          label="Add"
-          onClick={handleAddField}
-        />
-        <RibbonButton
-          icon={<Copy size={18} />}
-          label="Duplicate"
-          onClick={() => selectedField && handleDuplicateField(selectedField.id)}
-          disabled={!selectedField}
-        />
-        <RibbonButton
-          icon={<Trash2 size={18} />}
-          label="Delete"
-          onClick={() => selectedField && handleDeleteField(selectedField.id)}
-          disabled={!selectedField}
-        />
-        <RibbonDivider />
-        <RibbonButton
-          icon={<Settings size={18} />}
-          label="Map Fields"
-          onClick={handleOpenFieldMapping}
-          disabled={!selectedTemplateId || !template?.rawSvg}
-        />
-      </RibbonGroup>
+      {designMode === 'import' && (
+        <>
+          <RibbonGroup title="Template">
+            <RibbonButton
+              icon={<FolderOpen size={18} />}
+              label="Open"
+              onClick={handleTemplateUploadClick}
+            />
+            <input
+              ref={templateUploadInputRef}
+              type="file"
+              accept="image/svg+xml"
+              onChange={handleTemplateUpload}
+              style={{ display: 'none' }}
+            />
+          </RibbonGroup>
 
-      <RibbonGroup title="Export">
-        <RibbonButton
-          icon={<FileDown size={18} />}
-          label="Quick PDF"
-          onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [], colorProfileId: null })}
-          disabled={!template || isExporting}
-          size="large"
-        />
-      </RibbonGroup>
+          <RibbonGroup title="Field">
+            <RibbonButton
+              icon={<Plus size={18} />}
+              label="Add"
+              onClick={handleAddField}
+            />
+            <RibbonButton
+              icon={<Copy size={18} />}
+              label="Duplicate"
+              onClick={() => selectedField && handleDuplicateField(selectedField.id)}
+              disabled={!selectedField}
+            />
+            <RibbonButton
+              icon={<Trash2 size={18} />}
+              label="Delete"
+              onClick={() => selectedField && handleDeleteField(selectedField.id)}
+              disabled={!selectedField}
+            />
+            <RibbonDivider />
+            <RibbonButton
+              icon={<Settings size={18} />}
+              label="Map Fields"
+              onClick={handleOpenFieldMapping}
+              disabled={!selectedTemplateId || !template?.rawSvg}
+            />
+          </RibbonGroup>
 
-      <div style={{ flex: 1 }} />
+          <RibbonGroup title="Export">
+            <RibbonButton
+              icon={<FileDown size={18} />}
+              label="Quick PDF"
+              onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [], colorProfileId: null })}
+              disabled={!template || isExporting}
+              size="large"
+            />
+          </RibbonGroup>
 
-      <RibbonButton
-        icon={<HelpCircle size={16} />}
-        label="Layer Help"
-        onClick={() => setLayerNamingDialogOpen(true)}
-      />
+          <div style={{ flex: 1 }} />
+
+          <RibbonButton
+            icon={<HelpCircle size={16} />}
+            label="Layer Help"
+            onClick={() => setLayerNamingDialogOpen(true)}
+          />
+        </>
+      )}
     </Ribbon>
   )
 
@@ -739,7 +793,20 @@ function App() {
 
         {/* Content */}
         <div className="app-content">
-          {activeTab === 'design' && (
+          {activeTab === 'design' && designMode === 'designer' && (
+            <CardDesignerTab
+              onSave={(data) => {
+                console.log('Design saved:', data)
+                // TODO: Save to storage and create template
+                setStatusMessage(`Saved design "${data.name}"`)
+              }}
+              onCancel={() => {
+                setDesignMode('import')
+              }}
+            />
+          )}
+
+          {activeTab === 'design' && designMode === 'import' && (
             <>
               {/* Left Panel - Templates & Fields */}
               <DockablePanel title="Templates" side="left" width={280}>

@@ -51,14 +51,24 @@ export type TemplateExtractionResult = {
   autoFields: FieldDefinition[]
 }
 
+export type CardDesignMode = 'template' | 'canvas'
+
 export type CardDesign = {
   id: string
   name: string
   description?: string | null
+  // Template-based design (existing)
   frontTemplateId: string | null
   backTemplateId: string | null
   frontTemplate?: TemplateSummary | null
   backTemplate?: TemplateSummary | null
+  // Canvas-based design (new)
+  designerMode?: CardDesignMode
+  frontCanvasData?: string | null   // Fabric.js JSON
+  backCanvasData?: string | null    // Fabric.js JSON
+  cardWidth?: number                // mm (default: 86)
+  cardHeight?: number               // mm (default: 54)
+  // Timestamps
   createdAt?: string | null
   updatedAt?: string | null
 }
