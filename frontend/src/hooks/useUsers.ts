@@ -1,80 +1,46 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { UserData } from '../lib/fieldParser'
-
-const API_BASE = '/api/users'
+import { useStorage } from '../lib/storage'
 
 export function useUsers() {
+  const storage = useStorage()
   const [users, setUsers] = useState<UserData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(API_BASE)
-      if (!response.ok) {
-        throw new Error('Failed to fetch users')
-      }
-      const data = await response.json()
+      const data = await storage.listUsers()
       setUsers(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [storage])
 
-  const createUser = async (userData: Omit<UserData, 'id'>): Promise<UserData> => {
-    const response = await fetch(API_BASE, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData),
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to create user')
-    }
-
-    const newUser = await response.json()
+  const createUser = useCallback(async (userData: Omit<UserData, 'id'>): Promise<UserData> => {
+    const newUser = await storage.createUser(userData)
     setUsers((prev) => [...prev, newUser])
     return newUser
-  }
+  }, [storage])
 
-  const updateUser = async (id: string, userData: Partial<UserData>): Promise<UserData> => {
-    const response = await fetch(`${API_BASE}/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData),
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to update user')
-    }
-
-    const updatedUser = await response.json()
+  const updateUser = useCallback(async (id: string, userData: Partial<UserData>): Promise<UserData> => {
+    const updatedUser = await storage.updateUser(id, userData)
     setUsers((prev) => prev.map((u) => (u.id === id ? updatedUser : u)))
     return updatedUser
-  }
+  }, [storage])
 
-  const deleteUser = async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE}/${id}`, {
-      method: 'DELETE',
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to delete user')
-    }
-
+  const deleteUser = useCallback(async (id: string): Promise<void> => {
+    await storage.deleteUser(id)
     setUsers((prev) => prev.filter((u) => u.id !== id))
-  }
+  }, [storage])
 
   useEffect(() => {
     fetchUsers()
-  }, [])
+  }, [fetchUsers])
 
   return {
     users,

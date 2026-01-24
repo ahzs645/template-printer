@@ -35,7 +35,8 @@ import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { useUsers } from './hooks/useUsers'
-import { deleteTemplateFromLibrary, uploadTemplateToLibrary, saveFieldMappings, getFieldMappings, renameTemplateInLibrary } from './lib/api'
+import { useStorage } from './lib/storage'
+import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout } from './lib/exporter'
 import { generateAutoMappings } from './lib/autoMapping'
@@ -58,6 +59,7 @@ type ActiveTab = 'design' | 'users' | 'export' | 'calibration'
 const PREVIEW_BASE_WIDTH = 420
 
 function App() {
+  const storage = useStorage()
   const [activeTab, setActiveTab] = useState<ActiveTab>('users')
   const [calibrationMode, setCalibrationMode] = useState<CalibrationMode>('swatch')
   const { profiles: colorProfiles, loading: colorProfilesLoading } = useColorProfiles()
@@ -122,7 +124,7 @@ function App() {
   // Fetch field mappings when template is selected
   useEffect(() => {
     if (selectedTemplateId && fields.length > 0) {
-      getFieldMappings(selectedTemplateId)
+      storage.getFieldMappings(selectedTemplateId)
         .then(mappings => {
           const mappingsMap: Record<string, string> = {}
           mappings.forEach(m => {
@@ -136,7 +138,7 @@ function App() {
     } else {
       setFieldMappings({})
     }
-  }, [selectedTemplateId, fields, fieldMappingsVersion])
+  }, [selectedTemplateId, fields, fieldMappingsVersion, storage])
 
   const selectedField = useMemo(
     () => fields.find((field) => field.id === selectedFieldId) ?? null,
@@ -189,13 +191,13 @@ function App() {
       setStatusMessage(baseMessage)
 
       try {
-        const savedTemplate = await uploadTemplateToLibrary(file, metadata, 'design')
+        const savedTemplate = await storage.createTemplate(file, metadata, 'design')
         setSelectedTemplateId(savedTemplate.id)
         await reloadDesignTemplates()
 
         const autoMappings = generateAutoMappings(nextFields)
         if (autoMappings.length > 0) {
-          await saveFieldMappings(savedTemplate.id, autoMappings)
+          await storage.saveFieldMappings(savedTemplate.id, autoMappings)
           setFieldMappingsVersion(v => v + 1)
           setStatusMessage(`${baseMessage} Saved "${savedTemplate.name}" with ${autoMappings.length} auto-mapped field${autoMappings.length === 1 ? '' : 's'}.`)
         } else {
@@ -221,7 +223,7 @@ function App() {
 
     try {
       const { metadata } = await parseTemplate(file)
-      await uploadTemplateToLibrary(file, metadata, 'print')
+      await storage.createTemplate(file, metadata, 'print')
       await reloadPrintTemplates()
       setStatusMessage(`Print layout "${metadata.name}" uploaded successfully.`)
     } catch (error) {
@@ -233,11 +235,7 @@ function App() {
   const handleTemplateSelect = async (templateSummary: TemplateSummary) => {
     try {
       setErrorMessage(null)
-      const response = await fetch(templateSummary.svgPath)
-      if (!response.ok) {
-        throw new Error(`Failed to load template: ${response.status}`)
-      }
-      const svgText = await response.text()
+      const svgText = await loadTemplateSvgContent(templateSummary)
       const { metadata, autoFields } = await parseTemplateString(svgText, templateSummary.name)
       resetPreviousObjectUrl(metadata.objectUrl)
       setTemplate(metadata)
@@ -248,11 +246,11 @@ function App() {
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
 
-      const existingMappings = await getFieldMappings(templateSummary.id)
+      const existingMappings = await storage.getFieldMappings(templateSummary.id)
       if (existingMappings.length === 0 && nextFields.length > 0) {
         const autoMappings = generateAutoMappings(nextFields)
         if (autoMappings.length > 0) {
-          await saveFieldMappings(templateSummary.id, autoMappings)
+          await storage.saveFieldMappings(templateSummary.id, autoMappings)
           setFieldMappingsVersion(v => v + 1)
           setStatusMessage(
             `Loaded template "${templateSummary.name}" with ${autoFields.length} placeholder${autoFields.length === 1 ? '' : 's'}. Auto-mapped ${autoMappings.length} field${autoMappings.length === 1 ? '' : 's'}.`
@@ -383,7 +381,7 @@ function App() {
           throw new Error('Template must be saved to use database mode')
         }
 
-        const mappings = await getFieldMappings(selectedTemplateId)
+        const mappings = await storage.getFieldMappings(selectedTemplateId)
         const fieldMappingsMap: Record<string, string> = {}
         const customValuesMap: Record<string, string> = {}
         mappings.forEach((m) => {
@@ -479,7 +477,7 @@ function App() {
 
     try {
       setErrorMessage(null)
-      const updated = await renameTemplateInLibrary(templateSummary.id, { name: trimmed })
+      const updated = await storage.updateTemplate(templateSummary.id, { name: trimmed })
       await reloadDesignTemplates()
       setStatusMessage(`Renamed template to "${updated.name}".`)
       if (selectedTemplateId === templateSummary.id) {
@@ -500,7 +498,7 @@ function App() {
 
     try {
       setErrorMessage(null)
-      await deleteTemplateFromLibrary(templateSummary.id)
+      await storage.deleteTemplate(templateSummary.id)
 
       if (selectedTemplateId === templateSummary.id) {
         setTemplate(null)
@@ -529,7 +527,7 @@ function App() {
     }
 
     try {
-      await saveFieldMappings(selectedTemplateId, mappings)
+      await storage.saveFieldMappings(selectedTemplateId, mappings)
       setStatusMessage(`Saved ${mappings.length} field mapping${mappings.length !== 1 ? 's' : ''}.`)
       setFieldMappingsVersion(v => v + 1)
       setTimeout(() => {
@@ -594,7 +592,7 @@ function App() {
         <RibbonButton
           icon={<FileDown size={18} />}
           label="Quick PDF"
-          onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [] })}
+          onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [], colorProfileId: null })}
           disabled={!template || isExporting}
           size="large"
         />

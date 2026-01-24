@@ -59,7 +59,7 @@ export function PreviewWorkspace({
               </CardDescription>
             </div>
             <Button
-              onClick={() => onExportPdf({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [] })}
+              onClick={() => onExportPdf({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [], colorProfileId: null })}
               disabled={!template || isExporting}
               size="sm"
             >

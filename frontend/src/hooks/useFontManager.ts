@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { listFonts, uploadFont, type FontData } from '../lib/api'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import type { FontData } from '../lib/api'
+import { useStorage } from '../lib/storage'
 
 export type FontEntry = {
   name: string
@@ -22,6 +23,7 @@ type UseFontManagerResult = {
 }
 
 export function useFontManager(): UseFontManagerResult {
+  const storage = useStorage()
   const [entries, setEntries] = useState<FontEntryMap>({})
   const [templateFonts, setTemplateFonts] = useState<string[]>([])
   const entriesRef = useRef(entries)
@@ -30,30 +32,7 @@ export function useFontManager(): UseFontManagerResult {
     entriesRef.current = entries
   }, [entries])
 
-  // Load fonts from backend on mount
-  useEffect(() => {
-    const loadSavedFonts = async () => {
-      try {
-        const savedFonts = await listFonts()
-
-        // Load each font into the browser
-        for (const fontData of savedFonts) {
-          try {
-            await loadFontFromData(fontData)
-          } catch (error) {
-            console.error(`Failed to load saved font ${fontData.fontName}:`, error)
-          }
-        }
-
-      } catch (error) {
-        console.error('Failed to load saved fonts:', error)
-      }
-    }
-
-    loadSavedFonts()
-  }, [])
-
-  const loadFontFromData = async (fontData: FontData) => {
+  const loadFontFromData = useCallback(async (fontData: FontData) => {
     // Convert base64 to blob
     const binaryString = atob(fontData.fontData)
     const bytes = new Uint8Array(binaryString.length)
@@ -82,7 +61,30 @@ export function useFontManager(): UseFontManagerResult {
       URL.revokeObjectURL(objectUrl)
       throw error
     }
-  }
+  }, [])
+
+  // Load fonts from storage on mount
+  useEffect(() => {
+    const loadSavedFonts = async () => {
+      try {
+        const savedFonts = await storage.listFonts()
+
+        // Load each font into the browser
+        for (const fontData of savedFonts) {
+          try {
+            await loadFontFromData(fontData)
+          } catch (error) {
+            console.error(`Failed to load saved font ${fontData.fontName}:`, error)
+          }
+        }
+
+      } catch (error) {
+        console.error('Failed to load saved fonts:', error)
+      }
+    }
+
+    loadSavedFonts()
+  }, [storage, loadFontFromData])
 
   useEffect(() => {
     return () => {
@@ -147,7 +149,7 @@ export function useFontManager(): UseFontManagerResult {
     })
   }
 
-  const loadFontFile = async (fontName: string, file: File) => {
+  const loadFontFile = useCallback(async (fontName: string, file: File) => {
     const objectUrl = URL.createObjectURL(file)
     try {
       // Load font into browser
@@ -173,18 +175,18 @@ export function useFontManager(): UseFontManagerResult {
         }
       })
 
-      // Save to backend for persistence
+      // Save to storage for persistence
       try {
-        await uploadFont(fontName, file)
+        await storage.uploadFont(fontName, file)
       } catch (error) {
-        console.error('Failed to save font to backend:', error)
+        console.error('Failed to save font to storage:', error)
         // Don't throw - font is still loaded in browser for this session
       }
     } catch (error) {
       URL.revokeObjectURL(objectUrl)
       throw error
     }
-  }
+  }, [storage])
 
   return {
     fontList,

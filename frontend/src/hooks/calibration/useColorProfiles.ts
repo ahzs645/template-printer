@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { ColorProfile } from '../../lib/calibration/exportUtils'
-
-const API_BASE = '/api/color-profiles'
+import { useStorage } from '../../lib/storage'
 
 export function useColorProfiles() {
+  const storage = useStorage()
   const [profiles, setProfiles] = useState<ColorProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -18,16 +18,12 @@ export function useColorProfiles() {
   const [newProfileName, setNewProfileName] = useState("")
   const [newProfileDevice, setNewProfileDevice] = useState("")
 
-  // Fetch profiles from the backend
+  // Fetch profiles from storage
   const fetchProfiles = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(API_BASE)
-      if (!response.ok) {
-        throw new Error('Failed to fetch color profiles')
-      }
-      const data = await response.json()
+      const data = await storage.listColorProfiles()
       setProfiles(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -35,33 +31,25 @@ export function useColorProfiles() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [storage])
 
   // Load profiles on mount
   useEffect(() => {
     fetchProfiles()
   }, [fetchProfiles])
 
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = useCallback(async () => {
     if (!newProfileName || !newProfileDevice) return
 
     try {
-      const response = await fetch(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newProfileName,
-          device: newProfileDevice,
-          adjustments
-        })
+      // Note: The adjustments type here is for UI sliders, which differs from
+      // the per-color adjustments stored in profiles. This cast maintains
+      // backward compatibility with the existing API behavior.
+      const newProfile = await storage.createColorProfile({
+        name: newProfileName,
+        device: newProfileDevice,
+        adjustments: adjustments as unknown as Record<string, { r: number; g: number; b: number }>
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to save profile')
-      }
-
-      const newProfile = await response.json()
       setProfiles(prev => [...prev, newProfile])
       setNewProfileName("")
       setNewProfileDevice("")
@@ -69,37 +57,26 @@ export function useColorProfiles() {
       console.error('Error saving profile:', err)
       throw err
     }
-  }
+  }, [storage, newProfileName, newProfileDevice, adjustments])
 
-  const handleCreateProfileFromComparison = async (
+  const handleCreateProfileFromComparison = useCallback(async (
     colorAdjustments: Record<string, { r: number; g: number; b: number }>,
     profileName: string,
     deviceName: string
   ) => {
     try {
-      const response = await fetch(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: profileName,
-          device: deviceName,
-          adjustments: colorAdjustments
-        })
+      const newProfile = await storage.createColorProfile({
+        name: profileName,
+        device: deviceName,
+        adjustments: colorAdjustments
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to save profile')
-      }
-
-      const newProfile = await response.json()
       setProfiles(prev => [...prev, newProfile])
       return newProfile
     } catch (err) {
       console.error('Error creating profile from comparison:', err)
       throw err
     }
-  }
+  }, [storage])
 
   const handleResetAdjustments = () => {
     setAdjustments({
@@ -118,43 +95,26 @@ export function useColorProfiles() {
     console.log('Profile loaded:', profile.name, 'with', Object.keys(profile.adjustments || {}).length, 'color adjustments')
   }
 
-  const handleDeleteProfile = async (profileId: string) => {
+  const handleDeleteProfile = useCallback(async (profileId: string) => {
     try {
-      const response = await fetch(`${API_BASE}/${profileId}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete profile')
-      }
-
+      await storage.deleteColorProfile(profileId)
       setProfiles(prev => prev.filter(p => p.id !== profileId))
     } catch (err) {
       console.error('Error deleting profile:', err)
       throw err
     }
-  }
+  }, [storage])
 
-  const handleUpdateProfile = async (profileId: string, updates: Partial<ColorProfile>) => {
+  const handleUpdateProfile = useCallback(async (profileId: string, updates: Partial<ColorProfile>) => {
     try {
-      const response = await fetch(`${API_BASE}/${profileId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile')
-      }
-
-      const updatedProfile = await response.json()
+      const updatedProfile = await storage.updateColorProfile(profileId, updates)
       setProfiles(prev => prev.map(p => p.id === profileId ? updatedProfile : p))
       return updatedProfile
     } catch (err) {
       console.error('Error updating profile:', err)
       throw err
     }
-  }
+  }, [storage])
 
   const applyAdjustments = (color: string) => {
     // Convert hex to RGB
@@ -171,18 +131,14 @@ export function useColorProfiles() {
     return `#${adjustedR.toString(16).padStart(2, '0')}${adjustedG.toString(16).padStart(2, '0')}${adjustedB.toString(16).padStart(2, '0')}`
   }
 
-  // Import profiles from file and save to backend
-  const handleImportProfiles = async (importedProfiles: ColorProfile[]) => {
+  // Import profiles from file and save to storage
+  const handleImportProfiles = useCallback(async (importedProfiles: ColorProfile[]) => {
     try {
       for (const profile of importedProfiles) {
-        await fetch(API_BASE, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: profile.name,
-            device: profile.device,
-            adjustments: profile.adjustments
-          })
+        await storage.createColorProfile({
+          name: profile.name,
+          device: profile.device,
+          adjustments: profile.adjustments
         })
       }
       await fetchProfiles()
@@ -190,7 +146,7 @@ export function useColorProfiles() {
       console.error('Error importing profiles:', err)
       throw err
     }
-  }
+  }, [storage, fetchProfiles])
 
   return {
     profiles,

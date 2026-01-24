@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { TemplateSummary, TemplateType } from '../lib/templates'
+import { useStorage } from '../lib/storage'
 
 export function useTemplateLibrary(type?: TemplateType) {
+  const storage = useStorage()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -10,12 +12,7 @@ export function useTemplateLibrary(type?: TemplateType) {
   const fetchTemplates = useCallback(async () => {
     setIsLoading(true)
     try {
-      const url = type ? `/api/templates?type=${type}` : '/api/templates'
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`Failed to load templates (${response.status})`)
-      }
-      const data: TemplateSummary[] = await response.json()
+      const data = await storage.listTemplates(type)
       setTemplates(data)
       setError(null)
     } catch (err) {
@@ -24,7 +21,7 @@ export function useTemplateLibrary(type?: TemplateType) {
     } finally {
       setIsLoading(false)
     }
-  }, [type])
+  }, [storage, type])
 
   useEffect(() => {
     fetchTemplates()
