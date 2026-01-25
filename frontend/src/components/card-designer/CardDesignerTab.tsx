@@ -11,7 +11,7 @@ import { DesignerCanvas } from './DesignerCanvas'
 import { DesignerToolbar } from './DesignerToolbar'
 import { PropertiesPanel } from './PropertiesPanel'
 import { useDesignerHistory } from './hooks/useDesignerHistory'
-import type { CardSide, DesignerObjectData } from './types'
+import type { CardSide, CardOrientation, DesignerObjectData } from './types'
 import type { useFabricCanvas } from './hooks/useFabricCanvas'
 
 type CardDesignerTabProps = {
@@ -45,6 +45,9 @@ export function CardDesignerTab({
   const [designName, setDesignName] = useState(initialName)
   const [cardWidth, setCardWidth] = useState(initialCardWidth)
   const [cardHeight, setCardHeight] = useState(initialCardHeight)
+  const [orientation, setOrientation] = useState<CardOrientation>(
+    initialCardWidth >= initialCardHeight ? 'horizontal' : 'vertical'
+  )
 
   // Active card side
   const [activeSide, setActiveSide] = useState<CardSide>('front')
@@ -153,9 +156,24 @@ export function CardDesignerTab({
   }, [])
 
   const handleCardSizeChange = useCallback((width: number, height: number) => {
-    setCardWidth(width)
-    setCardHeight(height)
-  }, [])
+    // Apply size based on current orientation
+    if (orientation === 'horizontal') {
+      setCardWidth(Math.max(width, height))
+      setCardHeight(Math.min(width, height))
+    } else {
+      setCardWidth(Math.min(width, height))
+      setCardHeight(Math.max(width, height))
+    }
+  }, [orientation])
+
+  const handleOrientationChange = useCallback((newOrientation: CardOrientation) => {
+    if (newOrientation === orientation) return
+
+    // Swap width and height
+    setCardWidth(cardHeight)
+    setCardHeight(cardWidth)
+    setOrientation(newOrientation)
+  }, [orientation, cardWidth, cardHeight])
 
   // Property changes
   const handlePropertyChange = useCallback((property: string, value: unknown) => {
@@ -303,6 +321,8 @@ export function CardDesignerTab({
         cardWidth={cardWidth}
         cardHeight={cardHeight}
         onCardSizeChange={handleCardSizeChange}
+        orientation={orientation}
+        onOrientationChange={handleOrientationChange}
         hasSelection={selectedObjects.length > 0}
       />
 

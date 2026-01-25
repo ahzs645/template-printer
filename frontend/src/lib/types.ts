@@ -53,6 +53,30 @@ export type TemplateExtractionResult = {
 
 export type CardDesignMode = 'template' | 'canvas'
 
+export type PrintLayout = {
+  id: string
+  sourceId?: number | null
+  name: string
+  pageWidth: string
+  pageHeight: string
+  orientation: 'P' | 'L'
+  cardsPerRow: number
+  cardsPerPage: number
+  pageMarginTop: string
+  pageMarginLeft: string
+  cardMarginRight: string
+  cardMarginBottom: string
+  cardWidth: string
+  cardHeight: string
+  bleedWidth: string
+  bleedHeight: string
+  paperSize?: string | null
+  printMedia?: string | null
+  instructions?: string | null
+  isBuiltin: boolean
+  createdAt?: string | null
+}
+
 export type CardDesign = {
   id: string
   name: string

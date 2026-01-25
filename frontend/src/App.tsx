@@ -1007,8 +1007,10 @@ function App() {
                       })
                       setStatusMessage(`Saved design "${design.name}"`)
                     }
+                    // Refresh the card designs list
+                    refreshCardDesigns()
                     setEditingCanvasDesignId(null)
-                    setDesignMode('import')
+                    setDesignMode('designs')
                   } catch (error) {
                     console.error('Failed to save design:', error)
                     setErrorMessage(error instanceof Error ? error.message : 'Failed to save design')

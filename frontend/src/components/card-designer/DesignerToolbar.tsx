@@ -14,6 +14,8 @@ import {
   Redo2,
   Variable,
   Magnet,
+  RectangleHorizontal,
+  RectangleVertical,
 } from 'lucide-react'
 import { Button } from '../ui/button'
 import {
@@ -23,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select'
-import { CARD_PRESETS } from './types'
+import { CARD_PRESETS, type CardOrientation } from './types'
 
 type DesignerToolbarProps = {
   // Element actions
@@ -49,10 +51,12 @@ type DesignerToolbarProps = {
   onRedo?: () => void
   canUndo?: boolean
   canRedo?: boolean
-  // Card size
+  // Card size & orientation
   cardWidth: number
   cardHeight: number
   onCardSizeChange: (width: number, height: number) => void
+  orientation: CardOrientation
+  onOrientationChange: (orientation: CardOrientation) => void
   // State
   hasSelection: boolean
 }
@@ -80,6 +84,8 @@ export function DesignerToolbar({
   cardWidth,
   cardHeight,
   onCardSizeChange,
+  orientation,
+  onOrientationChange,
   hasSelection,
 }: DesignerToolbarProps) {
   const handlePresetChange = (presetName: string) => {
@@ -385,6 +391,26 @@ export function DesignerToolbar({
             ))}
           </SelectContent>
         </Select>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant={orientation === 'horizontal' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => onOrientationChange('horizontal')}
+            title="Horizontal (Landscape)"
+            style={{ padding: '6px 8px' }}
+          >
+            <RectangleHorizontal size={16} />
+          </Button>
+          <Button
+            variant={orientation === 'vertical' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => onOrientationChange('vertical')}
+            title="Vertical (Portrait)"
+            style={{ padding: '6px 8px' }}
+          >
+            <RectangleVertical size={16} />
+          </Button>
+        </div>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {cardWidth.toFixed(1)} × {cardHeight.toFixed(1)} mm
         </span>

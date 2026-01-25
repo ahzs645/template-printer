@@ -1,0 +1,162 @@
+[
+  {
+    "id": 10,
+    "name": "Canon G PVC Card Tray - 2 cards",
+    "pageMarginLeft": "0.3250",
+    "pageMarginTop": "4.1952",
+    "cardMarginRight": "0.2945",
+    "cardMarginBottom": "0.0000",
+    "paperSize": "Disc Tray G",
+    "printMedia": "Printable Disc (recommended)"
+  },
+  {
+    "id": 15,
+    "name": "Canon J PVC Card Tray - 2 cards",
+    "pageMarginLeft": "0.2950",
+    "pageMarginTop": "3.0700",
+    "cardMarginRight": "0.2950",
+    "cardMarginBottom": "0.0000",
+    "paperSize": "Disc Tray J",
+    "printMedia": "Printable Disc (recommended)"
+  },
+  {
+    "id": 20,
+    "name": "Canon J PVC Card Tray (Alternate) - 2 cards",
+    "pageMarginLeft": "0.2950",
+    "pageMarginTop": "3.6700",
+    "cardMarginRight": "0.2950",
+    "cardMarginBottom": "0.0000",
+    "paperSize": "Disc Tray J",
+    "printMedia": "Printable Disc (recommended)"
+  },
+  {
+    "id": 25,
+    "name": "Canon K PVC Card Tray - 2 cards",
+    "pageMarginLeft": "1.5094",
+    "pageMarginTop": "5.8088",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.1700",
+    "paperSize": "Disc Tray K",
+    "printMedia": "Printable Disc (Recommended)"
+  },
+  {
+    "id": 30,
+    "name": "Canon M PVC Card Tray - 2 cards",
+    "pageMarginLeft": "1.2234",
+    "pageMarginTop": "1.9349",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.0864",
+    "paperSize": "Disc Tray M",
+    "printMedia": "Printable Disc (Recommended)"
+  },
+  {
+    "id": 35,
+    "name": "Canon M PVC Card Tray (120 x 120 mm) - 2 cards",
+    "pageMarginLeft": "0.6747",
+    "pageMarginTop": "0.1940",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.0864",
+    "paperSize": "120 x 120 mm",
+    "printMedia": "Printable Disc (Recommended)"
+  },
+  {
+    "id": 40,
+    "name": "Canon MP PVC Card Tray - 2 cards",
+    "pageMarginLeft": "0.6736",
+    "pageMarginTop": "0.1304",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.2392",
+    "paperSize": "Multi-purpose Tray",
+    "printMedia": "Printable Disc"
+  },
+  {
+    "id": 42,
+    "name": "Canon CD Tray Insert - 2 cards",
+    "pageMarginLeft": "0.0800",
+    "pageMarginTop": "0.3840",
+    "cardMarginRight": "0.2630",
+    "cardMarginBottom": "0.0000",
+    "paperSize": "Disc Tray Insert",
+    "printMedia": "Printable Disc"
+  },
+  {
+    "id": 45,
+    "name": "Epson R200/R280 PVC Card Tray - 2 cards",
+    "pageMarginLeft": "1.2653",
+    "pageMarginTop": "0.4479",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.2431",
+    "paperSize": "A4 (Not Borderless)",
+    "printMedia": "CD/DVD"
+  },
+  {
+    "id": 50,
+    "name": "Epson Artisan 1430 - 4 cards",
+    "pageMarginLeft": "0.2072",
+    "pageMarginTop": "0.5444",
+    "cardMarginRight": "0.0483",
+    "cardMarginBottom": "0.1395",
+    "paperSize": "A4 (Not Borderless)",
+    "printMedia": "CD/DVD"
+  },
+  {
+    "id": 910,
+    "name": "Teslin 1-Up - 1 card",
+    "pageMarginLeft": "0.9375",
+    "pageMarginTop": "1.3125",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.0000",
+    "paperSize": "4 x 6 inches",
+    "printMedia": "Plain Paper"
+  },
+  {
+    "id": 915,
+    "name": "Teslin 2-Up - 2 cards",
+    "pageMarginLeft": "0.3125",
+    "pageMarginTop": "0.4375",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.8750",
+    "paperSize": "",
+    "printMedia": ""
+  },
+  {
+    "id": 920,
+    "name": "Teslin 8-up - 8 cards",
+    "pageMarginLeft": "0.6600",
+    "pageMarginTop": "0.6000",
+    "cardMarginRight": "0.4600",
+    "cardMarginBottom": "0.4300",
+    "paperSize": "US Letter",
+    "printMedia": "Plain Paper"
+  },
+  {
+    "id": 922,
+    "name": "Teslin 8-up - 8 Cards - Die Cutter",
+    "pageMarginLeft": "0.3125",
+    "pageMarginTop": "0.6000",
+    "cardMarginRight": "1.1250",
+    "cardMarginBottom": "0.0980",
+    "paperSize": "US Letter",
+    "printMedia": "Plain Paper"
+  },
+  {
+    "id": 930,
+    "name": "Teslin 8-up - 8 cards - UPDATED",
+    "pageMarginLeft": "0.6210",
+    "pageMarginTop": "0.6700",
+    "cardMarginRight": "0.4600",
+    "cardMarginBottom": "0.4300",
+    "paperSize": "US Letter",
+    "printMedia": "Plain Paper"
+  },
+  {
+    "id": 1000,
+    "name": "Thermal PVC Card Printer - 1 card",
+    "pageMarginLeft": "0.0000",
+    "pageMarginTop": "0.0000",
+    "cardMarginRight": "0.0000",
+    "cardMarginBottom": "0.0000",
+    "paperSize": "",
+    "printMedia": ""
+  }
+]

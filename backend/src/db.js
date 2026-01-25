@@ -45,6 +45,7 @@ function initializeDatabase() {
   db.pragma('journal_mode = WAL')
   createSchema(db)
   seedTemplates(db)
+  seedPrintLayouts(db)
   return db
 }
 
@@ -69,6 +70,32 @@ function createSchema(db) {
       svg_path TEXT NOT NULL,
       thumbnail_path TEXT,
       template_type TEXT DEFAULT 'design',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `
+
+  const createPrintLayoutsTable = `
+    CREATE TABLE IF NOT EXISTS print_layouts (
+      id TEXT PRIMARY KEY,
+      source_id INTEGER,
+      name TEXT NOT NULL,
+      page_width TEXT NOT NULL,
+      page_height TEXT NOT NULL,
+      orientation TEXT DEFAULT 'P',
+      cards_per_row INTEGER NOT NULL,
+      cards_per_page INTEGER NOT NULL,
+      page_margin_top TEXT NOT NULL,
+      page_margin_left TEXT NOT NULL,
+      card_margin_right TEXT NOT NULL,
+      card_margin_bottom TEXT NOT NULL,
+      card_width TEXT NOT NULL,
+      card_height TEXT NOT NULL,
+      bleed_width TEXT DEFAULT '0.0000',
+      bleed_height TEXT DEFAULT '0.0000',
+      paper_size TEXT,
+      print_media TEXT,
+      instructions TEXT,
+      is_builtin INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `
@@ -157,6 +184,7 @@ function createSchema(db) {
   `
 
   db.exec(createTemplatesTable)
+  db.exec(createPrintLayoutsTable)
   db.exec(createUsersTable)
   db.exec(createFieldMappingsTable)
   db.exec(createFontsTable)
@@ -280,6 +308,90 @@ function defaultTemplateSeeds() {
       templateType: 'print',
     },
   ]
+}
+
+function seedPrintLayouts(db) {
+  const layouts = loadPrintLayoutSeeds()
+  if (layouts.length === 0) {
+    return
+  }
+
+  const insert = db.prepare(`
+    INSERT INTO print_layouts (
+      id, source_id, name, page_width, page_height, orientation,
+      cards_per_row, cards_per_page, page_margin_top, page_margin_left,
+      card_margin_right, card_margin_bottom, card_width, card_height,
+      bleed_width, bleed_height, paper_size, print_media, instructions, is_builtin
+    )
+    VALUES (
+      @id, @sourceId, @name, @pageWidth, @pageHeight, @orientation,
+      @cardsPerRow, @cardsPerPage, @pageMarginTop, @pageMarginLeft,
+      @cardMarginRight, @cardMarginBottom, @cardWidth, @cardHeight,
+      @bleedWidth, @bleedHeight, @paperSize, @printMedia, @instructions, @isBuiltin
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      page_width = excluded.page_width,
+      page_height = excluded.page_height,
+      orientation = excluded.orientation,
+      cards_per_row = excluded.cards_per_row,
+      cards_per_page = excluded.cards_per_page,
+      page_margin_top = excluded.page_margin_top,
+      page_margin_left = excluded.page_margin_left,
+      card_margin_right = excluded.card_margin_right,
+      card_margin_bottom = excluded.card_margin_bottom,
+      card_width = excluded.card_width,
+      card_height = excluded.card_height,
+      bleed_width = excluded.bleed_width,
+      bleed_height = excluded.bleed_height,
+      paper_size = excluded.paper_size,
+      print_media = excluded.print_media,
+      instructions = excluded.instructions
+  `)
+
+  for (const layout of layouts) {
+    insert.run({
+      id: layout.id,
+      sourceId: layout.sourceId ?? null,
+      name: layout.name,
+      pageWidth: layout.pageWidth,
+      pageHeight: layout.pageHeight,
+      orientation: layout.orientation ?? 'P',
+      cardsPerRow: layout.cardsPerRow,
+      cardsPerPage: layout.cardsPerPage,
+      pageMarginTop: layout.pageMarginTop,
+      pageMarginLeft: layout.pageMarginLeft,
+      cardMarginRight: layout.cardMarginRight,
+      cardMarginBottom: layout.cardMarginBottom,
+      cardWidth: layout.cardWidth,
+      cardHeight: layout.cardHeight,
+      bleedWidth: layout.bleedWidth ?? '0.0000',
+      bleedHeight: layout.bleedHeight ?? '0.0000',
+      paperSize: layout.paperSize ?? null,
+      printMedia: layout.printMedia ?? null,
+      instructions: layout.instructions ?? null,
+      isBuiltin: layout.isBuiltin ? 1 : 0,
+    })
+  }
+}
+
+function loadPrintLayoutSeeds() {
+  const seedFile = path.join(dataDir, 'print-layouts.json')
+  if (!fs.existsSync(seedFile)) {
+    return []
+  }
+
+  try {
+    const fileContents = fs.readFileSync(seedFile, 'utf-8')
+    const parsed = JSON.parse(fileContents)
+    if (!Array.isArray(parsed)) {
+      throw new Error('Print layouts seed file must export an array')
+    }
+    return parsed
+  } catch (error) {
+    console.error('Failed to load print layout seeds', error)
+    return []
+  }
 }
 
 export function createTemplateRecord({ id, name, description, svgPath, thumbnailPath, templateType }) {
@@ -931,6 +1043,180 @@ export function deleteColorProfile(id) {
   if (!existing) return null
 
   const stmt = db.prepare(`DELETE FROM color_profiles WHERE id = ?`)
+  stmt.run(id)
+
+  return existing
+}
+
+// ============================================
+// PRINT LAYOUT OPERATIONS
+// ============================================
+
+export function listPrintLayouts() {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT
+      id, source_id AS sourceId, name,
+      page_width AS pageWidth, page_height AS pageHeight, orientation,
+      cards_per_row AS cardsPerRow, cards_per_page AS cardsPerPage,
+      page_margin_top AS pageMarginTop, page_margin_left AS pageMarginLeft,
+      card_margin_right AS cardMarginRight, card_margin_bottom AS cardMarginBottom,
+      card_width AS cardWidth, card_height AS cardHeight,
+      bleed_width AS bleedWidth, bleed_height AS bleedHeight,
+      paper_size AS paperSize, print_media AS printMedia,
+      instructions, is_builtin AS isBuiltin, created_at AS createdAt
+    FROM print_layouts
+    ORDER BY name
+  `)
+  return stmt.all().map(row => ({
+    ...row,
+    isBuiltin: row.isBuiltin === 1,
+  }))
+}
+
+export function getPrintLayoutById(id) {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    SELECT
+      id, source_id AS sourceId, name,
+      page_width AS pageWidth, page_height AS pageHeight, orientation,
+      cards_per_row AS cardsPerRow, cards_per_page AS cardsPerPage,
+      page_margin_top AS pageMarginTop, page_margin_left AS pageMarginLeft,
+      card_margin_right AS cardMarginRight, card_margin_bottom AS cardMarginBottom,
+      card_width AS cardWidth, card_height AS cardHeight,
+      bleed_width AS bleedWidth, bleed_height AS bleedHeight,
+      paper_size AS paperSize, print_media AS printMedia,
+      instructions, is_builtin AS isBuiltin, created_at AS createdAt
+    FROM print_layouts
+    WHERE id = ?
+  `)
+  const row = stmt.get(id)
+  if (!row) return null
+  return {
+    ...row,
+    isBuiltin: row.isBuiltin === 1,
+  }
+}
+
+export function createPrintLayout(layoutData) {
+  const db = getDatabase()
+  const id = `layout-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+  const cleanedName = (layoutData.name ?? '').trim()
+  if (!cleanedName) {
+    throw Object.assign(new Error('Layout name is required'), { status: 400 })
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO print_layouts (
+      id, source_id, name, page_width, page_height, orientation,
+      cards_per_row, cards_per_page, page_margin_top, page_margin_left,
+      card_margin_right, card_margin_bottom, card_width, card_height,
+      bleed_width, bleed_height, paper_size, print_media, instructions, is_builtin
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  stmt.run(
+    id,
+    layoutData.sourceId ?? null,
+    cleanedName,
+    layoutData.pageWidth,
+    layoutData.pageHeight,
+    layoutData.orientation ?? 'P',
+    layoutData.cardsPerRow,
+    layoutData.cardsPerPage,
+    layoutData.pageMarginTop,
+    layoutData.pageMarginLeft,
+    layoutData.cardMarginRight,
+    layoutData.cardMarginBottom,
+    layoutData.cardWidth,
+    layoutData.cardHeight,
+    layoutData.bleedWidth ?? '0.0000',
+    layoutData.bleedHeight ?? '0.0000',
+    layoutData.paperSize ?? null,
+    layoutData.printMedia ?? null,
+    layoutData.instructions ?? null,
+    0  // Custom layouts are not builtin
+  )
+
+  return getPrintLayoutById(id)
+}
+
+export function updatePrintLayout(id, updates) {
+  const db = getDatabase()
+  const existing = getPrintLayoutById(id)
+
+  if (!existing) return null
+
+  // Prevent updating builtin layouts
+  if (existing.isBuiltin) {
+    throw Object.assign(new Error('Cannot modify built-in layouts'), { status: 403 })
+  }
+
+  const fields = [
+    'name', 'pageWidth', 'pageHeight', 'orientation',
+    'cardsPerRow', 'cardsPerPage', 'pageMarginTop', 'pageMarginLeft',
+    'cardMarginRight', 'cardMarginBottom', 'cardWidth', 'cardHeight',
+    'bleedWidth', 'bleedHeight', 'paperSize', 'printMedia', 'instructions'
+  ]
+
+  const updated = { ...existing }
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      updated[field] = updates[field]
+    }
+  }
+
+  if (!(updated.name ?? '').trim()) {
+    throw Object.assign(new Error('Layout name is required'), { status: 400 })
+  }
+
+  const stmt = db.prepare(`
+    UPDATE print_layouts SET
+      name = ?, page_width = ?, page_height = ?, orientation = ?,
+      cards_per_row = ?, cards_per_page = ?, page_margin_top = ?, page_margin_left = ?,
+      card_margin_right = ?, card_margin_bottom = ?, card_width = ?, card_height = ?,
+      bleed_width = ?, bleed_height = ?, paper_size = ?, print_media = ?, instructions = ?
+    WHERE id = ?
+  `)
+
+  stmt.run(
+    updated.name,
+    updated.pageWidth,
+    updated.pageHeight,
+    updated.orientation,
+    updated.cardsPerRow,
+    updated.cardsPerPage,
+    updated.pageMarginTop,
+    updated.pageMarginLeft,
+    updated.cardMarginRight,
+    updated.cardMarginBottom,
+    updated.cardWidth,
+    updated.cardHeight,
+    updated.bleedWidth,
+    updated.bleedHeight,
+    updated.paperSize,
+    updated.printMedia,
+    updated.instructions,
+    id
+  )
+
+  return getPrintLayoutById(id)
+}
+
+export function deletePrintLayout(id) {
+  const db = getDatabase()
+  const existing = getPrintLayoutById(id)
+
+  if (!existing) return null
+
+  // Prevent deleting builtin layouts
+  if (existing.isBuiltin) {
+    throw Object.assign(new Error('Cannot delete built-in layouts'), { status: 403 })
+  }
+
+  const stmt = db.prepare(`DELETE FROM print_layouts WHERE id = ?`)
   stmt.run(id)
 
   return existing

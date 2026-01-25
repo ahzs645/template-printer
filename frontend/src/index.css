@@ -514,6 +514,13 @@ textarea {
   background: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.canvas-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 /* ===== Form Elements ===== */

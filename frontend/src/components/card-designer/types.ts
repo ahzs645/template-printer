@@ -41,6 +41,9 @@ export type DesignerObjectData = {
 // Card side type
 export type CardSide = 'front' | 'back'
 
+// Card orientation
+export type CardOrientation = 'horizontal' | 'vertical'
+
 // Card dimensions preset
 export type CardPreset = {
   name: string

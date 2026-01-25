@@ -1,4 +1,4 @@
-import type { CardDesign, TemplateMeta } from '../types'
+import type { CardDesign, PrintLayout, TemplateMeta } from '../types'
 import type { TemplateSummary, TemplateType } from '../templates'
 import type { UserData } from '../fieldParser'
 import type { FieldMapping, FontData, CardDesignPayload } from '../api'

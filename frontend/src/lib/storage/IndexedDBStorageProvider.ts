@@ -311,6 +311,12 @@ export class IndexedDBStorageProvider implements StorageProvider {
       description: payload.description ?? null,
       frontTemplateId: payload.frontTemplateId ?? null,
       backTemplateId: payload.backTemplateId ?? null,
+      // Canvas designer fields
+      designerMode: payload.designerMode ?? 'template',
+      frontCanvasData: payload.frontCanvasData ?? null,
+      backCanvasData: payload.backCanvasData ?? null,
+      cardWidth: payload.cardWidth ?? 86,
+      cardHeight: payload.cardHeight ?? 54,
       createdAt: now,
       updatedAt: now,
     }

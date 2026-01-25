@@ -11,6 +11,7 @@ import usersRouter from './routes/users.js'
 import fieldMappingsRouter from './routes/fieldMappings.js'
 import fontsRouter from './routes/fonts.js'
 import colorProfilesRouter from './routes/colorProfiles.js'
+import printLayoutsRouter from './routes/printLayouts.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 
 export function createApp() {
@@ -31,6 +32,7 @@ export function createApp() {
   app.use('/api/users', usersRouter)
   app.use('/api/fonts', fontsRouter)
   app.use('/api/color-profiles', colorProfilesRouter)
+  app.use('/api/print-layouts', printLayoutsRouter)
 
   if (fs.existsSync(templatesDir)) {
     app.use('/templates', express.static(templatesDir))
