@@ -493,11 +493,100 @@ export function ExportPage({
         )}
 
         {/* Print Layout Selection */}
-        <PanelSection title="Print Layout" defaultOpen={false}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+        <PanelSection title="Print Layout" defaultOpen={true}>
+          <Select
+            value={exportOptions.jsonPrintLayoutId || exportOptions.printLayoutId || 'none'}
+            onValueChange={(value) => {
+              if (value === 'none') {
+                updateExportOptions({ jsonPrintLayoutId: null, printLayoutId: null })
+              } else if (value.startsWith('layout-')) {
+                // JSON layout
+                updateExportOptions({ jsonPrintLayoutId: value, printLayoutId: null })
+              } else {
+                // SVG layout
+                updateExportOptions({ printLayoutId: value, jsonPrintLayoutId: null })
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select a print layout" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None (Single Card)</SelectItem>
+              {jsonPrintLayouts.length > 0 && (
+                <>
+                  <SelectGroup>
+                    <SelectLabel>Printer Tray Layouts</SelectLabel>
+                    {jsonPrintLayouts.filter(l => l.name.includes('Canon') || l.name.includes('Epson')).map((layout) => (
+                      <SelectItem key={layout.id} value={layout.id}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Printer size={12} />
+                          {layout.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Teslin / Card Stock</SelectLabel>
+                    {jsonPrintLayouts.filter(l => l.name.includes('Teslin')).map((layout) => (
+                      <SelectItem key={layout.id} value={layout.id}>
+                        {layout.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Thermal Printers</SelectLabel>
+                    {jsonPrintLayouts.filter(l => l.name.includes('Thermal')).map((layout) => (
+                      <SelectItem key={layout.id} value={layout.id}>
+                        {layout.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </>
+              )}
+              {printTemplates.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Custom SVG Layouts</SelectLabel>
+                  {printTemplates.map((layout) => (
+                    <SelectItem key={layout.id} value={layout.id}>
+                      {layout.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+            </SelectContent>
+          </Select>
+
+          {/* Layout Info */}
+          {selectedJsonLayout && (
+            <div style={{ marginTop: 12, padding: 10, background: 'var(--bg-surface-alt)', borderRadius: 'var(--radius)', fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Cards per page:</span>
+                <span style={{ fontWeight: 500 }}>{selectedJsonLayout.cardsPerPage}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Paper size:</span>
+                <span style={{ fontWeight: 500 }}>{selectedJsonLayout.paperSize || 'Custom'}</span>
+              </div>
+              {selectedJsonLayout.instructions && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ width: '100%', marginTop: 8, justifyContent: 'center' }}
+                  onClick={() => setShowInstructions(true)}
+                >
+                  <Info size={14} style={{ marginRight: 6 }} />
+                  Printing Instructions
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Upload Custom SVG Layout */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', flex: 1, justifyContent: 'center' }}>
               <Upload size={14} style={{ marginRight: 4 }} />
-              Upload
+              Upload SVG
               <input
                 type="file"
                 accept=".svg"
@@ -509,22 +598,6 @@ export function ExportPage({
               <RefreshCw size={14} />
             </button>
           </div>
-          <Select
-            value={exportOptions.printLayoutId || 'none'}
-            onValueChange={(value) => updateExportOptions({ printLayoutId: value === 'none' ? null : value })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None (Single Card)</SelectItem>
-              {printTemplates.map((layout) => (
-                <SelectItem key={layout.id} value={layout.id}>
-                  {layout.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </PanelSection>
       </DockablePanel>
 
@@ -699,6 +772,39 @@ export function ExportPage({
                 className="export-preview-svg"
                 style={{ width: '100%' }}
                 dangerouslySetInnerHTML={{ __html: layoutPreviewSvg }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Printing Instructions Dialog */}
+      {selectedJsonLayout?.instructions && (
+        <Dialog open={showInstructions} onOpenChange={setShowInstructions}>
+          <DialogContent style={{ maxWidth: 600 }}>
+            <DialogHeader>
+              <DialogTitle>Printing Instructions</DialogTitle>
+              <DialogDescription>{selectedJsonLayout.name}</DialogDescription>
+            </DialogHeader>
+            <div style={{ marginTop: 12 }}>
+              {selectedJsonLayout.paperSize && (
+                <div style={{ marginBottom: 12, padding: 10, background: 'var(--bg-surface-alt)', borderRadius: 'var(--radius)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Paper Size:</span>
+                    <span style={{ fontWeight: 500 }}>{selectedJsonLayout.paperSize}</span>
+                  </div>
+                  {selectedJsonLayout.printMedia && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Media Type:</span>
+                      <span style={{ fontWeight: 500 }}>{selectedJsonLayout.printMedia}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div
+                className="prose prose-sm"
+                style={{ fontSize: 13, lineHeight: 1.6 }}
+                dangerouslySetInnerHTML={{ __html: selectedJsonLayout.instructions }}
               />
             </div>
           </DialogContent>

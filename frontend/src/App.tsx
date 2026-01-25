@@ -41,7 +41,7 @@ import { CardDataPanel } from './components/CardDataPanel'
 import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
-import { SettingsDialog } from './components/SettingsDialog'
+import { SettingsTab } from './components/SettingsTab'
 import { CalibrationTab, type CalibrationMode } from './components/calibration'
 import { CardDesignerTab, generateSvgFromCanvasData } from './components/card-designer'
 import { useColorProfiles } from './hooks/calibration'
@@ -54,7 +54,8 @@ import { useCardDesigns } from './hooks/useCardDesigns'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
-import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout } from './lib/exporter'
+import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout } from './lib/exporter'
+import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
 import { isAutoMappable } from './lib/autoMapping'
 import type { CardData, CardDataValue, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
@@ -70,7 +71,7 @@ import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from
 import { labelFromId } from './lib/fields'
 import { cn } from './lib/utils'
 
-type ActiveTab = 'design' | 'users' | 'export' | 'calibration'
+type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
 type DesignMode = 'import' | 'designer' | 'designs'
 
 const PREVIEW_BASE_WIDTH = 420
@@ -91,7 +92,6 @@ function App() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [fieldMappingDialogOpen, setFieldMappingDialogOpen] = useState(false)
   const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
   const previousObjectUrl = useRef<string | null>(null)
@@ -111,6 +111,9 @@ function App() {
     error: printTemplatesError,
     reload: reloadPrintTemplates,
   } = useTemplateLibrary('print')
+
+  // JSON print layouts (Brainstorm-style layouts)
+  const { printLayouts: jsonPrintLayouts, getPrintLayoutById } = usePrintLayouts()
 
   const { users, loading: usersLoading } = useUsers()
   const {
@@ -558,7 +561,23 @@ function App() {
           : selectedUsers
 
         if (options.format === 'pdf') {
-          if (options.printLayoutId) {
+          // Check for JSON print layout first
+          if (options.jsonPrintLayoutId) {
+            const jsonLayout = getPrintLayoutById(options.jsonPrintLayoutId)
+            if (!jsonLayout) {
+              throw new Error('Selected print layout not found')
+            }
+            await exportBatchCardsWithJsonLayout(
+              template,
+              fields,
+              orderedUsers,
+              fieldMappingsMap,
+              jsonLayout,
+              options.resolution,
+              customValuesMap
+            )
+            setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with "${jsonLayout.name}" layout.`)
+          } else if (options.printLayoutId) {
             const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
             if (!printLayout) {
               throw new Error('Selected print layout not found')
@@ -583,7 +602,21 @@ function App() {
       }
       else {
         if (options.format === 'pdf') {
-          if (options.printLayoutId) {
+          // Check for JSON print layout first
+          if (options.jsonPrintLayoutId) {
+            const jsonLayout = getPrintLayoutById(options.jsonPrintLayoutId)
+            if (!jsonLayout) {
+              throw new Error('Selected print layout not found')
+            }
+            await exportWithJsonLayout(
+              template,
+              fields,
+              cardData,
+              jsonLayout,
+              options.resolution
+            )
+            setStatusMessage(`Exported PDF with "${jsonLayout.name}" layout.`)
+          } else if (options.printLayoutId) {
             const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
             if (!printLayout) {
               throw new Error('Selected print layout not found')
@@ -958,7 +991,6 @@ function App() {
       <IconNav
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab as ActiveTab)}
-        onSettingsClick={() => setSettingsDialogOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -1249,8 +1281,21 @@ function App() {
                       <CreditCard size={48} className="empty-state__icon" />
                       <p className="empty-state__text">Select a card design to preview</p>
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap', justifyContent: 'center', padding: 24 }}>
+                  ) : (() => {
+                    const selectedDesign = cardDesigns.find(d => d.id === selectedCardDesignId)
+                    const isVertical = selectedDesign?.cardHeight && selectedDesign?.cardWidth
+                      ? selectedDesign.cardHeight > selectedDesign.cardWidth
+                      : false
+                    return (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: isVertical ? 'row' : 'column',
+                      gap: isVertical ? 32 : 48,
+                      flexWrap: 'wrap',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      padding: 24
+                    }}>
                       {/* Front Side */}
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
@@ -1327,7 +1372,8 @@ function App() {
                         })()}
                       </div>
                     </div>
-                  )}
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -1491,6 +1537,25 @@ function App() {
             <CalibrationTab
               mode={calibrationMode}
               onModeChange={setCalibrationMode}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <SettingsTab
+              onDataImported={() => {
+                // Refresh all data after import
+                reloadDesignTemplates()
+                reloadPrintTemplates()
+                refreshCardDesigns()
+                // Reset current template selection since data may have changed
+                setTemplate(null)
+                setFields([])
+                setCardData({})
+                setSelectedFieldId(null)
+                setSelectedTemplateId(null)
+                setSelectedCardDesignId(null)
+                setStatusMessage('Data imported successfully.')
+              }}
             />
           )}
         </div>
@@ -1685,26 +1750,6 @@ function App() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Settings Dialog */}
-      <SettingsDialog
-        open={settingsDialogOpen}
-        onOpenChange={setSettingsDialogOpen}
-        onDataImported={() => {
-          // Refresh all data after import
-          reloadDesignTemplates()
-          reloadPrintTemplates()
-          refreshCardDesigns()
-          // Reset current template selection since data may have changed
-          setTemplate(null)
-          setFields([])
-          setCardData({})
-          setSelectedFieldId(null)
-          setSelectedTemplateId(null)
-          setSelectedCardDesignId(null)
-          setStatusMessage('Data imported successfully. Please reload templates.')
-        }}
-      />
     </div>
   )
 }

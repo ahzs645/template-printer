@@ -18,10 +18,9 @@ const navItems: NavItem[] = [
 type IconNavProps = {
   activeTab: string
   onTabChange: (tab: string) => void
-  onSettingsClick?: () => void
 }
 
-export function IconNav({ activeTab, onTabChange, onSettingsClick }: IconNavProps) {
+export function IconNav({ activeTab, onTabChange }: IconNavProps) {
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -62,9 +61,9 @@ export function IconNav({ activeTab, onTabChange, onSettingsClick }: IconNavProp
         </button>
         <button
           type="button"
-          className="icon-nav__item"
+          className={cn('icon-nav__item', activeTab === 'settings' && 'icon-nav__item--active')}
+          onClick={() => onTabChange('settings')}
           title="Settings"
-          onClick={onSettingsClick}
         >
           <Settings size={20} />
           <span className="icon-nav__label">Settings</span>
