@@ -25,7 +25,7 @@ export type ImagePlaceholderConfig = {
 // Configuration for barcode fields
 export type BarcodeConfig = {
   fieldId: string
-  barcodeType: 'code128' | 'qr' | 'ean13'
+  barcodeType: 'code128' | 'qr' | 'ean13' | 'qrcode' | 'code39'
 }
 
 // Custom data attached to Fabric.js objects
@@ -121,6 +121,7 @@ export type ShapeProperties = CommonProperties & {
 export type ImagePlaceholderProperties = CommonProperties & {
   fieldId: string
   fitMode: 'cover' | 'contain' | 'fill'
+  fill: string
   stroke: string
   strokeWidth: number
   strokeDashArray: number[] | null

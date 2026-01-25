@@ -458,7 +458,7 @@ export function useFabricCanvas(
   // Serialize canvas to JSON
   const toJSON = useCallback((): string => {
     if (!canvas) return '{}'
-    return JSON.stringify(canvas.toJSON(['id', 'data']))
+    return JSON.stringify((canvas as unknown as { toJSON: (props: string[]) => object }).toJSON(['id', 'data']))
   }, [canvas])
 
   // Load canvas from JSON

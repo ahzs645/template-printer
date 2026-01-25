@@ -234,7 +234,7 @@ export function PropertiesPanel({
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <Label style={{ fontSize: 11 }}>Rotation</Label>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{localProps.angle}°</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{String(localProps.angle ?? 0)}°</span>
             </div>
             <Slider
               value={[localProps.angle as number ?? 0]}
@@ -247,7 +247,7 @@ export function PropertiesPanel({
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <Label style={{ fontSize: 11 }}>Opacity</Label>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{localProps.opacity}%</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{String(localProps.opacity ?? 100)}%</span>
             </div>
             <Slider
               value={[localProps.opacity as number ?? 100]}

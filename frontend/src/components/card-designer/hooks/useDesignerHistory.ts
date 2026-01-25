@@ -18,7 +18,7 @@ export function useDesignerHistory({ canvas, onStateChange }: UseDesignerHistory
   const saveState = useCallback(() => {
     if (!canvas || isRestoringRef.current) return
 
-    const currentState = JSON.stringify(canvas.toJSON(['id', 'data']))
+    const currentState = JSON.stringify((canvas as unknown as { toJSON: (props: string[]) => object }).toJSON(['id', 'data']))
 
     // Don't save if state hasn't changed
     if (currentState === lastSavedStateRef.current) return
@@ -98,7 +98,7 @@ export function useDesignerHistory({ canvas, onStateChange }: UseDesignerHistory
   useEffect(() => {
     if (canvas && history.length === 0) {
       // Save initial state
-      const initialState = JSON.stringify(canvas.toJSON(['id', 'data']))
+      const initialState = JSON.stringify((canvas as unknown as { toJSON: (props: string[]) => object }).toJSON(['id', 'data']))
       setHistory([initialState])
       setHistoryIndex(0)
       lastSavedStateRef.current = initialState
