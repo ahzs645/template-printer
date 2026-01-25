@@ -8,8 +8,8 @@
     "dev": "vite",
     "dev:local": "VITE_STORAGE_MODE=local vite",
     "build": "tsc -b && vite build",
-    "build:local": "VITE_STORAGE_MODE=local tsc -b && vite build",
-    "build:gh-pages": "VITE_STORAGE_MODE=local GITHUB_PAGES=true tsc -b && vite build",
+    "build:local": "tsc -b && VITE_STORAGE_MODE=local vite build",
+    "build:gh-pages": "tsc -b && VITE_STORAGE_MODE=local GITHUB_PAGES=true vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "pnpm build:gh-pages && gh-pages -d dist"
