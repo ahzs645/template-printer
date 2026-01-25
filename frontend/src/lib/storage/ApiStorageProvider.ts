@@ -1,4 +1,4 @@
-import type { CardDesign, TemplateMeta } from '../types'
+import type { CardDesign, PrintLayout, TemplateMeta } from '../types'
 import type { TemplateSummary, TemplateType } from '../templates'
 import type { UserData } from '../fieldParser'
 import type { FieldMapping, FontData, CardDesignPayload } from '../api'
@@ -326,14 +326,33 @@ export class ApiStorageProvider implements StorageProvider {
     }
   }
 
+  // Print Layouts
+  async listPrintLayouts(): Promise<PrintLayout[]> {
+    const response = await fetch('/api/print-layouts')
+    if (!response.ok) {
+      throw new Error('Failed to fetch print layouts')
+    }
+    return response.json()
+  }
+
+  async getPrintLayout(id: string): Promise<PrintLayout | null> {
+    const response = await fetch(`/api/print-layouts/${id}`)
+    if (response.status === 404) return null
+    if (!response.ok) {
+      throw new Error('Failed to fetch print layout')
+    }
+    return response.json()
+  }
+
   // Export/Import
   async exportAllData(): Promise<ExportData> {
-    const [templates, users, cardDesigns, fonts, colorProfiles] = await Promise.all([
+    const [templates, users, cardDesigns, fonts, colorProfiles, printLayouts] = await Promise.all([
       this.listTemplates(),
       this.listUsers(),
       this.listCardDesigns(),
       this.listFonts(),
       this.listColorProfiles(),
+      this.listPrintLayouts(),
     ])
 
     // Fetch SVG contents and field mappings for all templates
@@ -359,6 +378,7 @@ export class ApiStorageProvider implements StorageProvider {
       cardDesigns,
       fonts,
       colorProfiles,
+      printLayouts,
     }
   }
 

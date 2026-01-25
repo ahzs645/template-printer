@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb'
-import type { CardDesign, TemplateMeta } from '../types'
+import type { CardDesign, PrintLayout, TemplateMeta } from '../types'
 import type { TemplateSummary, TemplateType } from '../templates'
 import type { UserData } from '../fieldParser'
 import type { FieldMapping, FontData, CardDesignPayload } from '../api'
@@ -462,6 +462,17 @@ export class IndexedDBStorageProvider implements StorageProvider {
     await db.delete('colorProfiles', id)
   }
 
+  // Print Layouts (read-only in local mode - builtin layouts come from server)
+  async listPrintLayouts(): Promise<PrintLayout[]> {
+    // Print layouts are primarily a server feature with builtin layouts
+    // In local mode, return empty array - users can still do single card export
+    return []
+  }
+
+  async getPrintLayout(_id: string): Promise<PrintLayout | null> {
+    return null
+  }
+
   // Export/Import
   async exportAllData(): Promise<ExportData> {
     const db = await this.getDB()
@@ -498,6 +509,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
       cardDesigns,
       fonts,
       colorProfiles,
+      printLayouts: [],
     }
   }
 

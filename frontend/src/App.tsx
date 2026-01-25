@@ -41,6 +41,7 @@ import { CardDataPanel } from './components/CardDataPanel'
 import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
+import { SettingsDialog } from './components/SettingsDialog'
 import { CalibrationTab, type CalibrationMode } from './components/calibration'
 import { CardDesignerTab, generateSvgFromCanvasData } from './components/card-designer'
 import { useColorProfiles } from './hooks/calibration'
@@ -90,6 +91,7 @@ function App() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [fieldMappingDialogOpen, setFieldMappingDialogOpen] = useState(false)
   const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
   const previousObjectUrl = useRef<string | null>(null)
@@ -953,7 +955,11 @@ function App() {
   return (
     <div className="app-layout">
       {/* Icon Navigation */}
-      <IconNav activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab as ActiveTab)} />
+      <IconNav
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as ActiveTab)}
+        onSettingsClick={() => setSettingsDialogOpen(true)}
+      />
 
       {/* Main Content Area */}
       <div className="app-main">
@@ -1679,6 +1685,26 @@ function App() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+        onDataImported={() => {
+          // Refresh all data after import
+          reloadDesignTemplates()
+          reloadPrintTemplates()
+          refreshCardDesigns()
+          // Reset current template selection since data may have changed
+          setTemplate(null)
+          setFields([])
+          setCardData({})
+          setSelectedFieldId(null)
+          setSelectedTemplateId(null)
+          setSelectedCardDesignId(null)
+          setStatusMessage('Data imported successfully. Please reload templates.')
+        }}
+      />
     </div>
   )
 }

@@ -47,6 +47,10 @@ export interface StorageProvider {
   updateColorProfile(id: string, updates: Partial<ColorProfile>): Promise<ColorProfile>
   deleteColorProfile(id: string): Promise<void>
 
+  // Print Layouts
+  listPrintLayouts(): Promise<PrintLayout[]>
+  getPrintLayout(id: string): Promise<PrintLayout | null>
+
   // Export/Import for data portability
   exportAllData(): Promise<ExportData>
   importAllData(data: ExportData): Promise<void>
@@ -65,6 +69,7 @@ export interface ExportData {
   cardDesigns: CardDesign[]
   fonts: FontData[]
   colorProfiles: ColorProfile[]
+  printLayouts: PrintLayout[]
 }
 
 export type StorageMode = 'server' | 'local'

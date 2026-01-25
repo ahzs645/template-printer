@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib'
-import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './types'
+import type { CardData, FieldDefinition, ImageValue, PrintLayout, TemplateMeta } from './types'
 import type { UserData } from './fieldParser'
 import { parseField } from './fieldParser'
 import {
@@ -252,6 +252,185 @@ export async function exportBatchCardsWithPrintLayout(
 
   downloadLink.href = downloadUrl
   downloadLink.download = `${baseName}-batch-${users.length}-cards-print-layout.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+// ============================================
+// JSON PRINT LAYOUT EXPORT FUNCTIONS
+// ============================================
+
+type CardPosition = {
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+  cardIndex: number
+}
+
+/**
+ * Calculate card positions from a JSON print layout configuration
+ */
+export function calculateCardPositions(layout: PrintLayout, cardCount: number): CardPosition[] {
+  const positions: CardPosition[] = []
+
+  const pageMarginTop = parseFloat(layout.pageMarginTop) * POINTS_PER_INCH
+  const pageMarginLeft = parseFloat(layout.pageMarginLeft) * POINTS_PER_INCH
+  const cardSpacingX = parseFloat(layout.cardMarginRight) * POINTS_PER_INCH
+  const cardSpacingY = parseFloat(layout.cardMarginBottom) * POINTS_PER_INCH
+  const cardWidth = parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const cardHeight = parseFloat(layout.cardHeight) * POINTS_PER_INCH
+
+  for (let i = 0; i < cardCount; i++) {
+    const slotIndex = i % layout.cardsPerPage
+    const col = slotIndex % layout.cardsPerRow
+    const row = Math.floor(slotIndex / layout.cardsPerRow)
+    const page = Math.floor(i / layout.cardsPerPage)
+
+    positions.push({
+      page,
+      x: pageMarginLeft + col * (cardWidth + cardSpacingX),
+      y: pageMarginTop + row * (cardHeight + cardSpacingY),
+      width: cardWidth,
+      height: cardHeight,
+      cardIndex: i,
+    })
+  }
+
+  return positions
+}
+
+/**
+ * Export a single card using a JSON print layout
+ */
+export async function exportWithJsonLayout(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  cardData: CardData,
+  layout: PrintLayout,
+  dpi: number = DEFAULT_EXPORT_DPI,
+): Promise<void> {
+  const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+
+  const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
+  const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
+
+  const pdfDoc = await PDFDocument.create()
+
+  // Calculate positions for all slots on the page (fill with same card)
+  const positions = calculateCardPositions(layout, layout.cardsPerPage)
+
+  const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+  const cardImage = await pdfDoc.embedPng(cardPngBytes)
+
+  const page = pdfDoc.addPage([pageWidth, pageHeight])
+
+  // Place the same card in each slot
+  for (const pos of positions) {
+    // PDF coordinates are from bottom-left, so flip Y
+    const pdfY = pageHeight - pos.y - pos.height
+
+    page.drawImage(cardImage, {
+      x: pos.x,
+      y: pdfY,
+      width: pos.width,
+      height: pos.height,
+    })
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  const baseName = template.name.replace(/\.svg$/i, '') || 'id-card'
+
+  downloadLink.href = downloadUrl
+  downloadLink.download = `${baseName}-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+/**
+ * Export multiple cards for multiple users with JSON print layout
+ */
+export async function exportBatchCardsWithJsonLayout(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  layout: PrintLayout,
+  dpi: number = DEFAULT_EXPORT_DPI,
+  customValues?: Record<string, string>,
+): Promise<void> {
+  const pdfDoc = await PDFDocument.create()
+
+  const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
+  const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
+
+  // Pre-render each user's card
+  const cardImages = []
+  for (const user of users) {
+    const cardData: CardData = {}
+    fields.forEach(field => {
+      const layerId = field.sourceId || field.id
+      const standardFieldName = fieldMappings[layerId]
+      if (standardFieldName) {
+        const customValue = customValues?.[layerId]
+        cardData[field.id] = parseField(standardFieldName, user, customValue)
+      }
+    })
+
+    const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+    const cardImage = await pdfDoc.embedPng(cardPngBytes)
+    cardImages.push(cardImage)
+  }
+
+  // Calculate all positions
+  const positions = calculateCardPositions(layout, users.length)
+
+  // Group positions by page
+  const pageGroups = new Map<number, CardPosition[]>()
+  for (const pos of positions) {
+    if (!pageGroups.has(pos.page)) {
+      pageGroups.set(pos.page, [])
+    }
+    pageGroups.get(pos.page)!.push(pos)
+  }
+
+  // Create pages and place cards
+  for (const [_pageNum, pagePositions] of pageGroups) {
+    const page = pdfDoc.addPage([pageWidth, pageHeight])
+
+    for (const pos of pagePositions) {
+      if (pos.cardIndex >= cardImages.length) break
+      const cardImage = cardImages[pos.cardIndex]
+
+      // PDF coordinates are from bottom-left, so flip Y
+      const pdfY = pageHeight - pos.y - pos.height
+
+      page.drawImage(cardImage, {
+        x: pos.x,
+        y: pdfY,
+        width: pos.width,
+        height: pos.height,
+      })
+    }
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  const baseName = template.name.replace(/\.svg$/i, '') || 'id-cards'
+
+  downloadLink.href = downloadUrl
+  downloadLink.download = `${baseName}-batch-${users.length}-cards-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`
   document.body.appendChild(downloadLink)
   downloadLink.click()
   downloadLink.remove()

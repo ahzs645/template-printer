@@ -42,13 +42,17 @@ export function useFabricCanvas(
   const mmToPx = useCallback((mm: number) => mm * PX_PER_MM, [])
   const pxToMm = useCallback((px: number) => px / PX_PER_MM, [])
 
-  // Initialize canvas
+  // Store initial dimensions in refs so initialization doesn't depend on them
+  const initialWidthRef = useRef(cardWidth)
+  const initialHeightRef = useRef(cardHeight)
+
+  // Initialize canvas (only once)
   useEffect(() => {
     if (!canvasRef.current || isInitializedRef.current) return
 
     const fabricCanvas = new Canvas(canvasRef.current, {
-      width: mmToPx(cardWidth),
-      height: mmToPx(cardHeight),
+      width: mmToPx(initialWidthRef.current),
+      height: mmToPx(initialHeightRef.current),
       backgroundColor: '#ffffff',
       selection: true,
       preserveObjectStacking: true,
@@ -167,16 +171,24 @@ export function useFabricCanvas(
       fabricCanvas.dispose()
       isInitializedRef.current = false
     }
-  }, [canvasRef, cardWidth, cardHeight, mmToPx, onSelectionChange, onCanvasChange])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasRef, mmToPx, onSelectionChange, onCanvasChange])
 
   // Update canvas size when dimensions change
   useEffect(() => {
-    if (!canvas) return
-    canvas.setDimensions({
-      width: mmToPx(cardWidth),
-      height: mmToPx(cardHeight),
-    })
-    canvas.renderAll()
+    // Check if canvas exists and is still valid (not disposed)
+    if (!canvas || !canvas.lowerCanvasEl) return
+
+    try {
+      canvas.setDimensions({
+        width: mmToPx(cardWidth),
+        height: mmToPx(cardHeight),
+      })
+      canvas.renderAll()
+    } catch (e) {
+      // Canvas may have been disposed, ignore the error
+      console.warn('Canvas dimension update skipped:', e)
+    }
   }, [canvas, cardWidth, cardHeight, mmToPx])
 
   // Generate unique ID for objects

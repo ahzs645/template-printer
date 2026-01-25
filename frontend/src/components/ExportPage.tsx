@@ -1,15 +1,16 @@
 import { useState, useEffect, type ChangeEvent } from 'react'
-import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette } from 'lucide-react'
+import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Label } from './ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from './ui/select'
 import { Switch } from './ui/switch'
 import type { TemplateSummary } from '../lib/templates'
-import type { FieldDefinition, CardData } from '../lib/types'
+import type { FieldDefinition, CardData, PrintLayout } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
+import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
 
 export type ExportFormat = 'pdf' | 'png' | 'svg'
@@ -20,6 +21,7 @@ export type ExportOptions = {
   resolution: number
   maintainVectors: boolean
   printLayoutId: string | null
+  jsonPrintLayoutId: string | null
   mode: ExportMode
   selectedUserIds: string[]
   slotUserIds: string[]
@@ -78,11 +80,20 @@ export function ExportPage({
     resolution: 300,
     maintainVectors: true,
     printLayoutId: null,
+    jsonPrintLayoutId: null,
     mode: 'quick',
     selectedUserIds: [],
     slotUserIds: [],
     colorProfileId: null,
   })
+  const [showInstructions, setShowInstructions] = useState(false)
+
+  // Load JSON print layouts from storage
+  const { printLayouts: jsonPrintLayouts, isLoading: jsonLayoutsLoading } = usePrintLayouts()
+
+  const selectedJsonLayout = jsonPrintLayouts.find(
+    (l) => l.id === exportOptions.jsonPrintLayoutId
+  )
   const [printLayoutSvg, setPrintLayoutSvg] = useState<string | null>(null)
   const [compositePreview, setCompositePreview] = useState<string | null>(null)
   const [layoutPreviewSvg, setLayoutPreviewSvg] = useState<string | null>(null)
