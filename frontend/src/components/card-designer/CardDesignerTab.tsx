@@ -192,7 +192,7 @@ export function CardDesignerTab({
   }, [activeSide])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0 }}>
       {/* Header Bar */}
       <div
         style={{

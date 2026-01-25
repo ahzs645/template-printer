@@ -133,7 +133,7 @@ export function DesignerCanvas({
         flex: 1,
         padding: 24,
         backgroundColor: 'var(--bg-surface-alt, #f5f5f5)',
-        overflow: 'auto',
+        overflow: 'hidden',
       }}
     >
       <div

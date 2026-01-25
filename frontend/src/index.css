@@ -455,6 +455,17 @@ textarea {
   min-height: 0;
 }
 
+/* Reset styles for Fabric.js canvas-container wrapper inside the designer */
+.designer-canvas-wrapper .canvas-container {
+  flex: none;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  display: block;
+  overflow: visible;
+  min-height: auto;
+}
+
 .canvas-preview {
   position: relative;
   border: 1px solid var(--border-default);
