@@ -107,6 +107,7 @@ export function ExportPage({
       const newAssignments: SlotAssignment[] = Array.from({ length: slotCount }, () => ({
         source: 'custom',
         side: 'front',
+        templateId: null,
       }))
       setExportOptions((prev) => ({ ...prev, slotAssignments: newAssignments }))
     } else {
@@ -638,6 +639,165 @@ export function ExportPage({
             </button>
           </div>
         </PanelSection>
+
+        {/* Card Slots - separate section for configuring each slot on the print layout */}
+        {selectedJsonLayout && exportOptions.slotAssignments.length > 0 && (
+          <PanelSection title={`Card Slots (${exportOptions.slotAssignments.length})`} defaultOpen={true}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Configure what prints in each slot on the page
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {exportOptions.slotAssignments.map((assignment, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: 10,
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                    <CreditCard size={14} style={{ color: 'var(--text-muted)' }} />
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>Slot {index + 1}</span>
+                  </div>
+
+                  {/* Card Design Selection */}
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Card Design
+                    </label>
+                    <Select
+                      value={assignment.templateId || 'default'}
+                      onValueChange={(value) => updateSlotAssignment(index, {
+                        templateId: value === 'default' ? null : value
+                      })}
+                    >
+                      <SelectTrigger style={{ height: 32, fontSize: 12 }}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <CreditCard size={12} />
+                            {template?.name || 'Selected Design'}
+                          </span>
+                        </SelectItem>
+                        {designTemplates.filter(t => t.id !== template?.id).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Data Source Selection */}
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Data Source
+                    </label>
+                    <Select
+                      value={assignment.source}
+                      onValueChange={(value) => updateSlotAssignment(index, { source: value })}
+                    >
+                      <SelectTrigger style={{ height: 32, fontSize: 12 }}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="custom">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Zap size={12} />
+                            Custom Fields
+                          </span>
+                        </SelectItem>
+                        {users.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Database Users</SelectLabel>
+                            {users.map((user) => (
+                              <SelectItem key={user.id} value={user.id!}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <Users size={12} />
+                                  {user.firstName} {user.lastName}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Front/Back Selection */}
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Card Side
+                    </label>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        type="button"
+                        className={cn('btn btn-sm', assignment.side === 'front' ? 'btn-primary' : 'btn-secondary')}
+                        style={{ flex: 1, fontSize: 11, padding: '4px 8px' }}
+                        onClick={() => updateSlotAssignment(index, { side: 'front' })}
+                      >
+                        Front
+                      </button>
+                      <button
+                        type="button"
+                        className={cn('btn btn-sm', assignment.side === 'back' ? 'btn-primary' : 'btn-secondary')}
+                        style={{ flex: 1, fontSize: 11, padding: '4px 8px' }}
+                        onClick={() => updateSlotAssignment(index, { side: 'back' })}
+                        disabled={!hasBackTemplate}
+                        title={!hasBackTemplate ? 'No back template configured' : undefined}
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick fill options */}
+            {exportOptions.slotAssignments.length > 1 && (
+              <div style={{ marginTop: 10, display: 'flex', gap: 4 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1, fontSize: 10 }}
+                  onClick={() => {
+                    const newAssignments = exportOptions.slotAssignments.map((a) => ({
+                      ...a,
+                      source: 'custom' as const,
+                      side: 'front' as const,
+                    }))
+                    updateExportOptions({ slotAssignments: newAssignments })
+                  }}
+                >
+                  All Custom
+                </button>
+                {hasBackTemplate && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ flex: 1, fontSize: 10 }}
+                    onClick={() => {
+                      const newAssignments = exportOptions.slotAssignments.map((a, i) => ({
+                        ...a,
+                        source: 'custom' as const,
+                        side: (i % 2 === 0 ? 'front' : 'back') as 'front' | 'back',
+                      }))
+                      updateExportOptions({ slotAssignments: newAssignments })
+                    }}
+                  >
+                    Front/Back Pairs
+                  </button>
+                )}
+              </div>
+            )}
+          </PanelSection>
+        )}
       </DockablePanel>
 
       {/* Main Canvas - Preview */}

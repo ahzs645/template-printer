@@ -570,8 +570,46 @@ function App() {
 
             // If we have slot assignments, use per-slot export
             if (options.slotAssignments && options.slotAssignments.length > 0) {
+              // Build maps for templates referenced in slot assignments
+              const allTemplates = new Map<string, TemplateMeta>()
+              const allFieldMappings = new Map<string, Record<string, string>>()
+
+              // Add the current template
+              if (template && selectedTemplateId) {
+                allTemplates.set(selectedTemplateId, template)
+                allFieldMappings.set(selectedTemplateId, fieldMappingsMap)
+              }
+
+              // Load any other templates referenced in slots
+              const uniqueTemplateIds = new Set(
+                options.slotAssignments
+                  .map(s => s.templateId)
+                  .filter((id): id is string => !!id && id !== selectedTemplateId)
+              )
+
+              for (const templateId of uniqueTemplateIds) {
+                const templateSummary = designTemplates.find(t => t.id === templateId)
+                if (templateSummary) {
+                  try {
+                    const svgText = await loadTemplateSvgContent(templateSummary)
+                    const { metadata } = await parseTemplateString(svgText, templateSummary.name)
+                    allTemplates.set(templateId, metadata)
+
+                    // Load field mappings for this template
+                    const templateMappings = await storage.getFieldMappings(templateId)
+                    const mappingsMap: Record<string, string> = {}
+                    templateMappings.forEach((m) => {
+                      mappingsMap[m.svgLayerId] = m.standardFieldName
+                    })
+                    allFieldMappings.set(templateId, mappingsMap)
+                  } catch (err) {
+                    console.warn(`Failed to load template ${templateId}:`, err)
+                  }
+                }
+              }
+
               await exportWithSlotAssignments(
-                template,  // front template
+                template,  // default front template
                 null,      // back template (TODO: add back template support)
                 fields,
                 cardData,  // custom card data for slots set to 'custom'
@@ -580,7 +618,9 @@ function App() {
                 jsonLayout,
                 options.slotAssignments,
                 options.resolution,
-                customValuesMap
+                customValuesMap,
+                allTemplates,
+                allFieldMappings
               )
               setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
             } else {
@@ -630,12 +670,11 @@ function App() {
 
             // If we have slot assignments, use the new per-slot export
             if (options.slotAssignments && options.slotAssignments.length > 0) {
-              // Get field mappings for users if any slots reference database users
+              // Get field mappings for the default template
               let fieldMappingsMap: Record<string, string> = {}
               let customValuesMap: Record<string, string> = {}
-              const hasUserSlots = options.slotAssignments.some(s => s.source !== 'custom')
 
-              if (hasUserSlots && selectedTemplateId) {
+              if (selectedTemplateId) {
                 const mappings = await storage.getFieldMappings(selectedTemplateId)
                 mappings.forEach((m) => {
                   fieldMappingsMap[m.svgLayerId] = m.standardFieldName
@@ -645,8 +684,46 @@ function App() {
                 })
               }
 
+              // Build maps for templates referenced in slot assignments
+              const allTemplates = new Map<string, TemplateMeta>()
+              const allFieldMappings = new Map<string, Record<string, string>>()
+
+              // Add the current template
+              if (template && selectedTemplateId) {
+                allTemplates.set(selectedTemplateId, template)
+                allFieldMappings.set(selectedTemplateId, fieldMappingsMap)
+              }
+
+              // Load any other templates referenced in slots
+              const uniqueTemplateIds = new Set(
+                options.slotAssignments
+                  .map(s => s.templateId)
+                  .filter((id): id is string => !!id && id !== selectedTemplateId)
+              )
+
+              for (const templateId of uniqueTemplateIds) {
+                const templateSummary = designTemplates.find(t => t.id === templateId)
+                if (templateSummary) {
+                  try {
+                    const svgText = await loadTemplateSvgContent(templateSummary)
+                    const { metadata, autoFields } = await parseTemplateString(svgText, templateSummary.name)
+                    allTemplates.set(templateId, metadata)
+
+                    // Load field mappings for this template
+                    const templateMappings = await storage.getFieldMappings(templateId)
+                    const mappingsMap: Record<string, string> = {}
+                    templateMappings.forEach((m) => {
+                      mappingsMap[m.svgLayerId] = m.standardFieldName
+                    })
+                    allFieldMappings.set(templateId, mappingsMap)
+                  } catch (err) {
+                    console.warn(`Failed to load template ${templateId}:`, err)
+                  }
+                }
+              }
+
               await exportWithSlotAssignments(
-                template,  // front template
+                template,  // default front template
                 null,      // back template (TODO: add back template support)
                 fields,
                 cardData,
@@ -655,7 +732,9 @@ function App() {
                 jsonLayout,
                 options.slotAssignments,
                 options.resolution,
-                customValuesMap
+                customValuesMap,
+                allTemplates,
+                allFieldMappings
               )
               setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
             } else {
