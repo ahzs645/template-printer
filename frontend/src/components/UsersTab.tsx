@@ -475,7 +475,7 @@ export function UsersTab({
     }
   }
 
-  const renderPreviewPane = (side: 'front' | 'back') => {
+  const renderPreviewPane = (side: 'front' | 'back', maxWidth: number = 380) => {
     const pane = preview[side]
     if (pane.loading) {
       return <p className="empty-state__text">Rendering...</p>
@@ -487,7 +487,7 @@ export function UsersTab({
       return (
         <div
           className="canvas-preview"
-          style={{ maxWidth: 380, width: '100%' }}
+          style={{ maxWidth, width: '100%' }}
           dangerouslySetInnerHTML={{ __html: pane.svg }}
         />
       )
@@ -645,14 +645,36 @@ export function UsersTab({
                 <p className="empty-state__text">Assign a card design to see preview</p>
               </div>
             ) : previewSide === 'both' ? (
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>Front</div>
-                  {renderPreviewPane('front')}
+              <div style={{
+                display: 'flex',
+                gap: 48,
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                alignItems: 'flex-start',
+                padding: 32,
+                width: '100%',
+              }}>
+                <div style={{ textAlign: 'center', flex: '0 1 auto' }}>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--text-muted)',
+                    marginBottom: 16,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}>Front</div>
+                  {renderPreviewPane('front', 500)}
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>Back</div>
-                  {renderPreviewPane('back')}
+                <div style={{ textAlign: 'center', flex: '0 1 auto' }}>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--text-muted)',
+                    marginBottom: 16,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}>Back</div>
+                  {renderPreviewPane('back', 500)}
                 </div>
               </div>
             ) : (
@@ -767,25 +789,70 @@ export function UsersTab({
 
               {selectedDesign && (
                 <PanelSection title="Preview Side">
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px',
+                      backgroundColor: 'var(--bg-surface-alt)',
+                      borderRadius: 6,
+                    }}
+                  >
                     <button
-                      className={cn('btn btn-sm', previewSide === 'front' ? 'btn-primary' : 'btn-secondary')}
                       onClick={() => setPreviewSide('front')}
                       disabled={!selectedDesign.frontTemplateId}
+                      style={{
+                        flex: 1,
+                        padding: '6px 12px',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        border: 'none',
+                        borderRadius: 4,
+                        cursor: selectedDesign.frontTemplateId ? 'pointer' : 'not-allowed',
+                        backgroundColor: previewSide === 'front' ? 'var(--bg-surface)' : 'transparent',
+                        color: previewSide === 'front' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        boxShadow: previewSide === 'front' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                        opacity: selectedDesign.frontTemplateId ? 1 : 0.5,
+                      }}
                     >
                       Front
                     </button>
                     <button
-                      className={cn('btn btn-sm', previewSide === 'back' ? 'btn-primary' : 'btn-secondary')}
                       onClick={() => setPreviewSide('back')}
                       disabled={!selectedDesign.backTemplateId}
+                      style={{
+                        flex: 1,
+                        padding: '6px 12px',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        border: 'none',
+                        borderRadius: 4,
+                        cursor: selectedDesign.backTemplateId ? 'pointer' : 'not-allowed',
+                        backgroundColor: previewSide === 'back' ? 'var(--bg-surface)' : 'transparent',
+                        color: previewSide === 'back' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        boxShadow: previewSide === 'back' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                        opacity: selectedDesign.backTemplateId ? 1 : 0.5,
+                      }}
                     >
                       Back
                     </button>
                     <button
-                      className={cn('btn btn-sm', previewSide === 'both' ? 'btn-primary' : 'btn-secondary')}
                       onClick={() => setPreviewSide('both')}
                       disabled={!(selectedDesign.frontTemplateId && selectedDesign.backTemplateId)}
+                      style={{
+                        flex: 1,
+                        padding: '6px 12px',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        border: 'none',
+                        borderRadius: 4,
+                        cursor: (selectedDesign.frontTemplateId && selectedDesign.backTemplateId) ? 'pointer' : 'not-allowed',
+                        backgroundColor: previewSide === 'both' ? 'var(--bg-surface)' : 'transparent',
+                        color: previewSide === 'both' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        boxShadow: previewSide === 'both' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                        opacity: (selectedDesign.frontTemplateId && selectedDesign.backTemplateId) ? 1 : 0.5,
+                      }}
                     >
                       Both
                     </button>

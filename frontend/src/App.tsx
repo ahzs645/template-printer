@@ -42,7 +42,7 @@ import { FieldEditorPanel } from './components/FieldEditorPanel'
 import { ExportPage } from './components/ExportPage'
 import { UsersTab } from './components/UsersTab'
 import { CalibrationTab, type CalibrationMode } from './components/calibration'
-import { CardDesignerTab } from './components/card-designer'
+import { CardDesignerTab, generateSvgFromCanvasData } from './components/card-designer'
 import { useColorProfiles } from './hooks/calibration'
 import { FieldNamingTab } from './components/FieldNamingTab'
 import type { ExportOptions } from './components/ExportPage'
@@ -198,50 +198,95 @@ function App() {
 
     let cancelled = false
 
-    const loadSide = async (side: 'front' | 'back', templateId: string | null | undefined) => {
-      if (cancelled) return
-
-      if (!templateId) {
-        setDesignPreview(prev => ({
-          ...prev,
-          [side]: { svg: null, loading: false, error: 'No template assigned' },
-        }))
-        return
-      }
-
-      const templateSummary = designTemplates.find(t => t.id === templateId)
-      if (!templateSummary) {
-        setDesignPreview(prev => ({
-          ...prev,
-          [side]: { svg: null, loading: false, error: 'Template not found' },
-        }))
-        return
-      }
-
-      setDesignPreview(prev => ({
-        ...prev,
-        [side]: { ...prev[side], loading: true, error: null },
-      }))
-
-      try {
-        const svgText = await loadTemplateSvgContent(templateSummary)
+    // Handle canvas-based designs (from Card Designer)
+    if (selectedDesign.designerMode === 'canvas') {
+      const loadCanvasSide = async (
+        side: 'front' | 'back',
+        canvasData: string | null | undefined
+      ) => {
         if (cancelled) return
 
+        if (!canvasData) {
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: null, loading: false, error: 'No design data' },
+          }))
+          return
+        }
+
         setDesignPreview(prev => ({
           ...prev,
-          [side]: { svg: svgText, loading: false, error: null },
+          [side]: { ...prev[side], loading: true, error: null },
         }))
-      } catch (err) {
-        if (cancelled) return
-        setDesignPreview(prev => ({
-          ...prev,
-          [side]: { svg: null, loading: false, error: err instanceof Error ? err.message : 'Failed to load' },
-        }))
+
+        try {
+          const cardWidth = selectedDesign.cardWidth ?? 86
+          const cardHeight = selectedDesign.cardHeight ?? 54
+          const svgText = await generateSvgFromCanvasData(canvasData, cardWidth, cardHeight)
+          if (cancelled) return
+
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: svgText, loading: false, error: null },
+          }))
+        } catch (err) {
+          if (cancelled) return
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: null, loading: false, error: err instanceof Error ? err.message : 'Failed to render' },
+          }))
+        }
       }
+
+      loadCanvasSide('front', selectedDesign.frontCanvasData)
+      loadCanvasSide('back', selectedDesign.backCanvasData)
+    } else {
+      // Handle template-based designs
+      const loadTemplateSide = async (side: 'front' | 'back', templateId: string | null | undefined) => {
+        if (cancelled) return
+
+        if (!templateId) {
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: null, loading: false, error: 'No template assigned' },
+          }))
+          return
+        }
+
+        const templateSummary = designTemplates.find(t => t.id === templateId)
+        if (!templateSummary) {
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: null, loading: false, error: 'Template not found' },
+          }))
+          return
+        }
+
+        setDesignPreview(prev => ({
+          ...prev,
+          [side]: { ...prev[side], loading: true, error: null },
+        }))
+
+        try {
+          const svgText = await loadTemplateSvgContent(templateSummary)
+          if (cancelled) return
+
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: svgText, loading: false, error: null },
+          }))
+        } catch (err) {
+          if (cancelled) return
+          setDesignPreview(prev => ({
+            ...prev,
+            [side]: { svg: null, loading: false, error: err instanceof Error ? err.message : 'Failed to load' },
+          }))
+        }
+      }
+
+      loadTemplateSide('front', selectedDesign.frontTemplateId)
+      loadTemplateSide('back', selectedDesign.backTemplateId)
     }
-
-    loadSide('front', selectedDesign.frontTemplateId)
-    loadSide('back', selectedDesign.backTemplateId)
 
     return () => { cancelled = true }
   }, [selectedCardDesignId, cardDesigns, cardDesignsLoading, designTemplates])
