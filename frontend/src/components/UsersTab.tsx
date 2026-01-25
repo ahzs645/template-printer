@@ -6,9 +6,10 @@ import { useCardDesigns } from '../hooks/useCardDesigns'
 import type { UserData } from '../lib/fieldParser'
 import type { CardDesign } from '../lib/types'
 import type { TemplateSummary } from '../lib/templates'
+import { loadTemplateSvgContent } from '../lib/templates'
 import { parseField } from '../lib/fieldParser'
 import { parseTemplateString, renderSvgWithData } from '../lib/svgTemplate'
-import { getFieldMappings } from '../lib/api'
+import { useStorage } from '../lib/storage'
 import type { CardData, FieldDefinition, TemplateMeta } from '../lib/types'
 import { cn } from '../lib/utils'
 
@@ -83,6 +84,8 @@ export function UsersTab({
     deleteDesign,
     refresh: refreshCardDesigns,
   } = useCardDesigns()
+
+  const storage = useStorage()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<UserData | null>(null)
@@ -175,11 +178,7 @@ export function UsersTab({
   const loadTemplate = useCallback(
     async (templateId: string, summary: TemplateSummary) => {
       if (!templateCacheRef.current.has(templateId)) {
-        const response = await fetch(summary.svgPath)
-        if (!response.ok) {
-          throw new Error('Unable to load template SVG.')
-        }
-        const svgText = await response.text()
+        const svgText = await loadTemplateSvgContent(summary)
         const { metadata, autoFields } = await parseTemplateString(svgText, summary.name)
         templateCacheRef.current.set(templateId, { meta: metadata, fields: autoFields })
       }
@@ -190,7 +189,7 @@ export function UsersTab({
 
   const loadMappings = useCallback(async (templateId: string) => {
     if (!mappingCacheRef.current.has(templateId)) {
-      const response = await getFieldMappings(templateId)
+      const response = await storage.getFieldMappings(templateId)
       const map: Record<string, string> = {}
       const customValues: Record<string, string> = {}
       response.forEach((mapping) => {
@@ -202,7 +201,7 @@ export function UsersTab({
       mappingCacheRef.current.set(templateId, { mappings: map, customValues })
     }
     return mappingCacheRef.current.get(templateId)!
-  }, [])
+  }, [storage])
 
   useEffect(() => {
     setPreview(createInitialPreviewState())
@@ -559,12 +558,14 @@ export function UsersTab({
                     ? designs.find((d) => d.id === user.cardDesignId)?.name
                     : null
                   return (
-                    <button
+                    <div
                       key={user.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       className={cn('field-item', isSelected && 'field-item--selected')}
                       onClick={() => user.id && setSelectedUserId(user.id)}
-                      style={{ alignItems: 'flex-start', textAlign: 'left' }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { user.id && setSelectedUserId(user.id) } }}
+                      style={{ alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer' }}
                     >
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', width: '100%' }}>
                         {user.photoPath ? (
@@ -622,7 +623,7 @@ export function UsersTab({
                           </button>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>

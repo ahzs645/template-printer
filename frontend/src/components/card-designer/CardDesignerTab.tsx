@@ -64,8 +64,13 @@ export function CardDesignerTab({
   const frontCanvasRef = useRef<ReturnType<typeof useFabricCanvas> | null>(null)
   const backCanvasRef = useRef<ReturnType<typeof useFabricCanvas> | null>(null)
 
-  // Get current canvas based on active side
+  // Get current canvas based on active side (for render-time access)
   const currentCanvas = activeSide === 'front' ? frontCanvasRef.current : backCanvasRef.current
+
+  // Helper to get current canvas ref inside callbacks (refs don't trigger re-renders)
+  const getCurrentCanvas = useCallback(() => {
+    return activeSide === 'front' ? frontCanvasRef.current : backCanvasRef.current
+  }, [activeSide])
 
   // History for undo/redo
   const frontHistory = useDesignerHistory({
@@ -90,54 +95,54 @@ export function CardDesignerTab({
     setBackCanvasData(json)
   }, [])
 
-  // Toolbar actions
+  // Toolbar actions - use getCurrentCanvas() to access ref at call time
   const handleAddText = useCallback(() => {
-    currentCanvas?.addText('Text')
-  }, [currentCanvas])
+    getCurrentCanvas()?.addText('Text')
+  }, [getCurrentCanvas])
 
   const handleAddDynamicText = useCallback(() => {
     const fieldId = `field_${Date.now()}`
-    currentCanvas?.addDynamicText(fieldId, `{{${fieldId}}}`)
-  }, [currentCanvas])
+    getCurrentCanvas()?.addDynamicText(fieldId, `{{${fieldId}}}`)
+  }, [getCurrentCanvas])
 
   const handleAddImagePlaceholder = useCallback(() => {
     const fieldId = `photo_${Date.now()}`
-    currentCanvas?.addImagePlaceholder(fieldId)
-  }, [currentCanvas])
+    getCurrentCanvas()?.addImagePlaceholder(fieldId)
+  }, [getCurrentCanvas])
 
   const handleAddRectangle = useCallback(() => {
-    currentCanvas?.addRectangle()
-  }, [currentCanvas])
+    getCurrentCanvas()?.addRectangle()
+  }, [getCurrentCanvas])
 
   const handleAddCircle = useCallback(() => {
-    currentCanvas?.addCircle()
-  }, [currentCanvas])
+    getCurrentCanvas()?.addCircle()
+  }, [getCurrentCanvas])
 
   const handleAddLine = useCallback(() => {
-    currentCanvas?.addLine()
-  }, [currentCanvas])
+    getCurrentCanvas()?.addLine()
+  }, [getCurrentCanvas])
 
   const handleAddBarcode = useCallback(() => {
     const fieldId = `barcode_${Date.now()}`
-    currentCanvas?.addBarcode(fieldId, 'code128')
-  }, [currentCanvas])
+    getCurrentCanvas()?.addBarcode(fieldId, 'code128')
+  }, [getCurrentCanvas])
 
   const handleAddQrCode = useCallback(() => {
     const fieldId = `qrcode_${Date.now()}`
-    currentCanvas?.addBarcode(fieldId, 'qrcode')
-  }, [currentCanvas])
+    getCurrentCanvas()?.addBarcode(fieldId, 'qrcode')
+  }, [getCurrentCanvas])
 
   const handleDelete = useCallback(() => {
-    currentCanvas?.deleteSelected()
-  }, [currentCanvas])
+    getCurrentCanvas()?.deleteSelected()
+  }, [getCurrentCanvas])
 
   const handleBringToFront = useCallback(() => {
-    currentCanvas?.bringToFront()
-  }, [currentCanvas])
+    getCurrentCanvas()?.bringToFront()
+  }, [getCurrentCanvas])
 
   const handleSendToBack = useCallback(() => {
-    currentCanvas?.sendToBack()
-  }, [currentCanvas])
+    getCurrentCanvas()?.sendToBack()
+  }, [getCurrentCanvas])
 
   const handleToggleGrid = useCallback(() => {
     setShowGrid((prev) => !prev)
@@ -154,14 +159,15 @@ export function CardDesignerTab({
 
   // Property changes
   const handlePropertyChange = useCallback((property: string, value: unknown) => {
-    if (!currentCanvas?.canvas) return
+    const canvas = getCurrentCanvas()
+    if (!canvas?.canvas) return
 
-    const activeObject = currentCanvas.canvas.getActiveObject()
+    const activeObject = canvas.canvas.getActiveObject()
     if (!activeObject) return
 
     activeObject.set(property as keyof FabricObject, value)
-    currentCanvas.canvas.renderAll()
-  }, [currentCanvas])
+    canvas.canvas.renderAll()
+  }, [getCurrentCanvas])
 
   // Save handler
   const handleSave = useCallback(() => {

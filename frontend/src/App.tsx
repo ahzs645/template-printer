@@ -16,6 +16,7 @@ import {
   Download,
   Pencil,
   CreditCard,
+  PenTool,
 } from 'lucide-react'
 
 import './App.css'
@@ -121,7 +122,7 @@ function App() {
   const [selectedCardDesignId, setSelectedCardDesignId] = useState<string | null>(null)
   const [designDialogOpen, setDesignDialogOpen] = useState(false)
   const [editingDesign, setEditingDesign] = useState<typeof cardDesigns[0] | null>(null)
-  const [designPreviewSide, setDesignPreviewSide] = useState<'front' | 'back'>('front')
+  const [editingCanvasDesignId, setEditingCanvasDesignId] = useState<string | null>(null)
   const [designFormData, setDesignFormData] = useState({
     name: '',
     description: '',
@@ -223,9 +224,7 @@ function App() {
       }))
 
       try {
-        const response = await fetch(templateSummary.svgPath)
-        if (!response.ok) throw new Error('Failed to load template')
-        const svgText = await response.text()
+        const svgText = await loadTemplateSvgContent(templateSummary)
         if (cancelled) return
 
         setDesignPreview(prev => ({
@@ -924,31 +923,59 @@ function App() {
 
         {/* Content */}
         <div className="app-content">
-          {activeTab === 'design' && designMode === 'designer' && (
-            <CardDesignerTab
-              onSave={async (data) => {
-                try {
-                  setErrorMessage(null)
-                  const design = await storage.createCardDesign({
-                    name: data.name,
-                    designerMode: 'canvas',
-                    frontCanvasData: data.frontCanvasData,
-                    backCanvasData: data.backCanvasData,
-                    cardWidth: data.cardWidth,
-                    cardHeight: data.cardHeight,
-                  })
-                  setStatusMessage(`Saved design "${design.name}"`)
+          {activeTab === 'design' && designMode === 'designer' && (() => {
+            const editingDesignData = editingCanvasDesignId
+              ? cardDesigns.find(d => d.id === editingCanvasDesignId)
+              : null
+            return (
+              <CardDesignerTab
+                key={editingCanvasDesignId ?? 'new'}
+                designId={editingCanvasDesignId ?? undefined}
+                initialName={editingDesignData?.name}
+                initialFrontData={editingDesignData?.frontCanvasData}
+                initialBackData={editingDesignData?.backCanvasData}
+                initialCardWidth={editingDesignData?.cardWidth}
+                initialCardHeight={editingDesignData?.cardHeight}
+                onSave={async (data) => {
+                  try {
+                    setErrorMessage(null)
+                    if (editingCanvasDesignId) {
+                      // Update existing design
+                      const design = await updateCardDesign(editingCanvasDesignId, {
+                        name: data.name,
+                        designerMode: 'canvas',
+                        frontCanvasData: data.frontCanvasData,
+                        backCanvasData: data.backCanvasData,
+                        cardWidth: data.cardWidth,
+                        cardHeight: data.cardHeight,
+                      })
+                      setStatusMessage(`Updated design "${design.name}"`)
+                    } else {
+                      // Create new design
+                      const design = await storage.createCardDesign({
+                        name: data.name,
+                        designerMode: 'canvas',
+                        frontCanvasData: data.frontCanvasData,
+                        backCanvasData: data.backCanvasData,
+                        cardWidth: data.cardWidth,
+                        cardHeight: data.cardHeight,
+                      })
+                      setStatusMessage(`Saved design "${design.name}"`)
+                    }
+                    setEditingCanvasDesignId(null)
+                    setDesignMode('import')
+                  } catch (error) {
+                    console.error('Failed to save design:', error)
+                    setErrorMessage(error instanceof Error ? error.message : 'Failed to save design')
+                  }
+                }}
+                onCancel={() => {
+                  setEditingCanvasDesignId(null)
                   setDesignMode('import')
-                } catch (error) {
-                  console.error('Failed to save design:', error)
-                  setErrorMessage(error instanceof Error ? error.message : 'Failed to save design')
-                }
-              }}
-              onCancel={() => {
-                setDesignMode('import')
-              }}
-            />
-          )}
+                }}
+              />
+            )
+          })()}
 
           {activeTab === 'design' && designMode === 'import' && (
             <>
@@ -1170,44 +1197,82 @@ function App() {
                       <p className="empty-state__text">Select a card design to preview</p>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          className={cn('btn btn-sm', designPreviewSide === 'front' ? 'btn-primary' : 'btn-secondary')}
-                          onClick={() => setDesignPreviewSide('front')}
-                        >
+                    <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap', justifyContent: 'center', padding: 24 }}>
+                      {/* Front Side */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                           Front
-                        </button>
-                        <button
-                          className={cn('btn btn-sm', designPreviewSide === 'back' ? 'btn-primary' : 'btn-secondary')}
-                          onClick={() => setDesignPreviewSide('back')}
-                        >
-                          Back
-                        </button>
-                      </div>
-                      {(() => {
-                        const preview = designPreview[designPreviewSide]
-                        if (preview.loading) {
-                          return <p className="empty-state__text">Loading preview...</p>
-                        }
-                        if (preview.error) {
+                        </div>
+                        {(() => {
+                          const preview = designPreview.front
+                          if (preview.loading) {
+                            return (
+                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</p>
+                              </div>
+                            )
+                          }
+                          if (preview.error) {
+                            return (
+                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: 24 }}>{preview.error}</p>
+                              </div>
+                            )
+                          }
+                          if (preview.svg) {
+                            return (
+                              <div
+                                className="canvas-preview"
+                                style={{ width: 450 }}
+                                dangerouslySetInnerHTML={{ __html: preview.svg }}
+                              />
+                            )
+                          }
                           return (
-                            <div className="empty-state">
-                              <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>{preview.error}</p>
+                            <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                              <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No template</p>
                             </div>
                           )
-                        }
-                        if (preview.svg) {
+                        })()}
+                      </div>
+
+                      {/* Back Side */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Back
+                        </div>
+                        {(() => {
+                          const preview = designPreview.back
+                          if (preview.loading) {
+                            return (
+                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</p>
+                              </div>
+                            )
+                          }
+                          if (preview.error) {
+                            return (
+                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: 24 }}>{preview.error}</p>
+                              </div>
+                            )
+                          }
+                          if (preview.svg) {
+                            return (
+                              <div
+                                className="canvas-preview"
+                                style={{ width: 450 }}
+                                dangerouslySetInnerHTML={{ __html: preview.svg }}
+                              />
+                            )
+                          }
                           return (
-                            <div
-                              className="canvas-preview"
-                              style={{ maxWidth: 420, width: '100%' }}
-                              dangerouslySetInnerHTML={{ __html: preview.svg }}
-                            />
+                            <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                              <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No template</p>
+                            </div>
                           )
-                        }
-                        return <p className="empty-state__text">No preview available</p>
-                      })()}
+                        })()}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1227,62 +1292,101 @@ function App() {
                               <span style={{ color: 'var(--text-muted)' }}>Name:</span>{' '}
                               <strong>{design.name}</strong>
                             </div>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Type:</span>{' '}
+                              {design.designerMode === 'canvas' ? (
+                                <Badge variant="secondary" style={{ fontSize: 10 }}>Canvas Design</Badge>
+                              ) : (
+                                <Badge variant="outline" style={{ fontSize: 10 }}>Template Design</Badge>
+                              )}
+                            </div>
                             {design.description && (
                               <div>
                                 <span style={{ color: 'var(--text-muted)' }}>Description:</span>{' '}
                                 {design.description}
                               </div>
                             )}
-                            <div>
-                              <span style={{ color: 'var(--text-muted)' }}>Front Template:</span>{' '}
-                              {design.frontTemplateId
-                                ? designTemplates.find(t => t.id === design.frontTemplateId)?.name || 'Unknown'
-                                : 'None'}
-                            </div>
-                            <div>
-                              <span style={{ color: 'var(--text-muted)' }}>Back Template:</span>{' '}
-                              {design.backTemplateId
-                                ? designTemplates.find(t => t.id === design.backTemplateId)?.name || 'Unknown'
-                                : 'None'}
-                            </div>
+                            {design.designerMode !== 'canvas' && (
+                              <>
+                                <div>
+                                  <span style={{ color: 'var(--text-muted)' }}>Front Template:</span>{' '}
+                                  {design.frontTemplateId
+                                    ? designTemplates.find(t => t.id === design.frontTemplateId)?.name || 'Unknown'
+                                    : 'None'}
+                                </div>
+                                <div>
+                                  <span style={{ color: 'var(--text-muted)' }}>Back Template:</span>{' '}
+                                  {design.backTemplateId
+                                    ? designTemplates.find(t => t.id === design.backTemplateId)?.name || 'Unknown'
+                                    : 'None'}
+                                </div>
+                              </>
+                            )}
+                            {design.designerMode === 'canvas' && design.cardWidth && design.cardHeight && (
+                              <div>
+                                <span style={{ color: 'var(--text-muted)' }}>Card Size:</span>{' '}
+                                {design.cardWidth} × {design.cardHeight} mm
+                              </div>
+                            )}
                           </div>
                         )
                       })()}
                     </PanelSection>
                     <PanelSection title="Actions">
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            const design = cardDesigns.find(d => d.id === selectedCardDesignId)
-                            if (design) {
-                              setEditingDesign(design)
-                              setDesignFormData({
-                                name: design.name,
-                                description: design.description ?? '',
-                                frontTemplateId: design.frontTemplateId ?? '',
-                                backTemplateId: design.backTemplateId ?? '',
-                              })
-                              setDesignDialogOpen(true)
-                            }
-                          }}
-                        >
-                          <Pencil size={14} style={{ marginRight: 4 }} />
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          style={{ color: 'var(--danger)' }}
-                          onClick={async () => {
-                            if (confirm('Delete this card design?')) {
-                              await deleteCardDesign(selectedCardDesignId)
-                              setSelectedCardDesignId(null)
-                            }
-                          }}
-                        >
-                          <Trash2 size={14} style={{ marginRight: 4 }} />
-                          Delete
-                        </button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {(() => {
+                          const design = cardDesigns.find(d => d.id === selectedCardDesignId)
+                          const isCanvasDesign = design?.designerMode === 'canvas'
+                          return (
+                            <>
+                              {isCanvasDesign && (
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => {
+                                    setEditingCanvasDesignId(selectedCardDesignId)
+                                    setDesignMode('designer')
+                                  }}
+                                >
+                                  <PenTool size={14} style={{ marginRight: 4 }} />
+                                  Edit in Designer
+                                </button>
+                              )}
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => {
+                                    if (design) {
+                                      setEditingDesign(design)
+                                      setDesignFormData({
+                                        name: design.name,
+                                        description: design.description ?? '',
+                                        frontTemplateId: design.frontTemplateId ?? '',
+                                        backTemplateId: design.backTemplateId ?? '',
+                                      })
+                                      setDesignDialogOpen(true)
+                                    }
+                                  }}
+                                >
+                                  <Pencil size={14} style={{ marginRight: 4 }} />
+                                  Edit Info
+                                </button>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ color: 'var(--danger)' }}
+                                  onClick={async () => {
+                                    if (confirm('Delete this card design?')) {
+                                      await deleteCardDesign(selectedCardDesignId)
+                                      setSelectedCardDesignId(null)
+                                    }
+                                  }}
+                                >
+                                  <Trash2 size={14} style={{ marginRight: 4 }} />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     </PanelSection>
                   </>
