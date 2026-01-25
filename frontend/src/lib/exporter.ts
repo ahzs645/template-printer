@@ -2,6 +2,13 @@ import { PDFDocument } from 'pdf-lib'
 import type { CardData, FieldDefinition, ImageValue, PrintLayout, TemplateMeta } from './types'
 import type { UserData } from './fieldParser'
 import { parseField } from './fieldParser'
+
+// Slot assignment for multi-card layouts
+export type SlotAssignment = {
+  source: 'custom' | string  // 'custom' for manual fields, or user ID
+  side: 'front' | 'back'     // Which side of the card design to use
+  templateId?: string | null // Optional: override with a different design template
+}
 import {
   buildCanvasFontString,
   clamp,
@@ -431,6 +438,144 @@ export async function exportBatchCardsWithJsonLayout(
 
   downloadLink.href = downloadUrl
   downloadLink.download = `${baseName}-batch-${users.length}-cards-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+/**
+ * Export cards with per-slot assignments
+ * Each slot can have its own data source (custom or user), template, and side (front/back)
+ */
+export async function exportWithSlotAssignments(
+  defaultTemplate: TemplateMeta | null,
+  backTemplate: TemplateMeta | null,
+  fields: FieldDefinition[],
+  customCardData: CardData,
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  layout: PrintLayout,
+  slotAssignments: SlotAssignment[],
+  dpi: number = DEFAULT_EXPORT_DPI,
+  customValues?: Record<string, string>,
+  allTemplates?: Map<string, TemplateMeta>,  // Map of template ID to template meta
+  allFieldMappings?: Map<string, Record<string, string>>,  // Map of template ID to field mappings
+): Promise<void> {
+  const pdfDoc = await PDFDocument.create()
+
+  const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
+  const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
+
+  // Create a map of user ID to user data for quick lookup
+  const userMap = new Map<string, UserData>()
+  for (const user of users) {
+    if (user.id) {
+      userMap.set(user.id, user)
+    }
+  }
+
+  // Pre-render each slot's card based on its assignment
+  const cardImages = []
+  for (const assignment of slotAssignments) {
+    // Determine which template to use
+    let template: TemplateMeta | null = null
+    let slotFieldMappings = fieldMappings
+
+    if (assignment.templateId && allTemplates?.has(assignment.templateId)) {
+      // Use the specific template selected for this slot
+      template = allTemplates.get(assignment.templateId)!
+      // Use that template's field mappings if available
+      if (allFieldMappings?.has(assignment.templateId)) {
+        slotFieldMappings = allFieldMappings.get(assignment.templateId)!
+      }
+    } else {
+      // Fall back to default template based on side
+      template = assignment.side === 'back' && backTemplate ? backTemplate : defaultTemplate
+    }
+
+    if (!template) {
+      // Skip if no template available
+      cardImages.push(null)
+      continue
+    }
+
+    // Get fields for this template (use default fields for now, templates should have their own)
+    const templateFields = fields
+
+    // Determine card data based on source
+    let cardData: CardData
+    if (assignment.source === 'custom') {
+      // Use custom card data entered in the form
+      cardData = customCardData
+    } else {
+      // Use data from a specific user
+      const user = userMap.get(assignment.source)
+      if (!user) {
+        // User not found, skip this slot
+        cardImages.push(null)
+        continue
+      }
+
+      // Build card data from user and field mappings
+      cardData = {}
+      templateFields.forEach(field => {
+        const layerId = field.sourceId || field.id
+        const standardFieldName = slotFieldMappings[layerId]
+        if (standardFieldName) {
+          const customValue = customValues?.[layerId]
+          cardData[field.id] = parseField(standardFieldName, user, customValue)
+        }
+      })
+    }
+
+    const canvas = await renderCardToCanvas(template, templateFields, cardData, dpi)
+    const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
+    const cardImage = await pdfDoc.embedPng(cardPngBytes)
+    cardImages.push(cardImage)
+  }
+
+  // Calculate positions for all slots
+  const positions = calculateCardPositions(layout, slotAssignments.length)
+
+  // Group positions by page
+  const pageGroups = new Map<number, CardPosition[]>()
+  for (const pos of positions) {
+    if (!pageGroups.has(pos.page)) {
+      pageGroups.set(pos.page, [])
+    }
+    pageGroups.get(pos.page)!.push(pos)
+  }
+
+  // Create pages and place cards
+  for (const [_pageNum, pagePositions] of pageGroups) {
+    const page = pdfDoc.addPage([pageWidth, pageHeight])
+
+    for (const pos of pagePositions) {
+      if (pos.cardIndex >= cardImages.length) break
+      const cardImage = cardImages[pos.cardIndex]
+      if (!cardImage) continue  // Skip null images
+
+      // PDF coordinates are from bottom-left, so flip Y
+      const pdfY = pageHeight - pos.y - pos.height
+
+      page.drawImage(cardImage, {
+        x: pos.x,
+        y: pdfY,
+        width: pos.width,
+        height: pos.height,
+      })
+    }
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  const baseName = frontTemplate?.name.replace(/\.svg$/i, '') || 'id-cards'
+
+  downloadLink.href = downloadUrl
+  downloadLink.download = `${baseName}-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`
   document.body.appendChild(downloadLink)
   downloadLink.click()
   downloadLink.remove()

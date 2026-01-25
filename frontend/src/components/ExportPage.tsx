@@ -1,5 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from 'react'
-import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info } from 'lucide-react'
+import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Label } from './ui/label'
@@ -12,9 +12,12 @@ import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
+import type { SlotAssignment } from '../lib/exporter'
 
 export type ExportFormat = 'pdf' | 'png' | 'svg'
 export type ExportMode = 'quick' | 'database'
+
+export type { SlotAssignment }
 
 export type ExportOptions = {
   format: ExportFormat
@@ -25,6 +28,7 @@ export type ExportOptions = {
   mode: ExportMode
   selectedUserIds: string[]
   slotUserIds: string[]
+  slotAssignments: SlotAssignment[]  // Per-slot configuration
   colorProfileId: string | null
 }
 
@@ -84,6 +88,7 @@ export function ExportPage({
     mode: 'quick',
     selectedUserIds: [],
     slotUserIds: [],
+    slotAssignments: [],
     colorProfileId: null,
   })
   const [showInstructions, setShowInstructions] = useState(false)
@@ -94,6 +99,20 @@ export function ExportPage({
   const selectedJsonLayout = jsonPrintLayouts.find(
     (l) => l.id === exportOptions.jsonPrintLayoutId
   )
+
+  // Initialize slot assignments when layout changes
+  useEffect(() => {
+    if (selectedJsonLayout) {
+      const slotCount = selectedJsonLayout.cardsPerPage
+      const newAssignments: SlotAssignment[] = Array.from({ length: slotCount }, () => ({
+        source: 'custom',
+        side: 'front',
+      }))
+      setExportOptions((prev) => ({ ...prev, slotAssignments: newAssignments }))
+    } else {
+      setExportOptions((prev) => ({ ...prev, slotAssignments: [] }))
+    }
+  }, [selectedJsonLayout?.id])
   const [printLayoutSvg, setPrintLayoutSvg] = useState<string | null>(null)
   const [compositePreview, setCompositePreview] = useState<string | null>(null)
   const [layoutPreviewSvg, setLayoutPreviewSvg] = useState<string | null>(null)
@@ -384,6 +403,19 @@ export function ExportPage({
     setExportOptions((prev) => ({ ...prev, ...updates }))
   }
 
+  const updateSlotAssignment = (slotIndex: number, updates: Partial<SlotAssignment>) => {
+    setExportOptions((prev) => {
+      const newAssignments = [...prev.slotAssignments]
+      if (newAssignments[slotIndex]) {
+        newAssignments[slotIndex] = { ...newAssignments[slotIndex], ...updates }
+      }
+      return { ...prev, slotAssignments: newAssignments }
+    })
+  }
+
+  // Check if the selected template has a back side available
+  const hasBackTemplate = templateMeta?.backTemplateId || false
+
   return (
     <div className="app-content" style={{ height: '100%' }}>
       {/* Left Panel - Export Options */}
@@ -439,9 +471,15 @@ export function ExportPage({
           </p>
         </PanelSection>
 
-        {/* Quick Mode - Card Data Entry */}
-        {exportOptions.mode === 'quick' && template && fields.length > 0 && (
-          <PanelSection title="Card Data">
+        {/* Card Data Entry - shows when needed for custom data */}
+        {((exportOptions.slotAssignments.length === 0 && exportOptions.mode === 'quick') ||
+          exportOptions.slotAssignments.some(s => s.source === 'custom')) && template && fields.length > 0 && (
+          <PanelSection title="Custom Card Data" defaultOpen={true}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+              {exportOptions.slotAssignments.length > 0
+                ? 'Data for slots set to "Custom Fields"'
+                : 'Enter data for the card'}
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {fields.map((field) => (
                 <div key={field.id} className="form-group" style={{ marginBottom: 0 }}>
@@ -581,6 +619,7 @@ export function ExportPage({
               )}
             </div>
           )}
+
 
           {/* Upload Custom SVG Layout */}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>

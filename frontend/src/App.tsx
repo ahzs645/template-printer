@@ -54,7 +54,7 @@ import { useCardDesigns } from './hooks/useCardDesigns'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
-import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout } from './lib/exporter'
+import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments } from './lib/exporter'
 import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
 import { isAutoMappable } from './lib/autoMapping'
@@ -567,16 +567,35 @@ function App() {
             if (!jsonLayout) {
               throw new Error('Selected print layout not found')
             }
-            await exportBatchCardsWithJsonLayout(
-              template,
-              fields,
-              orderedUsers,
-              fieldMappingsMap,
-              jsonLayout,
-              options.resolution,
-              customValuesMap
-            )
-            setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with "${jsonLayout.name}" layout.`)
+
+            // If we have slot assignments, use per-slot export
+            if (options.slotAssignments && options.slotAssignments.length > 0) {
+              await exportWithSlotAssignments(
+                template,  // front template
+                null,      // back template (TODO: add back template support)
+                fields,
+                cardData,  // custom card data for slots set to 'custom'
+                users,
+                fieldMappingsMap,
+                jsonLayout,
+                options.slotAssignments,
+                options.resolution,
+                customValuesMap
+              )
+              setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
+            } else {
+              // Fallback to old batch behavior (fill pages with selected users)
+              await exportBatchCardsWithJsonLayout(
+                template,
+                fields,
+                orderedUsers,
+                fieldMappingsMap,
+                jsonLayout,
+                options.resolution,
+                customValuesMap
+              )
+              setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with "${jsonLayout.name}" layout.`)
+            }
           } else if (options.printLayoutId) {
             const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
             if (!printLayout) {
@@ -608,14 +627,48 @@ function App() {
             if (!jsonLayout) {
               throw new Error('Selected print layout not found')
             }
-            await exportWithJsonLayout(
-              template,
-              fields,
-              cardData,
-              jsonLayout,
-              options.resolution
-            )
-            setStatusMessage(`Exported PDF with "${jsonLayout.name}" layout.`)
+
+            // If we have slot assignments, use the new per-slot export
+            if (options.slotAssignments && options.slotAssignments.length > 0) {
+              // Get field mappings for users if any slots reference database users
+              let fieldMappingsMap: Record<string, string> = {}
+              let customValuesMap: Record<string, string> = {}
+              const hasUserSlots = options.slotAssignments.some(s => s.source !== 'custom')
+
+              if (hasUserSlots && selectedTemplateId) {
+                const mappings = await storage.getFieldMappings(selectedTemplateId)
+                mappings.forEach((m) => {
+                  fieldMappingsMap[m.svgLayerId] = m.standardFieldName
+                  if (m.customValue) {
+                    customValuesMap[m.svgLayerId] = m.customValue
+                  }
+                })
+              }
+
+              await exportWithSlotAssignments(
+                template,  // front template
+                null,      // back template (TODO: add back template support)
+                fields,
+                cardData,
+                users,
+                fieldMappingsMap,
+                jsonLayout,
+                options.slotAssignments,
+                options.resolution,
+                customValuesMap
+              )
+              setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
+            } else {
+              // Fallback to filling all slots with the same card
+              await exportWithJsonLayout(
+                template,
+                fields,
+                cardData,
+                jsonLayout,
+                options.resolution
+              )
+              setStatusMessage(`Exported PDF with "${jsonLayout.name}" layout.`)
+            }
           } else if (options.printLayoutId) {
             const printLayout = printTemplates.find((t) => t.id === options.printLayoutId)
             if (!printLayout) {
