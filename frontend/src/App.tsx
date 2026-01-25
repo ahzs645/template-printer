@@ -14,13 +14,25 @@ import {
   ScanLine,
   Settings2,
   Download,
+  Pencil,
+  CreditCard,
 } from 'lucide-react'
 
 import './App.css'
 import { IconNav } from './components/IconNav'
 import { Ribbon, RibbonGroup, RibbonButton, RibbonDivider } from './components/Ribbon'
 import { DockablePanel, PanelSection } from './components/ui/dockable-panel'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog'
+import { Button } from './components/ui/button'
+import { Input } from './components/ui/input'
+import { Textarea } from './components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './components/ui/select'
 import { Badge } from './components/ui/badge'
 import { TemplateSelector } from './components/TemplateSelector'
 import { PreviewField } from './components/PreviewField'
@@ -36,6 +48,7 @@ import type { ExportOptions } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { useUsers } from './hooks/useUsers'
+import { useCardDesigns } from './hooks/useCardDesigns'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
@@ -56,7 +69,7 @@ import { labelFromId } from './lib/fields'
 import { cn } from './lib/utils'
 
 type ActiveTab = 'design' | 'users' | 'export' | 'calibration'
-type DesignMode = 'import' | 'designer'
+type DesignMode = 'import' | 'designer' | 'designs'
 
 const PREVIEW_BASE_WIDTH = 420
 
@@ -97,6 +110,33 @@ function App() {
   } = useTemplateLibrary('print')
 
   const { users, loading: usersLoading } = useUsers()
+  const {
+    designs: cardDesigns,
+    loading: cardDesignsLoading,
+    createDesign: createCardDesign,
+    updateDesign: updateCardDesign,
+    deleteDesign: deleteCardDesign,
+    refresh: refreshCardDesigns,
+  } = useCardDesigns()
+  const [selectedCardDesignId, setSelectedCardDesignId] = useState<string | null>(null)
+  const [designDialogOpen, setDesignDialogOpen] = useState(false)
+  const [editingDesign, setEditingDesign] = useState<typeof cardDesigns[0] | null>(null)
+  const [designPreviewSide, setDesignPreviewSide] = useState<'front' | 'back'>('front')
+  const [designFormData, setDesignFormData] = useState({
+    name: '',
+    description: '',
+    frontTemplateId: '',
+    backTemplateId: '',
+  })
+  const [designFormError, setDesignFormError] = useState<string | null>(null)
+  const [designFormSaving, setDesignFormSaving] = useState(false)
+  const [designPreview, setDesignPreview] = useState<{
+    front: { svg: string | null; loading: boolean; error: string | null }
+    back: { svg: string | null; loading: boolean; error: string | null }
+  }>({
+    front: { svg: null, loading: false, error: null },
+    back: { svg: null, loading: false, error: null },
+  })
 
   const resetPreviousObjectUrl = (nextUrl: string | null | undefined) => {
     if (previousObjectUrl.current && previousObjectUrl.current !== nextUrl) {
@@ -142,6 +182,70 @@ function App() {
       setFieldMappings({})
     }
   }, [selectedTemplateId, fields, fieldMappingsVersion, storage])
+
+  // Load design preview when a card design is selected
+  useEffect(() => {
+    setDesignPreview({
+      front: { svg: null, loading: false, error: null },
+      back: { svg: null, loading: false, error: null },
+    })
+
+    if (!selectedCardDesignId || cardDesignsLoading) return
+
+    const selectedDesign = cardDesigns.find(d => d.id === selectedCardDesignId)
+    if (!selectedDesign) return
+
+    let cancelled = false
+
+    const loadSide = async (side: 'front' | 'back', templateId: string | null | undefined) => {
+      if (cancelled) return
+
+      if (!templateId) {
+        setDesignPreview(prev => ({
+          ...prev,
+          [side]: { svg: null, loading: false, error: 'No template assigned' },
+        }))
+        return
+      }
+
+      const templateSummary = designTemplates.find(t => t.id === templateId)
+      if (!templateSummary) {
+        setDesignPreview(prev => ({
+          ...prev,
+          [side]: { svg: null, loading: false, error: 'Template not found' },
+        }))
+        return
+      }
+
+      setDesignPreview(prev => ({
+        ...prev,
+        [side]: { ...prev[side], loading: true, error: null },
+      }))
+
+      try {
+        const response = await fetch(templateSummary.svgPath)
+        if (!response.ok) throw new Error('Failed to load template')
+        const svgText = await response.text()
+        if (cancelled) return
+
+        setDesignPreview(prev => ({
+          ...prev,
+          [side]: { svg: svgText, loading: false, error: null },
+        }))
+      } catch (err) {
+        if (cancelled) return
+        setDesignPreview(prev => ({
+          ...prev,
+          [side]: { svg: null, loading: false, error: err instanceof Error ? err.message : 'Failed to load' },
+        }))
+      }
+    }
+
+    loadSide('front', selectedDesign.frontTemplateId)
+    loadSide('back', selectedDesign.backTemplateId)
+
+    return () => { cancelled = true }
+  }, [selectedCardDesignId, cardDesigns, cardDesignsLoading, designTemplates])
 
   const selectedField = useMemo(
     () => fields.find((field) => field.id === selectedFieldId) ?? null,
@@ -546,56 +650,33 @@ function App() {
     templateUploadInputRef.current?.click()
   }
 
+  // Render Design Tab mode tabs
+  const renderDesignModeTabs = () => (
+    <div className="design-mode-tabs">
+      <button
+        className={cn('design-mode-tab', designMode === 'import' && 'design-mode-tab--active')}
+        onClick={() => setDesignMode('import')}
+      >
+        Import SVG
+      </button>
+      <button
+        className={cn('design-mode-tab', designMode === 'designer' && 'design-mode-tab--active')}
+        onClick={() => setDesignMode('designer')}
+      >
+        Card Designer
+      </button>
+      <button
+        className={cn('design-mode-tab', designMode === 'designs' && 'design-mode-tab--active')}
+        onClick={() => setDesignMode('designs')}
+      >
+        Card Designs
+      </button>
+    </div>
+  )
+
   // Render Design Tab ribbon
   const renderDesignRibbon = () => (
     <Ribbon>
-      {/* Mode Toggle */}
-      <RibbonGroup title="Mode">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            padding: '2px',
-            backgroundColor: 'var(--bg-surface-alt)',
-            borderRadius: 6,
-          }}
-        >
-          <button
-            onClick={() => setDesignMode('import')}
-            style={{
-              padding: '4px 12px',
-              fontSize: 12,
-              fontWeight: 500,
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              backgroundColor: designMode === 'import' ? 'var(--bg-surface)' : 'transparent',
-              color: designMode === 'import' ? 'var(--text-primary)' : 'var(--text-muted)',
-              boxShadow: designMode === 'import' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-            }}
-          >
-            Import SVG
-          </button>
-          <button
-            onClick={() => setDesignMode('designer')}
-            style={{
-              padding: '4px 12px',
-              fontSize: 12,
-              fontWeight: 500,
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              backgroundColor: designMode === 'designer' ? 'var(--bg-surface)' : 'transparent',
-              color: designMode === 'designer' ? 'var(--text-primary)' : 'var(--text-muted)',
-              boxShadow: designMode === 'designer' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-            }}
-          >
-            Card Designer
-          </button>
-        </div>
-      </RibbonGroup>
-
       {designMode === 'import' && (
         <>
           <RibbonGroup title="Template">
@@ -657,6 +738,53 @@ function App() {
             label="Layer Help"
             onClick={() => setLayerNamingDialogOpen(true)}
           />
+        </>
+      )}
+
+      {designMode === 'designs' && (
+        <>
+          <RibbonGroup title="Design">
+            <RibbonButton
+              icon={<Plus size={18} />}
+              label="New"
+              onClick={() => {
+                setEditingDesign(null)
+                setDesignFormData({ name: '', description: '', frontTemplateId: '', backTemplateId: '' })
+                setDesignDialogOpen(true)
+              }}
+            />
+            <RibbonButton
+              icon={<Pencil size={18} />}
+              label="Edit"
+              onClick={() => {
+                if (selectedCardDesignId) {
+                  const design = cardDesigns.find(d => d.id === selectedCardDesignId)
+                  if (design) {
+                    setEditingDesign(design)
+                    setDesignFormData({
+                      name: design.name,
+                      description: design.description ?? '',
+                      frontTemplateId: design.frontTemplateId ?? '',
+                      backTemplateId: design.backTemplateId ?? '',
+                    })
+                    setDesignDialogOpen(true)
+                  }
+                }
+              }}
+              disabled={!selectedCardDesignId}
+            />
+            <RibbonButton
+              icon={<Trash2 size={18} />}
+              label="Delete"
+              onClick={async () => {
+                if (selectedCardDesignId && confirm('Delete this card design?')) {
+                  await deleteCardDesign(selectedCardDesignId)
+                  setSelectedCardDesignId(null)
+                }
+              }}
+              disabled={!selectedCardDesignId}
+            />
+          </RibbonGroup>
         </>
       )}
     </Ribbon>
@@ -785,8 +913,11 @@ function App() {
 
       {/* Main Content Area */}
       <div className="app-main">
+        {/* Design Mode Tabs */}
+        {activeTab === 'design' && renderDesignModeTabs()}
+
         {/* Ribbon Toolbar */}
-        {activeTab === 'design' && renderDesignRibbon()}
+        {activeTab === 'design' && designMode !== 'designer' && renderDesignRibbon()}
         {activeTab === 'users' && renderUsersRibbon()}
         {activeTab === 'export' && renderExportRibbon()}
         {activeTab === 'calibration' && renderCalibrationRibbon()}
@@ -979,6 +1110,191 @@ function App() {
             </>
           )}
 
+          {activeTab === 'design' && designMode === 'designs' && (
+            <>
+              {/* Left Panel - Card Designs List */}
+              <DockablePanel title="Card Designs" side="left" width={280}>
+                <PanelSection title={`All Designs (${cardDesigns.length})`}>
+                  {cardDesignsLoading ? (
+                    <p className="empty-state__text">Loading designs...</p>
+                  ) : cardDesigns.length === 0 ? (
+                    <div className="empty-state">
+                      <CreditCard size={32} className="empty-state__icon" />
+                      <p className="empty-state__text">No card designs yet</p>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => {
+                          setEditingDesign(null)
+                          setDesignFormData({ name: '', description: '', frontTemplateId: '', backTemplateId: '' })
+                          setDesignDialogOpen(true)
+                        }}
+                      >
+                        <Plus size={14} style={{ marginRight: 4 }} />
+                        Create Design
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="field-list">
+                      {cardDesigns.map((design) => (
+                        <button
+                          key={design.id}
+                          type="button"
+                          className={cn('field-item', design.id === selectedCardDesignId && 'field-item--selected')}
+                          onClick={() => setSelectedCardDesignId(design.id)}
+                        >
+                          <div>
+                            <div className="field-item__name">{design.name}</div>
+                            <div className="field-item__type">
+                              {design.frontTemplateId && design.backTemplateId
+                                ? 'Front & Back'
+                                : design.frontTemplateId
+                                ? 'Front only'
+                                : design.backTemplateId
+                                ? 'Back only'
+                                : 'No templates'}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </PanelSection>
+              </DockablePanel>
+
+              {/* Main Canvas - Design Preview */}
+              <div className="app-workspace">
+                <div className="canvas-container">
+                  {!selectedCardDesignId ? (
+                    <div className="empty-state">
+                      <CreditCard size={48} className="empty-state__icon" />
+                      <p className="empty-state__text">Select a card design to preview</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className={cn('btn btn-sm', designPreviewSide === 'front' ? 'btn-primary' : 'btn-secondary')}
+                          onClick={() => setDesignPreviewSide('front')}
+                        >
+                          Front
+                        </button>
+                        <button
+                          className={cn('btn btn-sm', designPreviewSide === 'back' ? 'btn-primary' : 'btn-secondary')}
+                          onClick={() => setDesignPreviewSide('back')}
+                        >
+                          Back
+                        </button>
+                      </div>
+                      {(() => {
+                        const preview = designPreview[designPreviewSide]
+                        if (preview.loading) {
+                          return <p className="empty-state__text">Loading preview...</p>
+                        }
+                        if (preview.error) {
+                          return (
+                            <div className="empty-state">
+                              <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>{preview.error}</p>
+                            </div>
+                          )
+                        }
+                        if (preview.svg) {
+                          return (
+                            <div
+                              className="canvas-preview"
+                              style={{ maxWidth: 420, width: '100%' }}
+                              dangerouslySetInnerHTML={{ __html: preview.svg }}
+                            />
+                          )
+                        }
+                        return <p className="empty-state__text">No preview available</p>
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Panel - Design Details */}
+              <DockablePanel title="Details" side="right" width={260}>
+                {selectedCardDesignId ? (
+                  <>
+                    <PanelSection title="Design Info">
+                      {(() => {
+                        const design = cardDesigns.find(d => d.id === selectedCardDesignId)
+                        if (!design) return null
+                        return (
+                          <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Name:</span>{' '}
+                              <strong>{design.name}</strong>
+                            </div>
+                            {design.description && (
+                              <div>
+                                <span style={{ color: 'var(--text-muted)' }}>Description:</span>{' '}
+                                {design.description}
+                              </div>
+                            )}
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Front Template:</span>{' '}
+                              {design.frontTemplateId
+                                ? designTemplates.find(t => t.id === design.frontTemplateId)?.name || 'Unknown'
+                                : 'None'}
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Back Template:</span>{' '}
+                              {design.backTemplateId
+                                ? designTemplates.find(t => t.id === design.backTemplateId)?.name || 'Unknown'
+                                : 'None'}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </PanelSection>
+                    <PanelSection title="Actions">
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            const design = cardDesigns.find(d => d.id === selectedCardDesignId)
+                            if (design) {
+                              setEditingDesign(design)
+                              setDesignFormData({
+                                name: design.name,
+                                description: design.description ?? '',
+                                frontTemplateId: design.frontTemplateId ?? '',
+                                backTemplateId: design.backTemplateId ?? '',
+                              })
+                              setDesignDialogOpen(true)
+                            }
+                          }}
+                        >
+                          <Pencil size={14} style={{ marginRight: 4 }} />
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ color: 'var(--danger)' }}
+                          onClick={async () => {
+                            if (confirm('Delete this card design?')) {
+                              await deleteCardDesign(selectedCardDesignId)
+                              setSelectedCardDesignId(null)
+                            }
+                          }}
+                        >
+                          <Trash2 size={14} style={{ marginRight: 4 }} />
+                          Delete
+                        </button>
+                      </div>
+                    </PanelSection>
+                  </>
+                ) : (
+                  <PanelSection title="Design Info">
+                    <p className="empty-state__text">Select a design to view details</p>
+                  </PanelSection>
+                )}
+              </DockablePanel>
+            </>
+          )}
+
           {activeTab === 'users' && (
             <UsersTab
                 designTemplates={designTemplates}
@@ -1052,6 +1368,164 @@ function App() {
           <div style={{ paddingTop: '0.5rem' }}>
             <FieldNamingTab />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Card Design Dialog */}
+      <Dialog
+        open={designDialogOpen}
+        onOpenChange={(open) => {
+          setDesignDialogOpen(open)
+          if (!open) {
+            setEditingDesign(null)
+            setDesignFormData({ name: '', description: '', frontTemplateId: '', backTemplateId: '' })
+            setDesignFormError(null)
+          } else if (editingDesign) {
+            setDesignFormData({
+              name: editingDesign.name,
+              description: editingDesign.description ?? '',
+              frontTemplateId: editingDesign.frontTemplateId ?? '',
+              backTemplateId: editingDesign.backTemplateId ?? '',
+            })
+          }
+        }}
+      >
+        <DialogContent>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setDesignFormError(null)
+              const trimmedName = designFormData.name.trim()
+              if (!trimmedName) {
+                setDesignFormError('Design name is required.')
+                return
+              }
+              const payload = {
+                name: trimmedName,
+                description: designFormData.description.trim() || null,
+                frontTemplateId: designFormData.frontTemplateId || null,
+                backTemplateId: designFormData.backTemplateId || null,
+              }
+              setDesignFormSaving(true)
+              try {
+                if (editingDesign) {
+                  await updateCardDesign(editingDesign.id, payload)
+                } else {
+                  await createCardDesign(payload)
+                }
+                setDesignDialogOpen(false)
+                setEditingDesign(null)
+                setDesignFormData({ name: '', description: '', frontTemplateId: '', backTemplateId: '' })
+                refreshCardDesigns()
+              } catch (err) {
+                setDesignFormError(err instanceof Error ? err.message : 'Failed to save')
+              } finally {
+                setDesignFormSaving(false)
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>{editingDesign ? 'Edit Card Design' : 'New Card Design'}</DialogTitle>
+              <DialogDescription>
+                Link front and back templates to create a reusable card design.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div style={{ display: 'grid', gap: '0.75rem', padding: '1rem 0' }}>
+              {designFormError && (
+                <div className="status-message status-message--error">{designFormError}</div>
+              )}
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Design Name *</label>
+                <Input
+                  value={designFormData.name}
+                  onChange={(e) => setDesignFormData((prev) => ({ ...prev, name: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Description</label>
+                <Textarea
+                  value={designFormData.description}
+                  onChange={(e) => setDesignFormData((prev) => ({ ...prev, description: e.target.value }))}
+                  rows={2}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Front Template</label>
+                  <Select
+                    value={designFormData.frontTemplateId || 'none'}
+                    onValueChange={(value) => setDesignFormData((prev) => ({ ...prev, frontTemplateId: value === 'none' ? '' : value }))}
+                    disabled={designTemplatesLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No front</SelectItem>
+                      {designTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Back Template</label>
+                  <Select
+                    value={designFormData.backTemplateId || 'none'}
+                    onValueChange={(value) => setDesignFormData((prev) => ({ ...prev, backTemplateId: value === 'none' ? '' : value }))}
+                    disabled={designTemplatesLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No back</SelectItem>
+                      {designTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter style={{ justifyContent: 'space-between' }}>
+              {editingDesign ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={async () => {
+                    if (confirm('Delete this card design?')) {
+                      await deleteCardDesign(editingDesign.id)
+                      setDesignDialogOpen(false)
+                      setEditingDesign(null)
+                      if (selectedCardDesignId === editingDesign.id) {
+                        setSelectedCardDesignId(null)
+                      }
+                    }
+                  }}
+                  disabled={designFormSaving}
+                >
+                  Delete
+                </Button>
+              ) : (
+                <span />
+              )}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <Button type="button" variant="outline" onClick={() => setDesignDialogOpen(false)} disabled={designFormSaving}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={designFormSaving}>
+                  {designFormSaving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
