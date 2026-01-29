@@ -241,12 +241,28 @@ function extractImagePlaceholders(svg: Document, dimensions: { width?: number; h
 
 export function extractFontFamilies(svg: Document): string[] {
   const fonts = new Set<string>()
+
+  // Extract from font-family attributes and inline styles on elements
   const candidateNodes = svg.querySelectorAll('[font-family], text')
   candidateNodes.forEach((node) => {
     if (node instanceof SVGElement && node.closest('defs')) return
     const family = getFontFamily(node as Element)
     if (family) fonts.add(family)
   })
+
+  // Extract from <style> blocks (CSS rules)
+  const styleElements = svg.querySelectorAll('style')
+  styleElements.forEach((styleEl) => {
+    const cssText = styleEl.textContent || ''
+    // Match font-family declarations in CSS
+    const fontFamilyRegex = /font-family\s*:\s*([^;}\n]+)/gi
+    let match: RegExpExecArray | null
+    while ((match = fontFamilyRegex.exec(cssText)) !== null) {
+      const parsed = parseFontFamily(match[1])
+      if (parsed) fonts.add(parsed)
+    }
+  })
+
   return Array.from(fonts)
 }
 
