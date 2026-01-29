@@ -614,7 +614,9 @@ export async function renderCardToCanvas(
 
   try {
     const svgMarkup = renderSvgWithData(template, fields, cardData)
-    const background = await loadSvgAsImage(svgMarkup)
+    // Set explicit width/height on SVG to ensure fonts scale correctly when rendered
+    const scaledSvgMarkup = setSvgDimensions(svgMarkup, canvasWidth, canvasHeight)
+    const background = await loadSvgAsImage(scaledSvgMarkup)
     context.drawImage(background, 0, 0, canvasWidth, canvasHeight)
   } catch (error) {
     console.warn('Unable to draw template background, exporting fields only.', error)
@@ -777,6 +779,23 @@ function getTemplateSizeInPoints(template: TemplateMeta): { widthPoints: number;
     widthPoints: (widthMm / MM_PER_INCH) * POINTS_PER_INCH,
     heightPoints: (heightMm / MM_PER_INCH) * POINTS_PER_INCH,
   }
+}
+
+/**
+ * Set explicit width and height attributes on an SVG to ensure proper font scaling
+ * when the SVG is rendered to a canvas. Without explicit dimensions, fonts defined
+ * in pixels won't scale correctly when the SVG is stretched to fit the canvas.
+ */
+function setSvgDimensions(svgMarkup: string, width: number, height: number): string {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+  const svgRoot = doc.documentElement
+
+  // Set explicit width and height to ensure proper rendering at target size
+  svgRoot.setAttribute('width', `${width}`)
+  svgRoot.setAttribute('height', `${height}`)
+
+  return new XMLSerializer().serializeToString(svgRoot)
 }
 
 async function dataUrlToUint8Array(dataUrl: string): Promise<Uint8Array> {
