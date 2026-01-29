@@ -521,6 +521,10 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
   const doc = parser.parseFromString(template.rawSvg, 'image/svg+xml')
   const svgRoot = doc.documentElement
 
+  // Bake CSS font-sizes into inline attributes for all text elements and tspans
+  // This ensures font styling is preserved even when tspan structure changes
+  bakeCssFontSizes(doc)
+
   for (const field of fields) {
     if (!field.sourceId) continue
     const target = doc.getElementById(field.sourceId)
@@ -541,13 +545,66 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
   return new XMLSerializer().serializeToString(svgRoot)
 }
 
+/**
+ * Bake CSS font-sizes into inline font-size attributes for all text elements and tspans.
+ * This preserves font styling when tspan structure is modified during text replacement.
+ */
+function bakeCssFontSizes(doc: Document): void {
+  const cssFontSizes = parseCssFontSizes(doc)
+
+  // Process all text elements
+  const textElements = doc.querySelectorAll('text')
+  for (const textEl of textElements) {
+    // Skip if already has inline font-size
+    if (!textEl.hasAttribute('font-size')) {
+      const fontSize = getCssFontSizeForElement(textEl, cssFontSizes)
+      if (fontSize !== undefined) {
+        textEl.setAttribute('font-size', String(fontSize))
+      }
+    }
+
+    // Process all tspans within this text element
+    const tspans = textEl.querySelectorAll('tspan')
+    for (const tspan of tspans) {
+      // Skip if already has inline font-size
+      if (!tspan.hasAttribute('font-size')) {
+        const fontSize = getCssFontSizeForElement(tspan, cssFontSizes)
+        if (fontSize !== undefined) {
+          tspan.setAttribute('font-size', String(fontSize))
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get font-size from CSS classes for an element (doesn't check parent/children)
+ */
+function getCssFontSizeForElement(element: Element, cssFontSizes: Map<string, number>): number | undefined {
+  const classAttr = element.getAttribute('class')
+  if (!classAttr) return undefined
+
+  const classes = classAttr.split(/\s+/)
+  for (const cls of classes) {
+    const size = cssFontSizes.get(cls)
+    if (size !== undefined) return size
+  }
+  return undefined
+}
+
 function applySvgTextField(
   doc: Document,
   element: Element,
   field: FieldDefinition,
   rawValue: string | undefined,
 ) {
-  const value = rawValue && rawValue.trim().length > 0 ? rawValue : field.label ?? ''
+  // If no custom value provided, preserve the original element structure
+  // This keeps tspans with their baked inline font-sizes intact
+  if (!rawValue || rawValue.trim().length === 0) {
+    return
+  }
+
+  const value = rawValue.trim()
   const lines = value.split(/\r?\n/)
 
   // Capture the original font-size from CSS before removing children
