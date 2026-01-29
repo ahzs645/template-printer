@@ -157,9 +157,89 @@ function asImageValue(value: CardDataValue | undefined): ImageValue | undefined 
   return value as ImageValue
 }
 
+/**
+ * Parse CSS rules from SVG <style> blocks and build a map of class -> font-size
+ */
+function parseCssFontSizes(svg: Document): Map<string, number> {
+  const fontSizeMap = new Map<string, number>()
+  const styleElements = svg.querySelectorAll('style')
+
+  for (const styleEl of styleElements) {
+    const cssText = styleEl.textContent || ''
+    // Match CSS rules like: .cls-5 { font-size: 10.6px; } or .cls-3, .cls-4, .cls-5 { font-size: 10.6px; }
+    const rulePattern = /([^{]+)\{([^}]+)\}/g
+    let match
+    while ((match = rulePattern.exec(cssText)) !== null) {
+      const selectors = match[1]
+      const declarations = match[2]
+
+      // Check if this rule has a font-size declaration
+      const fontSizeMatch = declarations.match(/font-size\s*:\s*([0-9.]+)(?:px)?/i)
+      if (!fontSizeMatch) continue
+
+      const fontSize = parseFloat(fontSizeMatch[1])
+      if (!Number.isFinite(fontSize)) continue
+
+      // Extract class names from selectors (e.g., ".cls-5" -> "cls-5")
+      const classPattern = /\.([a-zA-Z0-9_-]+)/g
+      let classMatch
+      while ((classMatch = classPattern.exec(selectors)) !== null) {
+        fontSizeMap.set(classMatch[1], fontSize)
+      }
+    }
+  }
+
+  return fontSizeMap
+}
+
+/**
+ * Get font size for an element, checking attributes, style attribute, and CSS classes
+ */
+function getFontSize(node: Element, cssFontSizes: Map<string, number>): number | undefined {
+  // 1. Check direct font-size attribute
+  const attrSize = readNumeric(node.getAttribute('font-size'))
+  if (attrSize !== undefined) return attrSize
+
+  // 2. Check style attribute
+  const styleAttr = node.getAttribute('style')
+  if (styleAttr) {
+    const styleMatch = styleAttr.match(/font-size\s*:\s*([0-9.]+)(?:px)?/i)
+    if (styleMatch) {
+      const size = parseFloat(styleMatch[1])
+      if (Number.isFinite(size)) return size
+    }
+  }
+
+  // 3. Check CSS classes (also check child tspans which may have the class)
+  const classAttr = node.getAttribute('class')
+  if (classAttr) {
+    const classes = classAttr.split(/\s+/)
+    for (const cls of classes) {
+      const size = cssFontSizes.get(cls)
+      if (size !== undefined) return size
+    }
+  }
+
+  // 4. Check first tspan's class for font-size
+  const tspan = node.querySelector('tspan')
+  if (tspan) {
+    const tspanClass = tspan.getAttribute('class')
+    if (tspanClass) {
+      const classes = tspanClass.split(/\s+/)
+      for (const cls of classes) {
+        const size = cssFontSizes.get(cls)
+        if (size !== undefined) return size
+      }
+    }
+  }
+
+  return undefined
+}
+
 function extractTextFields(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
   const textNodes = Array.from(svg.querySelectorAll('text'))
   const fields: FieldDefinition[] = []
+  const cssFontSizes = parseCssFontSizes(svg)
   let index = 1
 
   for (const node of textNodes) {
@@ -169,7 +249,7 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
 
     const { x, y } = getTextPosition(node)
     const fontFamily = getFontFamily(node)
-    const fontSize = readNumeric(node.getAttribute('font-size')) ?? 16
+    const fontSize = getFontSize(node, cssFontSizes) ?? 16
     const fontWeight = getFontWeight(node)
     const color = getFillColor(node) ?? '#000000'
     const anchor = node.getAttribute('text-anchor')?.toLowerCase()
@@ -288,6 +368,7 @@ export function buildCanvasFontString(fontFamily: string | undefined, fontWeight
 function extractPlaceholders(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
   const nodes = Array.from(svg.querySelectorAll('[id]'))
   const fields: FieldDefinition[] = []
+  const cssFontSizes = parseCssFontSizes(svg)
   let fallbackOffset = 10
   let index = 0
 
@@ -324,7 +405,7 @@ function extractPlaceholders(svg: Document, dimensions: { width?: number; height
       y: yPercent,
       width: widthPercent,
       height: heightPercent,
-      fontSize: readNumeric(node.getAttribute('font-size')) ?? 16,
+      fontSize: getFontSize(node, cssFontSizes) ?? 16,
       color,
       align,
       auto: true,
@@ -469,16 +550,24 @@ function applySvgTextField(
   const value = rawValue && rawValue.trim().length > 0 ? rawValue : field.label ?? ''
   const lines = value.split(/\r?\n/)
 
+  // Capture the original font-size from CSS before removing children
+  // This preserves styling from <style> blocks that would be lost when tspans are removed
+  const cssFontSizes = parseCssFontSizes(doc)
+  const originalFontSize = getFontSize(element, cssFontSizes)
+
   while (element.firstChild) {
     element.removeChild(element.firstChild)
   }
+
+  // Use the original CSS font-size if available, otherwise fall back to field.fontSize
+  const effectiveFontSize = originalFontSize ?? field.fontSize ?? 16
 
   if (lines.length <= 1) {
     element.textContent = lines[0] ?? ''
   } else {
     const baseX = element.getAttribute('x')
     const baseY = element.getAttribute('y')
-    const lineHeight = (field.fontSize ?? 16) * 1.2
+    const lineHeight = effectiveFontSize * 1.2
 
     lines.forEach((line, index) => {
       const tspan = doc.createElementNS(SVG_NS, 'tspan')
@@ -497,7 +586,8 @@ function applySvgTextField(
   if (field.fontFamily !== undefined) {
     setOrRemoveAttribute(element, 'font-family', field.fontFamily)
   }
-  setOrRemoveAttribute(element, 'font-size', field.fontSize ? String(field.fontSize) : undefined)
+  // Always set font-size as inline attribute to preserve it after CSS classes are removed
+  element.setAttribute('font-size', String(effectiveFontSize))
   setOrRemoveAttribute(element, 'font-weight', field.fontWeight ? String(field.fontWeight) : undefined)
   if (field.color !== undefined) {
     setOrRemoveAttribute(element, 'fill', field.color)
