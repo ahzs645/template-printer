@@ -936,7 +936,7 @@ function App() {
             <RibbonButton
               icon={<FileDown size={18} />}
               label="Quick PDF"
-              onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [], colorProfileId: null })}
+              onClick={() => handleExport({ format: 'pdf', resolution: 300, maintainVectors: true, printLayoutId: null, jsonPrintLayoutId: null, mode: 'quick', selectedUserIds: [], slotUserIds: [], slotAssignments: [], colorProfileId: null })}
               disabled={!template || isExporting}
               size="large"
             />

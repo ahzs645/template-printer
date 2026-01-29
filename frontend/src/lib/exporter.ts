@@ -572,7 +572,7 @@ export async function exportWithSlotAssignments(
   const blob = new Blob([pdfBytes], { type: 'application/pdf' })
   const downloadUrl = URL.createObjectURL(blob)
   const downloadLink = document.createElement('a')
-  const baseName = frontTemplate?.name.replace(/\.svg$/i, '') || 'id-cards'
+  const baseName = defaultTemplate?.name.replace(/\.svg$/i, '') || 'id-cards'
 
   downloadLink.href = downloadUrl
   downloadLink.download = `${baseName}-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`
