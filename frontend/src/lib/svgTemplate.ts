@@ -236,6 +236,119 @@ function getFontSize(node: Element, cssFontSizes: Map<string, number>): number |
   return undefined
 }
 
+/**
+ * Group tspan children of a text element by their effective y position
+ * to detect multi-line text layouts.
+ */
+function groupTspansByLine(textElement: Element): string[] {
+  const tspans = Array.from(textElement.querySelectorAll('tspan'))
+  if (tspans.length === 0) {
+    const content = textElement.textContent?.trim()
+    return content ? [content] : []
+  }
+
+  const lineGroups = new Map<number, string[]>()
+  let currentY = 0
+
+  for (const tspan of tspans) {
+    const yAttr = readNumeric(tspan.getAttribute('y'))
+    const dyAttr = readNumeric(tspan.getAttribute('dy'))
+
+    if (yAttr !== undefined) {
+      currentY = yAttr
+    } else if (dyAttr !== undefined) {
+      currentY += dyAttr
+    }
+
+    const roundedY = Math.round(currentY * 100) / 100
+    const existing = lineGroups.get(roundedY) || []
+    existing.push(tspan.textContent || '')
+    lineGroups.set(roundedY, existing)
+  }
+
+  return Array.from(lineGroups.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([, texts]) => texts.join('').trim())
+    .filter((line) => line.length > 0)
+}
+
+/**
+ * Measure the widest line of text using an offscreen canvas.
+ * Returns width in the same units as fontSize (SVG user units).
+ */
+function measureWidestLine(
+  lines: string[],
+  fontFamily: string | undefined,
+  fontSize: number,
+  fontWeight: number | undefined,
+): number | undefined {
+  try {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return undefined
+
+    ctx.font = buildCanvasFontString(fontFamily, fontWeight, fontSize)
+
+    let maxWidth = 0
+    for (const line of lines) {
+      const width = ctx.measureText(line).width
+      if (width > maxWidth) maxWidth = width
+    }
+
+    return maxWidth > 0 ? maxWidth : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Word-wrap text to fit within maxWidth using canvas text measurement.
+ */
+function wrapTextToLines(
+  text: string,
+  maxWidth: number,
+  fontFamily: string | undefined,
+  fontWeight: number | undefined,
+  fontSize: number,
+): string[] {
+  try {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return text.split(/\r?\n/)
+
+    ctx.font = buildCanvasFontString(fontFamily, fontWeight, fontSize)
+
+    const paragraphs = text.split(/\r?\n/)
+    const result: string[] = []
+
+    for (const paragraph of paragraphs) {
+      if (!paragraph.trim()) {
+        result.push('')
+        continue
+      }
+
+      const words = paragraph.split(/\s+/)
+      let currentLine = ''
+
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word
+        if (ctx.measureText(testLine).width <= maxWidth || !currentLine) {
+          currentLine = testLine
+        } else {
+          result.push(currentLine)
+          currentLine = word
+        }
+      }
+
+      if (currentLine) result.push(currentLine)
+    }
+
+    return result.length > 0 ? result : ['']
+  } catch {
+    return text.split(/\r?\n/)
+  }
+}
+
 function extractTextFields(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
   const textNodes = Array.from(svg.querySelectorAll('text'))
   const fields: FieldDefinition[] = []
@@ -255,6 +368,14 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
     const anchor = node.getAttribute('text-anchor')?.toLowerCase()
     const align: FieldDefinition['align'] = anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left'
 
+    // Detect multi-line tspan layout and compute wrap width
+    const lineTexts = groupTspansByLine(node)
+    const isMultiLine = lineTexts.length > 1
+    let wrapWidth: number | undefined
+    if (isMultiLine) {
+      wrapWidth = measureWidestLine(lineTexts, fontFamily, fontSize, fontWeight)
+    }
+
     const sourceId = ensureNodeId(node, 'text-field', index)
     const idBaseFromSource = sanitizeIdentifier(sourceId)
     const idBase = idBaseFromSource || slugify(content)
@@ -273,6 +394,7 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
       fontFamily,
       fontWeight,
       sourceId,
+      wrapWidth,
     })
 
     index += 1
@@ -605,12 +727,18 @@ function applySvgTextField(
   }
 
   const value = rawValue.trim()
-  const lines = value.split(/\r?\n/)
 
   // Capture the original font-size from CSS before removing children
   // This preserves styling from <style> blocks that would be lost when tspans are removed
   const cssFontSizes = parseCssFontSizes(doc)
   const originalFontSize = getFontSize(element, cssFontSizes)
+
+  // Capture baseline position from the first tspan before clearing children.
+  // Many SVGs use transform="translate(...)" on the <text> element with tspans
+  // at x="0" y="0", so we fall back to the first tspan's coordinates.
+  const firstTspan = element.querySelector('tspan')
+  const baseX = element.getAttribute('x') ?? firstTspan?.getAttribute('x') ?? '0'
+  const baseY = element.getAttribute('y') ?? firstTspan?.getAttribute('y') ?? '0'
 
   while (element.firstChild) {
     element.removeChild(element.firstChild)
@@ -619,20 +747,26 @@ function applySvgTextField(
   // Use the original CSS font-size if available, otherwise fall back to field.fontSize
   const effectiveFontSize = originalFontSize ?? field.fontSize ?? 16
 
+  // Determine lines: use word wrapping if a wrapWidth was detected, otherwise split on newlines
+  let lines: string[]
+  if (field.wrapWidth && field.wrapWidth > 0) {
+    lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, effectiveFontSize)
+  } else {
+    lines = value.split(/\r?\n/)
+  }
+
   if (lines.length <= 1) {
     element.textContent = lines[0] ?? ''
   } else {
-    const baseX = element.getAttribute('x')
-    const baseY = element.getAttribute('y')
     const lineHeight = effectiveFontSize * 1.2
 
     lines.forEach((line, index) => {
       const tspan = doc.createElementNS(SVG_NS, 'tspan')
       if (index === 0) {
-        if (baseX) tspan.setAttribute('x', baseX)
-        if (baseY) tspan.setAttribute('y', baseY)
+        tspan.setAttribute('x', baseX)
+        tspan.setAttribute('y', baseY)
       } else {
-        if (baseX) tspan.setAttribute('x', baseX)
+        tspan.setAttribute('x', baseX)
         tspan.setAttribute('dy', `${lineHeight}`)
       }
       tspan.textContent = line || ' '

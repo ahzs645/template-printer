@@ -23,6 +23,35 @@ const POINTS_PER_INCH = 72
 const DEFAULT_EXPORT_DPI = 300
 const PREVIEW_BASE_WIDTH = 420
 
+/**
+ * Check if rotating a card 90° would give a significantly better fit within a slot.
+ */
+function cardNeedsRotation(
+  cardWidth: number,
+  cardHeight: number,
+  slotWidth: number,
+  slotHeight: number,
+): boolean {
+  const normalScale = Math.min(slotWidth / cardWidth, slotHeight / cardHeight)
+  const rotatedScale = Math.min(slotWidth / cardHeight, slotHeight / cardWidth)
+  return rotatedScale > normalScale * 1.05
+}
+
+/**
+ * Rotate a canvas 90° clockwise, swapping width and height.
+ */
+function rotateCanvas90CW(source: HTMLCanvasElement): HTMLCanvasElement {
+  const rotated = document.createElement('canvas')
+  rotated.width = source.height
+  rotated.height = source.width
+  const ctx = rotated.getContext('2d')
+  if (!ctx) return source
+  ctx.translate(source.height, 0)
+  ctx.rotate(Math.PI / 2)
+  ctx.drawImage(source, 0, 0)
+  return rotated
+}
+
 function asImageValue(value: CardData[string]): ImageValue | undefined {
   if (!value || typeof value !== 'object') return undefined
   if (!('src' in value)) return undefined
@@ -72,7 +101,7 @@ export async function exportWithPrintLayout(
   printLayoutSvgPath: string,
   dpi: number = DEFAULT_EXPORT_DPI,
 ): Promise<void> {
-  const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
   const layout = await loadPrintLayout(printLayoutSvgPath)
 
   const pdfDoc = await PDFDocument.create()
@@ -87,10 +116,17 @@ export async function exportWithPrintLayout(
     height: layout.heightPoints,
   })
 
+  let { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
+
+  // Rotate the card if it would fit significantly better in the layout slots
+  const firstSlot = layout.placeholders[0]
+  if (firstSlot && cardNeedsRotation(cardWidthPoints, cardHeightPoints, firstSlot.width, firstSlot.height)) {
+    canvas = rotateCanvas90CW(canvas)
+    ;[cardWidthPoints, cardHeightPoints] = [cardHeightPoints, cardWidthPoints]
+  }
+
   const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
   const cardImage = await pdfDoc.embedPng(cardPngBytes)
-
-  const { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
 
   layout.placeholders.forEach((slot) => {
     const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
@@ -195,7 +231,14 @@ export async function exportBatchCardsWithPrintLayout(
 ): Promise<void> {
   const layout = await loadPrintLayout(printLayoutSvgPath)
   const pdfDoc = await PDFDocument.create()
-  const { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
+  let { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
+
+  // Check if cards need rotation to fit the layout slots
+  const firstSlot = layout.placeholders[0]
+  const rotate = firstSlot != null && cardNeedsRotation(cardWidthPoints, cardHeightPoints, firstSlot.width, firstSlot.height)
+  if (rotate) {
+    ;[cardWidthPoints, cardHeightPoints] = [cardHeightPoints, cardWidthPoints]
+  }
 
   // Pre-render each user's card as a PDF image
   const cardImages = []
@@ -210,7 +253,8 @@ export async function exportBatchCardsWithPrintLayout(
       }
     })
 
-    const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    if (rotate) canvas = rotateCanvas90CW(canvas)
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
     cardImages.push(cardImage)
@@ -320,7 +364,7 @@ export async function exportWithJsonLayout(
   layout: PrintLayout,
   dpi: number = DEFAULT_EXPORT_DPI,
 ): Promise<void> {
-  const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
 
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
   const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
@@ -330,21 +374,35 @@ export async function exportWithJsonLayout(
   // Calculate positions for all slots on the page (fill with same card)
   const positions = calculateCardPositions(layout, layout.cardsPerPage)
 
+  let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
+
+  // Rotate the card if it would fit significantly better in the slot
+  const firstPos = positions[0]
+  if (firstPos && cardNeedsRotation(cardWidthPt, cardHeightPt, firstPos.width, firstPos.height)) {
+    canvas = rotateCanvas90CW(canvas)
+    ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
+  }
+
   const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
   const cardImage = await pdfDoc.embedPng(cardPngBytes)
 
   const page = pdfDoc.addPage([pageWidth, pageHeight])
 
-  // Place the same card in each slot
+  // Place the same card in each slot, scaling proportionally
   for (const pos of positions) {
-    // PDF coordinates are from bottom-left, so flip Y
+    const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+    const drawWidth = cardWidthPt * scale
+    const drawHeight = cardHeightPt * scale
+    // PDF coordinates are from bottom-left, so flip Y, then center within slot
     const pdfY = pageHeight - pos.y - pos.height
+    const offsetX = pos.x + (pos.width - drawWidth) / 2
+    const offsetY = pdfY + (pos.height - drawHeight) / 2
 
     page.drawImage(cardImage, {
-      x: pos.x,
-      y: pdfY,
-      width: pos.width,
-      height: pos.height,
+      x: offsetX,
+      y: offsetY,
+      width: drawWidth,
+      height: drawHeight,
     })
   }
 
@@ -379,6 +437,16 @@ export async function exportBatchCardsWithJsonLayout(
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
   const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
 
+  let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
+
+  // Check if cards need rotation to fit the layout slots
+  const slotWidth = parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const slotHeight = parseFloat(layout.cardHeight) * POINTS_PER_INCH
+  const rotate = cardNeedsRotation(cardWidthPt, cardHeightPt, slotWidth, slotHeight)
+  if (rotate) {
+    ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
+  }
+
   // Pre-render each user's card
   const cardImages = []
   for (const user of users) {
@@ -392,7 +460,8 @@ export async function exportBatchCardsWithJsonLayout(
       }
     })
 
-    const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    if (rotate) canvas = rotateCanvas90CW(canvas)
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
     cardImages.push(cardImage)
@@ -418,14 +487,19 @@ export async function exportBatchCardsWithJsonLayout(
       if (pos.cardIndex >= cardImages.length) break
       const cardImage = cardImages[pos.cardIndex]
 
-      // PDF coordinates are from bottom-left, so flip Y
+      // Scale proportionally and center within the slot
+      const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+      const drawWidth = cardWidthPt * scale
+      const drawHeight = cardHeightPt * scale
       const pdfY = pageHeight - pos.y - pos.height
+      const offsetX = pos.x + (pos.width - drawWidth) / 2
+      const offsetY = pdfY + (pos.height - drawHeight) / 2
 
       page.drawImage(cardImage, {
-        x: pos.x,
-        y: pdfY,
-        width: pos.width,
-        height: pos.height,
+        x: offsetX,
+        y: offsetY,
+        width: drawWidth,
+        height: drawHeight,
       })
     }
   }
@@ -475,8 +549,12 @@ export async function exportWithSlotAssignments(
     }
   }
 
+  // Check if cards need rotation to fit the layout slots
+  const slotWidth = parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const slotHeight = parseFloat(layout.cardHeight) * POINTS_PER_INCH
+
   // Pre-render each slot's card based on its assignment
-  const cardImages = []
+  const cardImages: Array<{ image: Awaited<ReturnType<typeof pdfDoc.embedPng>>; cardWidthPt: number; cardHeightPt: number } | null> = []
   for (const assignment of slotAssignments) {
     // Determine which template to use
     let template: TemplateMeta | null = null
@@ -529,10 +607,18 @@ export async function exportWithSlotAssignments(
       })
     }
 
-    const canvas = await renderCardToCanvas(template, templateFields, cardData, dpi)
+    let canvas = await renderCardToCanvas(template, templateFields, cardData, dpi)
+    let { widthPoints: cw, heightPoints: ch } = getTemplateSizeInPoints(template)
+
+    // Rotate if this card's orientation doesn't match the slot
+    if (cardNeedsRotation(cw, ch, slotWidth, slotHeight)) {
+      canvas = rotateCanvas90CW(canvas)
+      ;[cw, ch] = [ch, cw]
+    }
+
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
-    cardImages.push(cardImage)
+    cardImages.push({ image: cardImage, cardWidthPt: cw, cardHeightPt: ch })
   }
 
   // Calculate positions for all slots
@@ -553,17 +639,22 @@ export async function exportWithSlotAssignments(
 
     for (const pos of pagePositions) {
       if (pos.cardIndex >= cardImages.length) break
-      const cardImage = cardImages[pos.cardIndex]
-      if (!cardImage) continue  // Skip null images
+      const entry = cardImages[pos.cardIndex]
+      if (!entry) continue  // Skip null images
 
-      // PDF coordinates are from bottom-left, so flip Y
+      // Scale proportionally and center within the slot
+      const scale = Math.min(pos.width / entry.cardWidthPt, pos.height / entry.cardHeightPt)
+      const drawWidth = entry.cardWidthPt * scale
+      const drawHeight = entry.cardHeightPt * scale
       const pdfY = pageHeight - pos.y - pos.height
+      const offsetX = pos.x + (pos.width - drawWidth) / 2
+      const offsetY = pdfY + (pos.height - drawHeight) / 2
 
-      page.drawImage(cardImage, {
-        x: pos.x,
-        y: pdfY,
-        width: pos.width,
-        height: pos.height,
+      page.drawImage(entry.image, {
+        x: offsetX,
+        y: offsetY,
+        width: drawWidth,
+        height: drawHeight,
       })
     }
   }

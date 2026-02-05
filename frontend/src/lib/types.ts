@@ -42,6 +42,7 @@ export type FieldDefinition = {
   fontFamily?: string
   fontWeight?: number
   sourceId?: string
+  wrapWidth?: number
 }
 
 export type CardData = Record<string, CardDataValue>
