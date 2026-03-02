@@ -4,6 +4,7 @@ import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { Input } from './ui/input'
 import type { TemplateSummary } from '../lib/templates'
+import { cn } from '../lib/utils'
 
 type TemplateSelectorProps = {
   title?: string
@@ -76,67 +77,53 @@ export function TemplateSelector({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <div className="flex flex-col gap-3">
       {/* Header with actions */}
-      {title && <h2 style={{ fontSize: '0.875rem', fontWeight: 500 }}>{title}</h2>}
+      {title && <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{title}</h2>}
 
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="flex gap-2">
         {onUploadClick && (
-          <Button variant="outline" size="sm" onClick={onUploadClick} disabled={isLoading} style={{ flex: 1 }}>
-            <Upload style={{ width: '0.875rem', height: '0.875rem', marginRight: '0.5rem' }} />
+          <Button variant="outline" size="sm" onClick={onUploadClick} disabled={isLoading} className="flex-1">
+            <Upload className="mr-2 h-3.5 w-3.5" />
             Upload
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onRetry} disabled={isLoading} style={{ flex: 1 }}>
-          <RefreshCw style={{ width: '0.875rem', height: '0.875rem', marginRight: '0.5rem' }} />
+        <Button variant="outline" size="sm" onClick={onRetry} disabled={isLoading} className="flex-1">
+          <RefreshCw className="mr-2 h-3.5 w-3.5" />
           {isLoading ? 'Refreshing…' : 'Refresh'}
         </Button>
       </div>
 
       {/* Loading state */}
       {isLoading && templates.length === 0 ? (
-        <p style={{ fontSize: '0.875rem', color: '#71717a' }}>Loading templates…</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading templates…</p>
       ) : null}
 
       {/* Error state */}
       {error ? (
-        <p style={{ fontSize: '0.875rem', color: '#dc2626' }}>{error}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : null}
 
       {/* Empty state */}
       {!isLoading && !error && templates.length === 0 ? (
-        <p style={{ fontSize: '0.875rem', color: '#71717a' }}>No templates available yet. Upload one to get started.</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No templates available yet. Upload one to get started.</p>
       ) : null}
 
       {/* Template list */}
       {templates.length > 0 && (
-        <ScrollArea style={{ maxHeight: '200px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <ScrollArea className="max-h-[200px]">
+          <div className="flex flex-col gap-2">
             {templates.map((template) => {
               const isSelected = template.id === selectedId
               const isEditing = editingId === template.id
               return (
                 <div
                   key={template.id}
-                  style={{
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '0.5rem'
-                  }}
+                  className="relative flex items-start gap-2"
                 >
                   {isEditing ? (
                     <div
-                      style={{
-                        flex: 1,
-                        padding: '0.75rem',
-                        border: '1px solid #e4e4e7',
-                        backgroundColor: '#fff',
-                        borderRadius: '0.375rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.5rem'
-                      }}
+                      className="flex flex-1 flex-col gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/60"
                     >
                       <div>
                         <Input
@@ -153,16 +140,16 @@ export function TemplateSelector({
                         />
                       </div>
                       {renameError && (
-                        <p style={{ fontSize: '0.75rem', color: '#dc2626' }}>{renameError}</p>
+                        <p className="text-xs text-red-600 dark:text-red-400">{renameError}</p>
                       )}
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <div className="flex gap-2">
                         <Button
                           size="sm"
                           onClick={() => submitRename(template)}
                           disabled={renaming}
-                          style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                          className="flex items-center gap-1"
                         >
-                          <Check style={{ width: '0.875rem', height: '0.875rem' }} />
+                          <Check className="h-3.5 w-3.5" />
                           {renaming ? 'Saving…' : 'Save'}
                         </Button>
                         <Button
@@ -171,9 +158,9 @@ export function TemplateSelector({
                           size="sm"
                           onClick={cancelRename}
                           disabled={renaming}
-                          style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                          className="flex items-center gap-1"
                         >
-                          <X style={{ width: '0.875rem', height: '0.875rem' }} />
+                          <X className="h-3.5 w-3.5" />
                           Cancel
                         </Button>
                       </div>
@@ -183,39 +170,21 @@ export function TemplateSelector({
                       type="button"
                       onClick={() => onSelect(template)}
                       disabled={isLoading}
-                      style={{
-                        flex: 1,
-                        padding: '0.75rem',
-                        textAlign: 'left',
-                        border: '1px solid',
-                        borderColor: isSelected ? '#18181b' : '#e4e4e7',
-                        backgroundColor: isSelected ? '#fafafa' : '#fff',
-                        borderRadius: '0.375rem',
-                        cursor: isLoading ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.25rem'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected && !isLoading) {
-                          e.currentTarget.style.backgroundColor = '#f9f9f9'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) {
-                          e.currentTarget.style.backgroundColor = '#fff'
-                        }
-                      }}
+                      className={cn(
+                        'flex flex-1 flex-col gap-1 rounded-md border p-3 text-left text-zinc-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 dark:text-zinc-100 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed',
+                        isSelected
+                          ? 'border-zinc-900 bg-zinc-100 dark:border-zinc-500 dark:bg-zinc-800'
+                          : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/70'
+                      )}
                     >
-                      <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{template.name}</span>
+                      <span className="text-sm font-medium">{template.name}</span>
                       {template.description && (
-                        <span style={{ fontSize: '0.75rem', color: '#71717a' }}>{template.description}</span>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">{template.description}</span>
                       )}
                     </button>
                   )}
 
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <div className="flex gap-1">
                     {onRename && !isEditing && (
                       <Button
                         variant="outline"
@@ -226,9 +195,9 @@ export function TemplateSelector({
                         }}
                         disabled={isLoading}
                         title="Rename template"
-                        style={{ flexShrink: 0, padding: '0.5rem' }}
+                        className="shrink-0 px-2"
                       >
-                        <Pencil style={{ width: '0.875rem', height: '0.875rem' }} />
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     )}
 
@@ -242,9 +211,9 @@ export function TemplateSelector({
                         }}
                         disabled={isLoading || renaming}
                         title="Delete template"
-                        style={{ flexShrink: 0, padding: '0.5rem' }}
+                        className="shrink-0 px-2"
                       >
-                        <Trash2 style={{ width: '0.875rem', height: '0.875rem', color: '#dc2626' }} />
+                        <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
                       </Button>
                     )}
                   </div>
