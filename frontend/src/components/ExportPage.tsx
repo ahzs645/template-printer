@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from 'react'
+import { useState, useEffect, useMemo, type ChangeEvent } from 'react'
 import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -54,6 +54,81 @@ export type ExportPageProps = {
   onCardDataChange: (fieldId: string, value: string) => void
   colorProfiles: ColorProfile[]
   colorProfilesLoading: boolean
+}
+
+const POINTS_PER_INCH = 72
+
+function parseNumeric(value: string | null | undefined, fallback: number): number {
+  const parsed = value ? parseFloat(value) : NaN
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function getSvgNaturalSize(svgElement: Element): { width: number; height: number } {
+  const viewBox = svgElement.getAttribute('viewBox')
+  if (viewBox) {
+    const parts = viewBox.split(/\s+/).map(Number)
+    if (parts.length === 4) {
+      const width = parts[2]
+      const height = parts[3]
+      if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        return { width, height }
+      }
+    }
+  }
+
+  const width = parseNumeric(svgElement.getAttribute('width'), 100)
+  const height = parseNumeric(svgElement.getAttribute('height'), 100)
+  return {
+    width: width > 0 ? width : 100,
+    height: height > 0 ? height : 100,
+  }
+}
+
+function shouldRotateCard(cardWidth: number, cardHeight: number, slotWidth: number, slotHeight: number): boolean {
+  const normalScale = Math.min(slotWidth / cardWidth, slotHeight / cardHeight)
+  const rotatedScale = Math.min(slotWidth / cardHeight, slotHeight / cardWidth)
+  return rotatedScale > normalScale * 1.05
+}
+
+function prefixSvgIds(root: Element, prefix: string) {
+  const idMap = new Map<string, string>()
+
+  root.querySelectorAll('[id]').forEach((el) => {
+    const oldId = el.getAttribute('id')
+    if (!oldId) return
+    const newId = `${prefix}${oldId}`
+    idMap.set(oldId, newId)
+    el.setAttribute('id', newId)
+  })
+
+  if (idMap.size === 0) return
+
+  const updateAttrValue = (value: string | null) => {
+    if (!value) return value
+    return value.replace(/url\(#([^)]+)\)/g, (_, id: string) => {
+      const mapped = idMap.get(id)
+      return `url(#${mapped ?? id})`
+    })
+  }
+
+  root.querySelectorAll('*').forEach((el) => {
+    Array.from(el.attributes).forEach((attr) => {
+      const name = attr.name
+      let value = attr.value
+      if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
+        const id = value.slice(1)
+        const mapped = idMap.get(id)
+        if (mapped) {
+          el.setAttribute(name, `#${mapped}`)
+        }
+        return
+      }
+      if (value.includes('url(#')) {
+        value = updateAttrValue(value) as string
+        el.setAttribute(name, value)
+      }
+    })
+  })
 }
 
 export function ExportPage({
@@ -238,47 +313,6 @@ export function ExportPage({
       const layoutSvg = layoutDoc.documentElement
       const placeholderGroups = ['Topcard', 'Bottomcard']
 
-      const prefixSvgIds = (root: Element, prefix: string) => {
-        const idMap = new Map<string, string>()
-        root.querySelectorAll('[id]').forEach((el) => {
-          const oldId = el.getAttribute('id')
-          if (!oldId) return
-          const newId = `${prefix}${oldId}`
-          idMap.set(oldId, newId)
-          el.setAttribute('id', newId)
-        })
-
-        if (idMap.size === 0) return
-
-        const updateAttrValue = (value: string | null) => {
-          if (!value) return value
-          let updated = value.replace(/url\(#([^)]+)\)/g, (_, id: string) => {
-            const mapped = idMap.get(id)
-            return `url(#${mapped ?? id})`
-          })
-          return updated
-        }
-
-        root.querySelectorAll('*').forEach((el) => {
-          Array.from(el.attributes).forEach((attr) => {
-            const name = attr.name
-            let value = attr.value
-            if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
-              const id = value.slice(1)
-              const mapped = idMap.get(id)
-              if (mapped) {
-                el.setAttribute(name, `#${mapped}`)
-              }
-              return
-            }
-            if (value.includes('url(#')) {
-              value = updateAttrValue(value) as string
-              el.setAttribute(name, value)
-            }
-          })
-        })
-      }
-
       placeholderGroups.forEach((groupId, index) => {
         const group = layoutDoc.getElementById(groupId)
         if (!group) return
@@ -368,6 +402,149 @@ export function ExportPage({
     exportOptions.slotUserIds,
     renderCardForUser,
   ])
+
+  const jsonCompositePreview = useMemo(() => {
+    if (!selectedJsonLayout || !previewSvg) {
+      return null
+    }
+
+    try {
+      const parser = new DOMParser()
+      const serializer = new XMLSerializer()
+      const svgNs = 'http://www.w3.org/2000/svg'
+
+      const pageWidth = parseNumeric(selectedJsonLayout.pageWidth, 0) * POINTS_PER_INCH
+      const pageHeight = parseNumeric(selectedJsonLayout.pageHeight, 0) * POINTS_PER_INCH
+      const cardWidth = parseNumeric(selectedJsonLayout.cardWidth, 0) * POINTS_PER_INCH
+      const cardHeight = parseNumeric(selectedJsonLayout.cardHeight, 0) * POINTS_PER_INCH
+      const pageMarginTop = parseNumeric(selectedJsonLayout.pageMarginTop, 0) * POINTS_PER_INCH
+      const pageMarginLeft = parseNumeric(selectedJsonLayout.pageMarginLeft, 0) * POINTS_PER_INCH
+      const cardSpacingX = parseNumeric(selectedJsonLayout.cardMarginRight, 0) * POINTS_PER_INCH
+      const cardSpacingY = parseNumeric(selectedJsonLayout.cardMarginBottom, 0) * POINTS_PER_INCH
+
+      if (pageWidth <= 0 || pageHeight <= 0 || cardWidth <= 0 || cardHeight <= 0) {
+        return previewSvg
+      }
+
+      const slotCount = Math.max(
+        1,
+        exportOptions.slotAssignments.length > 0
+          ? exportOptions.slotAssignments.length
+          : selectedJsonLayout.cardsPerPage,
+      )
+
+      const layoutDoc = document.implementation.createDocument(svgNs, 'svg', null)
+      const layoutSvg = layoutDoc.documentElement
+      layoutSvg.setAttribute('xmlns', svgNs)
+      layoutSvg.setAttribute('width', `${pageWidth}`)
+      layoutSvg.setAttribute('height', `${pageHeight}`)
+      layoutSvg.setAttribute('viewBox', `0 0 ${pageWidth} ${pageHeight}`)
+
+      const pageBackground = layoutDoc.createElementNS(svgNs, 'rect')
+      pageBackground.setAttribute('x', '0')
+      pageBackground.setAttribute('y', '0')
+      pageBackground.setAttribute('width', `${pageWidth}`)
+      pageBackground.setAttribute('height', `${pageHeight}`)
+      pageBackground.setAttribute('fill', '#ffffff')
+      pageBackground.setAttribute('stroke', '#d4d4d8')
+      pageBackground.setAttribute('stroke-width', '1')
+      layoutSvg.appendChild(pageBackground)
+
+      const slotsOverlay = layoutDoc.createElementNS(svgNs, 'g')
+      slotsOverlay.setAttribute('fill', 'none')
+      slotsOverlay.setAttribute('stroke', '#94a3b8')
+      slotsOverlay.setAttribute('stroke-width', '0.75')
+      slotsOverlay.setAttribute('stroke-dasharray', '3 2')
+
+      for (let index = 0; index < slotCount; index += 1) {
+        const slotAssignment = exportOptions.slotAssignments[index]
+        const col = index % selectedJsonLayout.cardsPerRow
+        const row = Math.floor(index / selectedJsonLayout.cardsPerRow)
+        const slotX = pageMarginLeft + col * (cardWidth + cardSpacingX)
+        const slotY = pageMarginTop + row * (cardHeight + cardSpacingY)
+
+        const slotOutline = layoutDoc.createElementNS(svgNs, 'rect')
+        slotOutline.setAttribute('x', `${slotX}`)
+        slotOutline.setAttribute('y', `${slotY}`)
+        slotOutline.setAttribute('width', `${cardWidth}`)
+        slotOutline.setAttribute('height', `${cardHeight}`)
+        slotsOverlay.appendChild(slotOutline)
+
+        let cardMarkup: string | null = previewSvg
+
+        if (slotAssignment?.source && slotAssignment.source !== 'custom') {
+          const renderedForUser = renderCardForUser(slotAssignment.source)
+          if (renderedForUser) {
+            cardMarkup = renderedForUser
+          }
+        } else if (exportOptions.mode === 'database') {
+          const userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
+          if (userIdForSlot) {
+            const renderedForUser = renderCardForUser(userIdForSlot)
+            if (renderedForUser) {
+              cardMarkup = renderedForUser
+            }
+          }
+        }
+
+        if (!cardMarkup) continue
+
+        const cardDoc = parser.parseFromString(cardMarkup, 'image/svg+xml')
+        const cardSvg = cardDoc.documentElement
+        if (cardSvg.tagName.toLowerCase() !== 'svg') continue
+
+        const { width: cardNaturalWidth, height: cardNaturalHeight } = getSvgNaturalSize(cardSvg)
+        const rotateCard = shouldRotateCard(cardNaturalWidth, cardNaturalHeight, cardWidth, cardHeight)
+        const fitWidth = rotateCard ? cardNaturalHeight : cardNaturalWidth
+        const fitHeight = rotateCard ? cardNaturalWidth : cardNaturalHeight
+        const scale = Math.min(cardWidth / fitWidth, cardHeight / fitHeight)
+
+        const scaledWidth = fitWidth * scale
+        const scaledHeight = fitHeight * scale
+        const offsetX = slotX + (cardWidth - scaledWidth) / 2
+        const offsetY = slotY + (cardHeight - scaledHeight) / 2
+
+        const cardGroup = layoutDoc.createElementNS(svgNs, 'g')
+        if (rotateCard) {
+          cardGroup.setAttribute(
+            'transform',
+            `matrix(0, ${scale}, ${-scale}, 0, ${offsetX}, ${offsetY + cardNaturalWidth * scale})`,
+          )
+        } else {
+          cardGroup.setAttribute('transform', `matrix(${scale}, 0, 0, ${scale}, ${offsetX}, ${offsetY})`)
+        }
+
+        const cardClone = cardSvg.cloneNode(true) as Element
+        prefixSvgIds(cardClone, `json-slot${index + 1}-`)
+
+        Array.from(cardClone.children).forEach((child) => {
+          const clonedChild = child.cloneNode(true)
+          cardGroup.appendChild(clonedChild)
+        })
+
+        layoutSvg.appendChild(cardGroup)
+      }
+
+      layoutSvg.appendChild(slotsOverlay)
+      return serializer.serializeToString(layoutSvg)
+    } catch (error) {
+      console.error('Failed to create JSON layout preview:', error)
+      return previewSvg
+    }
+  }, [
+    selectedJsonLayout,
+    previewSvg,
+    exportOptions.slotAssignments,
+    exportOptions.mode,
+    exportOptions.selectedUserIds,
+    renderCardForUser,
+  ])
+
+  const layoutCompositePreview = selectedJsonLayout
+    ? jsonCompositePreview
+    : selectedPrintLayout
+      ? compositePreview
+      : null
 
   const handleExport = () => {
     onExport(exportOptions)
@@ -808,11 +985,11 @@ export function ExportPage({
               <FolderOpen size={48} className="empty-state__icon" />
               <p className="empty-state__text">Select a card design to preview export</p>
             </div>
-          ) : compositePreview && selectedPrintLayout ? (
+          ) : layoutCompositePreview ? (
             <div
               className="export-preview-svg"
               style={{ maxWidth: 600, width: '100%' }}
-              dangerouslySetInnerHTML={{ __html: compositePreview }}
+              dangerouslySetInnerHTML={{ __html: layoutCompositePreview }}
             />
           ) : previewSvg ? (
             <div
