@@ -3,7 +3,8 @@ import type { CardData, FieldDefinition } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import { parseField } from '../lib/fieldParser'
 import { renderSvgWithData } from '../lib/svgTemplate'
-import { getFieldMappings } from '../lib/api'
+import { generateAutoMappings } from '../lib/autoMapping'
+import { useStorage } from '../lib/storage'
 import type { ExportMode } from '../components/ExportPage'
 
 type UseExportPreviewParams = {
@@ -25,37 +26,60 @@ export function useExportPreview({
   fields,
   renderedSvg,
 }: UseExportPreviewParams) {
+  const storage = useStorage()
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
   const [customValues, setCustomValues] = useState<Record<string, string>>({})
 
   // Fetch field mappings when template or mode changes
   useEffect(() => {
-    if (mode === 'database' && selectedTemplateId) {
-      getFieldMappings(selectedTemplateId)
-        .then(mappings => {
-          const mappingsMap: Record<string, string> = {}
-          const customValuesMap: Record<string, string> = {}
-          mappings.forEach(m => {
-            mappingsMap[m.svgLayerId] = m.standardFieldName
-            if (m.customValue) {
-              customValuesMap[m.svgLayerId] = m.customValue
+    if (!selectedTemplateId) {
+      setFieldMappings({})
+      setCustomValues({})
+      return
+    }
+
+    storage.getFieldMappings(selectedTemplateId)
+      .then(mappings => {
+        const mappingsMap: Record<string, string> = {}
+        const customValuesMap: Record<string, string> = {}
+        mappings.forEach(m => {
+          mappingsMap[m.svgLayerId] = m.standardFieldName
+          if (m.customValue) {
+            customValuesMap[m.svgLayerId] = m.customValue
+          }
+        })
+
+        if (Object.keys(mappingsMap).length === 0) {
+          const autoMappings = generateAutoMappings(fields)
+          autoMappings.forEach((mapping) => {
+            mappingsMap[mapping.svgLayerId] = mapping.standardFieldName
+            if (mapping.customValue) {
+              customValuesMap[mapping.svgLayerId] = mapping.customValue
             }
           })
-          setFieldMappings(mappingsMap)
-          setCustomValues(customValuesMap)
+        }
+
+        setFieldMappings(mappingsMap)
+        setCustomValues(customValuesMap)
+      })
+      .catch(err => {
+        console.error('Failed to load field mappings:', err)
+        const fallbackMappings = generateAutoMappings(fields)
+        const mappingsMap: Record<string, string> = {}
+        const customValuesMap: Record<string, string> = {}
+        fallbackMappings.forEach((mapping) => {
+          mappingsMap[mapping.svgLayerId] = mapping.standardFieldName
+          if (mapping.customValue) {
+            customValuesMap[mapping.svgLayerId] = mapping.customValue
+          }
         })
-        .catch(err => {
-          console.error('Failed to load field mappings:', err)
-        })
-    }
-  }, [selectedTemplateId, mode])
+        setFieldMappings(mappingsMap)
+        setCustomValues(customValuesMap)
+      })
+  }, [selectedTemplateId, storage, fields])
 
   const renderCardForUser = useCallback(
     (userId: string | null | undefined): string | null => {
-      if (mode === 'quick') {
-        return renderedSvg
-      }
-
       if (!templateMeta || !userId) {
         return renderedSvg
       }
@@ -83,7 +107,7 @@ export function useExportPreview({
         return renderedSvg
       }
     },
-    [mode, templateMeta, users, fieldMappings, customValues, fields, renderedSvg],
+    [templateMeta, users, fieldMappings, customValues, fields, renderedSvg],
   )
 
   // Generate preview SVG

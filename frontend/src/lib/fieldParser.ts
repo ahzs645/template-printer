@@ -6,6 +6,7 @@
  * Examples:
  * - fullName_Last_Comma_First_MiddleInitial_AllCaps → "WOLVES, TIMBER J."
  * - fullName_First_MiddleInitial_Last_TitleCase → "Timber J. Wolves"
+ * - fullName_First_LineBreak_Last → "Timber\nWolves"
  * - firstName_AllCaps → "TIMBER"
  * - studentId → "12345"
  * - photo → ImageValue with user's photo
@@ -205,6 +206,7 @@ function getSimpleField(fieldType: string, userData: UserData): string {
  * - Last_Comma_First → "Wolves, Timber"
  * - Last_Comma_First_MiddleInitial → "Wolves, Timber J."
  * - First_Last → "Timber Wolves"
+ * - First_LineBreak_Last → "Timber\nWolves"
  * - First_MiddleInitial_Last → "Timber J. Wolves"
  * - First_MiddleName_Last → "Timber John Wolves"
  */
@@ -241,6 +243,12 @@ function formatFullName(formatParts: string[], userData: UserData, capitalizatio
         result += ','
         break
 
+      case 'linebreak':
+      case 'newline':
+      case 'break':
+        result += '\n'
+        break
+
       default:
         // Unknown part, skip
         break
@@ -252,9 +260,11 @@ function formatFullName(formatParts: string[], userData: UserData, capitalizatio
     // - After a comma (space is added by comma logic)
     if (i < formatParts.length - 1) {
       const nextPart = formatParts[i + 1].toLowerCase()
-      if (part !== 'comma' && nextPart !== 'comma') {
+      const isLineBreak = part === 'linebreak' || part === 'newline' || part === 'break'
+      const nextIsLineBreak = nextPart === 'linebreak' || nextPart === 'newline' || nextPart === 'break'
+      if (!isLineBreak && !nextIsLineBreak && part !== 'comma' && nextPart !== 'comma') {
         result += ' '
-      } else if (part === 'comma') {
+      } else if (part === 'comma' && !nextIsLineBreak) {
         result += ' '
       }
     }

@@ -45,6 +45,8 @@ const STANDARD_FIELDS = [
   // Composite name fields (First-Last Order)
   'fullName_First_Last',
   'fullName_First_Last_AllCaps',
+  'fullName_First_LineBreak_Last',
+  'fullName_First_LineBreak_Last_AllCaps',
   'fullName_First_MiddleInitial_Last',
   'fullName_First_MiddleInitial_Last_AllCaps',
   'fullName_First_Middle_Last',
