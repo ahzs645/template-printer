@@ -5,7 +5,7 @@ import { parseField } from './fieldParser'
 
 // Slot assignment for multi-card layouts
 export type SlotAssignment = {
-  source: 'custom' | string  // 'custom' for manual fields, or user ID
+  source: 'custom' | 'empty' | string  // 'custom' for manual fields, 'empty' for a blank slot, or user ID
   side: 'front' | 'back'     // Which side of the card design to use
   templateId?: string | null // Optional: override with a different design template
 }
@@ -562,6 +562,11 @@ export async function exportWithSlotAssignments(
   // Pre-render each slot's card based on its assignment
   const cardImages: Array<{ image: Awaited<ReturnType<typeof pdfDoc.embedPng>>; cardWidthPt: number; cardHeightPt: number } | null> = []
   for (const assignment of slotAssignments) {
+    if (assignment.source === 'empty') {
+      cardImages.push(null)
+      continue
+    }
+
     // Determine which template to use
     let template: TemplateMeta | null = null
     let slotFieldMappings = fieldMappings

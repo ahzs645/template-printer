@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, type ChangeEvent } from 'react'
-import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard } from 'lucide-react'
+import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard, Ban } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Label } from './ui/label'
@@ -328,6 +328,11 @@ export function ExportPage({
 
         let cardMarkup: string | null = previewSvg
         if (exportOptions.mode === 'database') {
+          const slotAssignment = exportOptions.slotAssignments[index]
+          if (slotAssignment?.source === 'empty') {
+            return
+          }
+
           const slotUserIds = exportOptions.slotUserIds
           let userIdForSlot: string | null = null
 
@@ -472,6 +477,10 @@ export function ExportPage({
 
         let cardMarkup: string | null = previewSvg
 
+        if (slotAssignment?.source === 'empty') {
+          continue
+        }
+
         if (slotAssignment?.source && slotAssignment.source !== 'custom') {
           const renderedForUser = renderCardForUser(slotAssignment.source)
           if (renderedForUser) {
@@ -508,7 +517,7 @@ export function ExportPage({
         if (rotateCard) {
           cardGroup.setAttribute(
             'transform',
-            `matrix(0, ${scale}, ${-scale}, 0, ${offsetX}, ${offsetY + cardNaturalWidth * scale})`,
+            `matrix(0, ${scale}, ${-scale}, 0, ${offsetX + cardNaturalHeight * scale}, ${offsetY})`,
           )
         } else {
           cardGroup.setAttribute('transform', `matrix(${scale}, 0, 0, ${scale}, ${offsetX}, ${offsetY})`)
@@ -883,6 +892,12 @@ export function ExportPage({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="empty">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Ban size={12} />
+                            Empty Slot
+                          </span>
+                        </SelectItem>
                         <SelectItem value="custom">
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <Zap size={12} />
@@ -932,6 +947,12 @@ export function ExportPage({
                       </button>
                     </div>
                   </div>
+
+                  {assignment.source === 'empty' && (
+                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                      This slot will export as blank.
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -939,6 +960,20 @@ export function ExportPage({
             {/* Quick fill options */}
             {exportOptions.slotAssignments.length > 1 && (
               <div style={{ marginTop: 10, display: 'flex', gap: 4 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1, fontSize: 10 }}
+                  onClick={() => {
+                    const newAssignments = exportOptions.slotAssignments.map((a) => ({
+                      ...a,
+                      source: 'empty' as const,
+                    }))
+                    updateExportOptions({ slotAssignments: newAssignments })
+                  }}
+                >
+                  All Empty
+                </button>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
