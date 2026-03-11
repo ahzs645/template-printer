@@ -15,6 +15,7 @@
 
 /* Export preview SVG scaling */
 .export-preview-svg svg {
+  width: 100%;
   max-width: 100%;
   height: auto;
   display: block;

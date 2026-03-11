@@ -986,17 +986,20 @@ export function ExportPage({
               <p className="empty-state__text">Select a card design to preview export</p>
             </div>
           ) : layoutCompositePreview ? (
-            <div
-              className="export-preview-svg"
-              style={{ maxWidth: 600, width: '100%' }}
-              dangerouslySetInnerHTML={{ __html: layoutCompositePreview }}
-            />
+            <div className="canvas-preview-frame">
+              <div
+                className="export-preview-svg"
+                style={{ width: '100%', height: '100%' }}
+                dangerouslySetInnerHTML={{ __html: layoutCompositePreview }}
+              />
+            </div>
           ) : previewSvg ? (
-            <div
-              className="canvas-preview"
-              style={{ maxWidth: 420, width: '100%' }}
-              dangerouslySetInnerHTML={{ __html: previewSvg }}
-            />
+            <div className="canvas-preview-frame">
+              <div
+                className="canvas-preview"
+                dangerouslySetInnerHTML={{ __html: previewSvg }}
+              />
+            </div>
           ) : (
             <div className="empty-state">
               <FileText size={48} className="empty-state__icon" />
