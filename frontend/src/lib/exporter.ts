@@ -1,4 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
+import { jsPDF } from 'jspdf'
+import 'svg2pdf.js'
 import type { CardData, FieldDefinition, ImageValue, PrintLayout, TemplateMeta } from './types'
 import type { UserData } from './fieldParser'
 import { parseField } from './fieldParser'
@@ -22,6 +24,8 @@ const MM_PER_INCH = 25.4
 const POINTS_PER_INCH = 72
 const DEFAULT_EXPORT_DPI = 300
 const PREVIEW_BASE_WIDTH = 420
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const XLINK_NS = 'http://www.w3.org/1999/xlink'
 
 /**
  * Check if rotating a card 90° would give a significantly better fit within a slot.
@@ -63,7 +67,13 @@ export async function exportSingleCard(
   fields: FieldDefinition[],
   cardData: CardData,
   dpi: number = DEFAULT_EXPORT_DPI,
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportSingleCardVector(template, fields, cardData)
+    return
+  }
+
   const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
   const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
 
@@ -100,7 +110,13 @@ export async function exportWithPrintLayout(
   cardData: CardData,
   printLayoutSvgPath: string,
   dpi: number = DEFAULT_EXPORT_DPI,
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportWithPrintLayoutVector(template, fields, cardData, printLayoutSvgPath)
+    return
+  }
+
   let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
   const layout = await loadPrintLayout(printLayoutSvgPath)
 
@@ -167,7 +183,13 @@ export async function exportBatchCards(
   fieldMappings: Record<string, string>, // Map of field IDs to standard field names
   dpi: number = DEFAULT_EXPORT_DPI,
   customValues?: Record<string, string>, // Map of field IDs to custom static values
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportBatchCardsVector(template, fields, users, fieldMappings, customValues)
+    return
+  }
+
   const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
   const pdfDoc = await PDFDocument.create()
 
@@ -228,7 +250,20 @@ export async function exportBatchCardsWithPrintLayout(
   printLayoutSvgPath: string,
   dpi: number = DEFAULT_EXPORT_DPI,
   customValues?: Record<string, string>,
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportBatchCardsWithPrintLayoutVector(
+      template,
+      fields,
+      users,
+      fieldMappings,
+      printLayoutSvgPath,
+      customValues,
+    )
+    return
+  }
+
   const layout = await loadPrintLayout(printLayoutSvgPath)
   const pdfDoc = await PDFDocument.create()
   let { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
@@ -369,7 +404,13 @@ export async function exportWithJsonLayout(
   cardData: CardData,
   layout: PrintLayout,
   dpi: number = DEFAULT_EXPORT_DPI,
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportWithJsonLayoutVector(template, fields, cardData, layout)
+    return
+  }
+
   let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
 
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
@@ -437,7 +478,20 @@ export async function exportBatchCardsWithJsonLayout(
   layout: PrintLayout,
   dpi: number = DEFAULT_EXPORT_DPI,
   customValues?: Record<string, string>,
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportBatchCardsWithJsonLayoutVector(
+      template,
+      fields,
+      users,
+      fieldMappings,
+      layout,
+      customValues,
+    )
+    return
+  }
+
   const pdfDoc = await PDFDocument.create()
 
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
@@ -540,7 +594,25 @@ export async function exportWithSlotAssignments(
   customValues?: Record<string, string>,
   allTemplates?: Map<string, TemplateMeta>,  // Map of template ID to template meta
   allFieldMappings?: Map<string, Record<string, string>>,  // Map of template ID to field mappings
+  maintainVectors = false,
 ): Promise<void> {
+  if (maintainVectors) {
+    await exportWithSlotAssignmentsVector(
+      defaultTemplate,
+      backTemplate,
+      fields,
+      customCardData,
+      users,
+      fieldMappings,
+      layout,
+      slotAssignments,
+      customValues,
+      allTemplates,
+      allFieldMappings,
+    )
+    return
+  }
+
   const pdfDoc = await PDFDocument.create()
 
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
@@ -675,6 +747,471 @@ export async function exportWithSlotAssignments(
 
   downloadLink.href = downloadUrl
   downloadLink.download = `${baseName}-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+type VectorCardEntry = {
+  svgMarkup: string
+  cardWidthPt: number
+  cardHeightPt: number
+}
+
+async function exportSingleCardVector(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  cardData: CardData,
+): Promise<void> {
+  const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
+  const pdf = createVectorPdfDocument(widthPoints, heightPoints)
+  await drawSvgMarkupOnPdf(pdf, renderSvgWithData(template, fields, cardData), 0, 0, widthPoints, heightPoints)
+  downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-card'}.pdf`)
+}
+
+async function exportWithPrintLayoutVector(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  cardData: CardData,
+  printLayoutSvgPath: string,
+): Promise<void> {
+  const layout = await loadPrintLayout(printLayoutSvgPath)
+  const pdf = createVectorPdfDocument(layout.widthPoints, layout.heightPoints)
+  await drawSvgMarkupOnPdf(pdf, layout.backgroundSvg, 0, 0, layout.widthPoints, layout.heightPoints)
+
+  let cardMarkup = renderSvgWithData(template, fields, cardData)
+  let { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
+
+  const firstSlot = layout.placeholders[0]
+  if (firstSlot && cardNeedsRotation(cardWidthPoints, cardHeightPoints, firstSlot.width, firstSlot.height)) {
+    cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
+    ;[cardWidthPoints, cardHeightPoints] = [cardHeightPoints, cardWidthPoints]
+  }
+
+  for (const slot of layout.placeholders) {
+    const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+    const drawWidth = cardWidthPoints * scale
+    const drawHeight = cardHeightPoints * scale
+    const offsetX = slot.x + (slot.width - drawWidth) / 2
+    const offsetY = slot.y + (slot.height - drawHeight) / 2
+    await drawSvgMarkupOnPdf(pdf, cardMarkup, offsetX, offsetY, drawWidth, drawHeight)
+  }
+
+  downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-card'}-print-layout.pdf`)
+}
+
+async function exportBatchCardsVector(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  customValues?: Record<string, string>,
+): Promise<void> {
+  const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
+  const pdf = createVectorPdfDocument(widthPoints, heightPoints)
+
+  for (const [index, user] of users.entries()) {
+    if (index > 0) {
+      pdf.addPage([widthPoints, heightPoints], getPageOrientation(widthPoints, heightPoints))
+    }
+
+    const cardData: CardData = {}
+    fields.forEach(field => {
+      const layerId = field.sourceId || field.id
+      const standardFieldName = fieldMappings[layerId]
+      if (standardFieldName) {
+        const customValue = customValues?.[layerId]
+        cardData[field.id] = parseField(standardFieldName, user, customValue)
+      }
+    })
+
+    await drawSvgMarkupOnPdf(pdf, renderSvgWithData(template, fields, cardData), 0, 0, widthPoints, heightPoints)
+  }
+
+  downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-cards'}-batch-${users.length}-cards.pdf`)
+}
+
+async function exportBatchCardsWithPrintLayoutVector(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  printLayoutSvgPath: string,
+  customValues?: Record<string, string>,
+): Promise<void> {
+  const layout = await loadPrintLayout(printLayoutSvgPath)
+  const pdf = createVectorPdfDocument(layout.widthPoints, layout.heightPoints)
+  let { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
+
+  const firstSlot = layout.placeholders[0]
+  const rotate = firstSlot != null && cardNeedsRotation(cardWidthPoints, cardHeightPoints, firstSlot.width, firstSlot.height)
+  if (rotate) {
+    ;[cardWidthPoints, cardHeightPoints] = [cardHeightPoints, cardWidthPoints]
+  }
+
+  const cardMarkups: string[] = []
+  for (const user of users) {
+    const cardData: CardData = {}
+    fields.forEach(field => {
+      const layerId = field.sourceId || field.id
+      const standardFieldName = fieldMappings[layerId]
+      if (standardFieldName) {
+        const customValue = customValues?.[layerId]
+        cardData[field.id] = parseField(standardFieldName, user, customValue)
+      }
+    })
+
+    let cardMarkup = renderSvgWithData(template, fields, cardData)
+    if (rotate) {
+      cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
+    }
+    cardMarkups.push(cardMarkup)
+  }
+
+  let cardIndex = 0
+  let isFirstPage = true
+  while (cardIndex < cardMarkups.length) {
+    if (!isFirstPage) {
+      pdf.addPage([layout.widthPoints, layout.heightPoints], getPageOrientation(layout.widthPoints, layout.heightPoints))
+    }
+    isFirstPage = false
+
+    await drawSvgMarkupOnPdf(pdf, layout.backgroundSvg, 0, 0, layout.widthPoints, layout.heightPoints)
+
+    for (const slot of layout.placeholders) {
+      if (cardIndex >= cardMarkups.length) break
+      const cardMarkup = cardMarkups[cardIndex++]
+      const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+      const drawWidth = cardWidthPoints * scale
+      const drawHeight = cardHeightPoints * scale
+      const offsetX = slot.x + (slot.width - drawWidth) / 2
+      const offsetY = slot.y + (slot.height - drawHeight) / 2
+      await drawSvgMarkupOnPdf(pdf, cardMarkup, offsetX, offsetY, drawWidth, drawHeight)
+    }
+  }
+
+  downloadBlob(
+    pdf.output('blob'),
+    `${template.name.replace(/\.svg$/i, '') || 'id-cards'}-batch-${users.length}-cards-print-layout.pdf`,
+  )
+}
+
+async function exportWithJsonLayoutVector(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  cardData: CardData,
+  layout: PrintLayout,
+): Promise<void> {
+  const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
+  const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
+  const positions = calculateCardPositions(layout, layout.cardsPerPage)
+  const pdf = createVectorPdfDocument(pageWidth, pageHeight)
+
+  let cardMarkup = renderSvgWithData(template, fields, cardData)
+  let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
+  const firstPos = positions[0]
+  if (firstPos && cardNeedsRotation(cardWidthPt, cardHeightPt, firstPos.width, firstPos.height)) {
+    cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
+    ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
+  }
+
+  for (const pos of positions) {
+    const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+    const drawWidth = cardWidthPt * scale
+    const drawHeight = cardHeightPt * scale
+    const offsetX = pos.x + (pos.width - drawWidth) / 2
+    const offsetY = pos.y + (pos.height - drawHeight) / 2
+    await drawSvgMarkupOnPdf(pdf, cardMarkup, offsetX, offsetY, drawWidth, drawHeight)
+  }
+
+  downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-card'}-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`)
+}
+
+async function exportBatchCardsWithJsonLayoutVector(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  layout: PrintLayout,
+  customValues?: Record<string, string>,
+): Promise<void> {
+  const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
+  const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
+  const positions = calculateCardPositions(layout, users.length)
+  const pageGroups = new Map<number, CardPosition[]>()
+  const pdf = createVectorPdfDocument(pageWidth, pageHeight)
+
+  let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
+  const firstPos = positions[0]
+  const slotWidth = firstPos?.width ?? parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const slotHeight = firstPos?.height ?? parseFloat(layout.cardHeight) * POINTS_PER_INCH
+  const rotate = cardNeedsRotation(cardWidthPt, cardHeightPt, slotWidth, slotHeight)
+  if (rotate) {
+    ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
+  }
+
+  const cardMarkups: string[] = []
+  for (const user of users) {
+    const cardData: CardData = {}
+    fields.forEach(field => {
+      const layerId = field.sourceId || field.id
+      const standardFieldName = fieldMappings[layerId]
+      if (standardFieldName) {
+        const customValue = customValues?.[layerId]
+        cardData[field.id] = parseField(standardFieldName, user, customValue)
+      }
+    })
+
+    let cardMarkup = renderSvgWithData(template, fields, cardData)
+    if (rotate) {
+      cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
+    }
+    cardMarkups.push(cardMarkup)
+  }
+
+  for (const pos of positions) {
+    if (!pageGroups.has(pos.page)) {
+      pageGroups.set(pos.page, [])
+    }
+    pageGroups.get(pos.page)!.push(pos)
+  }
+
+  let isFirstPage = true
+  for (const [_pageNum, pagePositions] of pageGroups) {
+    if (!isFirstPage) {
+      pdf.addPage([pageWidth, pageHeight], getPageOrientation(pageWidth, pageHeight))
+    }
+    isFirstPage = false
+
+    for (const pos of pagePositions) {
+      if (pos.cardIndex >= cardMarkups.length) break
+      const cardMarkup = cardMarkups[pos.cardIndex]
+      const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+      const drawWidth = cardWidthPt * scale
+      const drawHeight = cardHeightPt * scale
+      const offsetX = pos.x + (pos.width - drawWidth) / 2
+      const offsetY = pos.y + (pos.height - drawHeight) / 2
+      await drawSvgMarkupOnPdf(pdf, cardMarkup, offsetX, offsetY, drawWidth, drawHeight)
+    }
+  }
+
+  downloadBlob(
+    pdf.output('blob'),
+    `${template.name.replace(/\.svg$/i, '') || 'id-cards'}-batch-${users.length}-cards-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`,
+  )
+}
+
+async function exportWithSlotAssignmentsVector(
+  defaultTemplate: TemplateMeta | null,
+  backTemplate: TemplateMeta | null,
+  fields: FieldDefinition[],
+  customCardData: CardData,
+  users: UserData[],
+  fieldMappings: Record<string, string>,
+  layout: PrintLayout,
+  slotAssignments: SlotAssignment[],
+  customValues?: Record<string, string>,
+  allTemplates?: Map<string, TemplateMeta>,
+  allFieldMappings?: Map<string, Record<string, string>>,
+): Promise<void> {
+  const pdf = createVectorPdfDocument(
+    parseFloat(layout.pageWidth) * POINTS_PER_INCH,
+    parseFloat(layout.pageHeight) * POINTS_PER_INCH,
+  )
+  const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
+  const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
+
+  const userMap = new Map<string, UserData>()
+  for (const user of users) {
+    if (user.id) {
+      userMap.set(user.id, user)
+    }
+  }
+
+  const positions = calculateCardPositions(layout, slotAssignments.length)
+  const firstPos = positions[0]
+  const slotWidth = firstPos?.width ?? parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const slotHeight = firstPos?.height ?? parseFloat(layout.cardHeight) * POINTS_PER_INCH
+
+  const cardEntries: Array<VectorCardEntry | null> = []
+  for (const assignment of slotAssignments) {
+    if (assignment.source === 'empty') {
+      cardEntries.push(null)
+      continue
+    }
+
+    let template: TemplateMeta | null = null
+    let slotFieldMappings = fieldMappings
+
+    if (assignment.templateId && allTemplates?.has(assignment.templateId)) {
+      template = allTemplates.get(assignment.templateId)!
+      if (allFieldMappings?.has(assignment.templateId)) {
+        slotFieldMappings = allFieldMappings.get(assignment.templateId)!
+      }
+    } else {
+      template = assignment.side === 'back' && backTemplate ? backTemplate : defaultTemplate
+    }
+
+    if (!template) {
+      cardEntries.push(null)
+      continue
+    }
+
+    const templateFields = fields
+    let slotCardData: CardData
+    if (assignment.source === 'custom') {
+      slotCardData = customCardData
+    } else {
+      const user = userMap.get(assignment.source)
+      if (!user) {
+        cardEntries.push(null)
+        continue
+      }
+
+      slotCardData = {}
+      templateFields.forEach(field => {
+        const layerId = field.sourceId || field.id
+        const standardFieldName = slotFieldMappings[layerId]
+        if (standardFieldName) {
+          const customValue = customValues?.[layerId]
+          slotCardData[field.id] = parseField(standardFieldName, user, customValue)
+        }
+      })
+    }
+
+    let svgMarkup = renderSvgWithData(template, templateFields, slotCardData)
+    let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
+    if (cardNeedsRotation(cardWidthPt, cardHeightPt, slotWidth, slotHeight)) {
+      svgMarkup = rotateSvgMarkup90CW(svgMarkup, template.width, template.height)
+      ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
+    }
+
+    cardEntries.push({ svgMarkup, cardWidthPt, cardHeightPt })
+  }
+
+  const pageGroups = new Map<number, CardPosition[]>()
+  for (const pos of positions) {
+    if (!pageGroups.has(pos.page)) {
+      pageGroups.set(pos.page, [])
+    }
+    pageGroups.get(pos.page)!.push(pos)
+  }
+
+  let isFirstPage = true
+  for (const [_pageNum, pagePositions] of pageGroups) {
+    if (!isFirstPage) {
+      pdf.addPage([pageWidth, pageHeight], getPageOrientation(pageWidth, pageHeight))
+    }
+    isFirstPage = false
+
+    for (const pos of pagePositions) {
+      if (pos.cardIndex >= cardEntries.length) break
+      const entry = cardEntries[pos.cardIndex]
+      if (!entry) continue
+
+      const scale = Math.min(pos.width / entry.cardWidthPt, pos.height / entry.cardHeightPt)
+      const drawWidth = entry.cardWidthPt * scale
+      const drawHeight = entry.cardHeightPt * scale
+      const offsetX = pos.x + (pos.width - drawWidth) / 2
+      const offsetY = pos.y + (pos.height - drawHeight) / 2
+      await drawSvgMarkupOnPdf(pdf, entry.svgMarkup, offsetX, offsetY, drawWidth, drawHeight)
+    }
+  }
+
+  downloadBlob(
+    pdf.output('blob'),
+    `${defaultTemplate?.name.replace(/\.svg$/i, '') || 'id-cards'}-${layout.name.replace(/[^a-z0-9]/gi, '-')}.pdf`,
+  )
+}
+
+function createVectorPdfDocument(pageWidth: number, pageHeight: number): jsPDF {
+  return new jsPDF({
+    orientation: getPageOrientation(pageWidth, pageHeight),
+    unit: 'pt',
+    format: [pageWidth, pageHeight],
+    compress: true,
+    putOnlyUsedFonts: true,
+  })
+}
+
+function getPageOrientation(pageWidth: number, pageHeight: number): 'portrait' | 'landscape' {
+  return pageWidth > pageHeight ? 'landscape' : 'portrait'
+}
+
+async function drawSvgMarkupOnPdf(
+  pdf: jsPDF,
+  svgMarkup: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): Promise<void> {
+  const svgElement = parseSvgMarkup(svgMarkup)
+  await pdf.svg(svgElement, {
+    x,
+    y,
+    width,
+    height,
+    loadExternalStyleSheets: false,
+  })
+}
+
+function parseSvgMarkup(svgMarkup: string): SVGElement {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+  return doc.documentElement as unknown as SVGElement
+}
+
+function rotateSvgMarkup90CW(svgMarkup: string, fallbackWidth: number, fallbackHeight: number): string {
+  const parser = new DOMParser()
+  const originalDoc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+  const originalRoot = originalDoc.documentElement
+  const { width, height } = getSvgSourceSize(originalRoot, fallbackWidth, fallbackHeight)
+  const wrapperDoc = parser.parseFromString(
+    `<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}" viewBox="0 0 ${height} ${width}" width="${height}" height="${width}"></svg>`,
+    'image/svg+xml',
+  )
+  const wrapperRoot = wrapperDoc.documentElement
+  const group = wrapperDoc.createElementNS(SVG_NS, 'g')
+  group.setAttribute('transform', `translate(${height} 0) rotate(90)`)
+
+  const nestedSvg = wrapperDoc.importNode(originalRoot, true) as Element
+  nestedSvg.setAttribute('x', '0')
+  nestedSvg.setAttribute('y', '0')
+  nestedSvg.setAttribute('width', String(width))
+  nestedSvg.setAttribute('height', String(height))
+  if (!nestedSvg.getAttribute('viewBox')) {
+    nestedSvg.setAttribute('viewBox', `0 0 ${width} ${height}`)
+  }
+
+  group.appendChild(nestedSvg)
+  wrapperRoot.appendChild(group)
+  return new XMLSerializer().serializeToString(wrapperRoot)
+}
+
+function getSvgSourceSize(svgRoot: Element, fallbackWidth: number, fallbackHeight: number): { width: number; height: number } {
+  const viewBox = svgRoot.getAttribute('viewBox')
+  if (viewBox) {
+    const parts = viewBox.split(/[\s,]+/).map(Number)
+    if (parts.length === 4 && Number.isFinite(parts[2]) && Number.isFinite(parts[3]) && parts[2] > 0 && parts[3] > 0) {
+      return { width: parts[2], height: parts[3] }
+    }
+  }
+
+  const width = parseFloat(svgRoot.getAttribute('width') ?? '')
+  const height = parseFloat(svgRoot.getAttribute('height') ?? '')
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : fallbackWidth,
+    height: Number.isFinite(height) && height > 0 ? height : fallbackHeight,
+  }
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const downloadUrl = URL.createObjectURL(blob)
+  const downloadLink = document.createElement('a')
+  downloadLink.href = downloadUrl
+  downloadLink.download = fileName
   document.body.appendChild(downloadLink)
   downloadLink.click()
   downloadLink.remove()

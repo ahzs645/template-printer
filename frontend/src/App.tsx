@@ -620,7 +620,8 @@ function App() {
                 options.resolution,
                 customValuesMap,
                 allTemplates,
-                allFieldMappings
+                allFieldMappings,
+                options.maintainVectors,
               )
               setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
             } else {
@@ -632,7 +633,8 @@ function App() {
                 fieldMappingsMap,
                 jsonLayout,
                 options.resolution,
-                customValuesMap
+                customValuesMap,
+                options.maintainVectors,
               )
               setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with "${jsonLayout.name}" layout.`)
             }
@@ -648,11 +650,20 @@ function App() {
               fieldMappingsMap,
               printLayout.svgPath,
               options.resolution,
-              customValuesMap
+              customValuesMap,
+              options.maintainVectors,
             )
             setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
           } else {
-            await exportBatchCards(template, fields, selectedUsers, fieldMappingsMap, options.resolution, customValuesMap)
+            await exportBatchCards(
+              template,
+              fields,
+              selectedUsers,
+              fieldMappingsMap,
+              options.resolution,
+              customValuesMap,
+              options.maintainVectors,
+            )
             setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
           }
         } else {
@@ -734,7 +745,8 @@ function App() {
                 options.resolution,
                 customValuesMap,
                 allTemplates,
-                allFieldMappings
+                allFieldMappings,
+                options.maintainVectors,
               )
               setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
             } else {
@@ -744,7 +756,8 @@ function App() {
                 fields,
                 cardData,
                 jsonLayout,
-                options.resolution
+                options.resolution,
+                options.maintainVectors,
               )
               setStatusMessage(`Exported PDF with "${jsonLayout.name}" layout.`)
             }
@@ -758,11 +771,12 @@ function App() {
               fields,
               cardData,
               printLayout.svgPath,
-              options.resolution
+              options.resolution,
+              options.maintainVectors,
             )
             setStatusMessage(`Exported PDF with print layout "${printLayout.name}".`)
           } else {
-            await exportSingleCard(template, fields, cardData, options.resolution)
+            await exportSingleCard(template, fields, cardData, options.resolution, options.maintainVectors)
             setStatusMessage(`Exported single card PDF.`)
           }
         } else {
