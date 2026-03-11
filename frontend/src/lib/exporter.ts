@@ -334,19 +334,25 @@ export function calculateCardPositions(layout: PrintLayout, cardCount: number): 
   const cardSpacingY = parseFloat(layout.cardMarginBottom) * POINTS_PER_INCH
   const cardWidth = parseFloat(layout.cardWidth) * POINTS_PER_INCH
   const cardHeight = parseFloat(layout.cardHeight) * POINTS_PER_INCH
+  const bleedWidth = parseFloat(layout.bleedWidth) * POINTS_PER_INCH
+  const bleedHeight = parseFloat(layout.bleedHeight) * POINTS_PER_INCH
+  const placedWidth = cardWidth + bleedWidth
+  const placedHeight = cardHeight + bleedHeight
 
   for (let i = 0; i < cardCount; i++) {
     const slotIndex = i % layout.cardsPerPage
     const col = slotIndex % layout.cardsPerRow
     const row = Math.floor(slotIndex / layout.cardsPerRow)
     const page = Math.floor(i / layout.cardsPerPage)
+    const trimX = pageMarginLeft + col * (cardWidth + cardSpacingX)
+    const trimY = pageMarginTop + row * (cardHeight + cardSpacingY)
 
     positions.push({
       page,
-      x: pageMarginLeft + col * (cardWidth + cardSpacingX),
-      y: pageMarginTop + row * (cardHeight + cardSpacingY),
-      width: cardWidth,
-      height: cardHeight,
+      x: trimX - bleedWidth / 2,
+      y: trimY - bleedHeight / 2,
+      width: placedWidth,
+      height: placedHeight,
       cardIndex: i,
     })
   }
@@ -437,11 +443,13 @@ export async function exportBatchCardsWithJsonLayout(
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
   const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
 
+  const positions = calculateCardPositions(layout, users.length)
   let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
 
-  // Check if cards need rotation to fit the layout slots
-  const slotWidth = parseFloat(layout.cardWidth) * POINTS_PER_INCH
-  const slotHeight = parseFloat(layout.cardHeight) * POINTS_PER_INCH
+  // Check if cards need rotation to fit the placed slot, including bleed.
+  const firstPos = positions[0]
+  const slotWidth = firstPos?.width ?? parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const slotHeight = firstPos?.height ?? parseFloat(layout.cardHeight) * POINTS_PER_INCH
   const rotate = cardNeedsRotation(cardWidthPt, cardHeightPt, slotWidth, slotHeight)
   if (rotate) {
     ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
@@ -466,9 +474,6 @@ export async function exportBatchCardsWithJsonLayout(
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
     cardImages.push(cardImage)
   }
-
-  // Calculate all positions
-  const positions = calculateCardPositions(layout, users.length)
 
   // Group positions by page
   const pageGroups = new Map<number, CardPosition[]>()
@@ -549,9 +554,10 @@ export async function exportWithSlotAssignments(
     }
   }
 
-  // Check if cards need rotation to fit the layout slots
-  const slotWidth = parseFloat(layout.cardWidth) * POINTS_PER_INCH
-  const slotHeight = parseFloat(layout.cardHeight) * POINTS_PER_INCH
+  const positions = calculateCardPositions(layout, slotAssignments.length)
+  const firstPos = positions[0]
+  const slotWidth = firstPos?.width ?? parseFloat(layout.cardWidth) * POINTS_PER_INCH
+  const slotHeight = firstPos?.height ?? parseFloat(layout.cardHeight) * POINTS_PER_INCH
 
   // Pre-render each slot's card based on its assignment
   const cardImages: Array<{ image: Awaited<ReturnType<typeof pdfDoc.embedPng>>; cardWidthPt: number; cardHeightPt: number } | null> = []
@@ -620,9 +626,6 @@ export async function exportWithSlotAssignments(
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
     cardImages.push({ image: cardImage, cardWidthPt: cw, cardHeightPt: ch })
   }
-
-  // Calculate positions for all slots
-  const positions = calculateCardPositions(layout, slotAssignments.length)
 
   // Group positions by page
   const pageGroups = new Map<number, CardPosition[]>()

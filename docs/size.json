@@ -62,6 +62,9 @@
   {
     "id": 40,
     "name": "Canon MP PVC Card Tray - 2 cards",
+    "pageWidth": "4.7244",
+    "pageHeight": "4.7244",
+    "orientation": "L",
     "pageMarginLeft": "0.6736",
     "pageMarginTop": "0.1304",
     "cardMarginRight": "0.0000",
