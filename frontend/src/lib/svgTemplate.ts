@@ -1,3 +1,4 @@
+import opentype from 'opentype.js'
 import type {
   CardData,
   CardDataValue,
@@ -905,4 +906,148 @@ function applySvgImageField(
   image.setAttribute('data-idcard-generated', 'true')
 
   element.appendChild(image)
+}
+
+/**
+ * Convert all <text> elements in SVG markup to <path> outlines using opentype.js.
+ * This preserves the exact font appearance as vector paths without requiring
+ * the fonts to be installed when viewing the PDF.
+ */
+export async function convertTextToOutlines(
+  svgMarkup: string,
+  fontBuffers: Map<string, ArrayBuffer>,
+): Promise<string> {
+  const parsedFonts = new Map<string, opentype.Font>()
+  for (const [name, buffer] of fontBuffers) {
+    try {
+      const font = opentype.parse(buffer.slice(0))
+      parsedFonts.set(name, font)
+    } catch (e) {
+      console.warn(`Could not parse font "${name}" for outline conversion:`, e)
+    }
+  }
+  if (parsedFonts.size === 0) return svgMarkup
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+  const root = doc.documentElement
+
+  const textElements = Array.from(root.querySelectorAll('text'))
+  for (const textEl of textElements) {
+    if (textEl.closest('defs')) continue
+
+    const fontName = getFontFamily(textEl)
+    const font = resolveOutlineFont(fontName, parsedFonts)
+    if (!font) continue
+
+    const fontSize = parseFloat(textEl.getAttribute('font-size') || '16')
+    const transform = textEl.getAttribute('transform')
+    const fill = getFillColor(textEl) || '#000000'
+    const textAnchor = textEl.getAttribute('text-anchor')?.toLowerCase()
+
+    const group = doc.createElementNS(SVG_NS, 'g')
+    if (transform) group.setAttribute('transform', transform)
+
+    const tspans = Array.from(textEl.children).filter(
+      (child) => child.tagName.toLowerCase() === 'tspan',
+    )
+
+    if (tspans.length === 0) {
+      const text = textEl.textContent || ''
+      if (!text.trim()) continue
+
+      let x = parseFloat(textEl.getAttribute('x') || '0')
+      const y = parseFloat(textEl.getAttribute('y') || '0')
+
+      if (textAnchor === 'middle') {
+        x -= font.getAdvanceWidth(text, fontSize) / 2
+      } else if (textAnchor === 'end') {
+        x -= font.getAdvanceWidth(text, fontSize)
+      }
+
+      const path = font.getPath(text, x, y, fontSize)
+      const d = path.toPathData(2)
+      if (d) {
+        const pathEl = doc.createElementNS(SVG_NS, 'path')
+        pathEl.setAttribute('d', d)
+        pathEl.setAttribute('fill', fill)
+        group.appendChild(pathEl)
+      }
+    } else {
+      let currentY = parseFloat(textEl.getAttribute('y') || '0')
+
+      for (const tspan of tspans) {
+        const text = tspan.textContent || ''
+        if (!text.trim()) continue
+
+        const tspanFontFamily = getFontFamily(tspan)
+        const tspanFont = tspanFontFamily ? resolveOutlineFont(tspanFontFamily, parsedFonts) || font : font
+        const tspanFontSize =
+          parseFloat(tspan.getAttribute('font-size') || '') || fontSize
+        const tspanFill = getFillColor(tspan) || fill
+
+        const yAttr = tspan.getAttribute('y')
+        const dyAttr = tspan.getAttribute('dy')
+        if (yAttr !== null && yAttr !== '') {
+          currentY = parseFloat(yAttr)
+        } else if (dyAttr !== null && dyAttr !== '') {
+          currentY += parseFloat(dyAttr)
+        }
+
+        let x = parseFloat(
+          tspan.getAttribute('x') ?? textEl.getAttribute('x') ?? '0',
+        )
+
+        const anchor =
+          tspan.getAttribute('text-anchor')?.toLowerCase() || textAnchor
+        if (anchor === 'middle') {
+          x -= tspanFont.getAdvanceWidth(text, tspanFontSize) / 2
+        } else if (anchor === 'end') {
+          x -= tspanFont.getAdvanceWidth(text, tspanFontSize)
+        }
+
+        const path = tspanFont.getPath(text, x, currentY, tspanFontSize)
+        const d = path.toPathData(2)
+        if (d) {
+          const pathEl = doc.createElementNS(SVG_NS, 'path')
+          pathEl.setAttribute('d', d)
+          pathEl.setAttribute('fill', tspanFill)
+          group.appendChild(pathEl)
+        }
+      }
+    }
+
+    textEl.parentNode?.replaceChild(group, textEl)
+  }
+
+  return new XMLSerializer().serializeToString(root)
+}
+
+function resolveOutlineFont(
+  fontFamily: string | undefined,
+  parsedFonts: Map<string, opentype.Font>,
+): opentype.Font | undefined {
+  if (!fontFamily) {
+    const first = parsedFonts.values().next()
+    return first.done ? undefined : first.value
+  }
+
+  const normalized = fontFamily.replace(/['"]/g, '').trim()
+
+  // Exact match (case-insensitive)
+  for (const [name, font] of parsedFonts) {
+    if (name.toLowerCase() === normalized.toLowerCase()) return font
+  }
+
+  // Partial match
+  for (const [name, font] of parsedFonts) {
+    if (
+      name.toLowerCase().includes(normalized.toLowerCase()) ||
+      normalized.toLowerCase().includes(name.toLowerCase())
+    ) {
+      return font
+    }
+  }
+
+  return undefined
 }

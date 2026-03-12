@@ -54,7 +54,7 @@ import { useCardDesigns } from './hooks/useCardDesigns'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
-import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments } from './lib/exporter'
+import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments, setOutlineFontBuffers, clearOutlineFontBuffers } from './lib/exporter'
 import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
 import { isAutoMappable } from './lib/autoMapping'
@@ -527,6 +527,26 @@ function App() {
     setIsExporting(true)
     setErrorMessage(null)
 
+    // Load font data for text-to-outlines conversion in vector PDF exports
+    if (options.format === 'pdf' && options.maintainVectors) {
+      try {
+        const savedFonts = await storage.listFonts()
+        const fontBuffers = new Map<string, ArrayBuffer>()
+        for (const font of savedFonts) {
+          const binaryString = atob(font.fontData)
+          const buffer = new ArrayBuffer(binaryString.length)
+          const view = new Uint8Array(buffer)
+          for (let i = 0; i < binaryString.length; i++) {
+            view[i] = binaryString.charCodeAt(i)
+          }
+          fontBuffers.set(font.fontName, buffer)
+        }
+        setOutlineFontBuffers(fontBuffers)
+      } catch (err) {
+        console.warn('Failed to load fonts for outline conversion:', err)
+      }
+    }
+
     try {
       if (options.mode === 'database') {
         if (options.selectedUserIds.length === 0) {
@@ -789,6 +809,7 @@ function App() {
         error instanceof Error ? error.message : `Failed to export ${options.format.toUpperCase()}`
       )
     } finally {
+      clearOutlineFontBuffers()
       setIsExporting(false)
     }
   }

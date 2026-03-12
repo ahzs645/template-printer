@@ -14,6 +14,7 @@ export type SlotAssignment = {
 import {
   buildCanvasFontString,
   clamp,
+  convertTextToOutlines,
   loadImageElement,
   loadSvgAsImage,
   renderSvgWithData,
@@ -26,6 +27,17 @@ const DEFAULT_EXPORT_DPI = 300
 const PREVIEW_BASE_WIDTH = 420
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const XLINK_NS = 'http://www.w3.org/1999/xlink'
+
+// Module-level font buffer cache for text-to-outlines conversion in vector PDF exports
+let _outlineFontBuffers: Map<string, ArrayBuffer> | null = null
+
+export function setOutlineFontBuffers(fontBuffers: Map<string, ArrayBuffer>): void {
+  _outlineFontBuffers = fontBuffers
+}
+
+export function clearOutlineFontBuffers(): void {
+  _outlineFontBuffers = null
+}
 
 /**
  * Check if rotating a card 90° would give a significantly better fit within a slot.
@@ -1147,7 +1159,11 @@ async function drawSvgMarkupOnPdf(
   width: number,
   height: number,
 ): Promise<void> {
-  const svgElement = parseSvgMarkup(svgMarkup)
+  let markup = svgMarkup
+  if (_outlineFontBuffers && _outlineFontBuffers.size > 0) {
+    markup = await convertTextToOutlines(markup, _outlineFontBuffers)
+  }
+  const svgElement = parseSvgMarkup(markup)
   await pdf.svg(svgElement, {
     x,
     y,
