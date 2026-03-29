@@ -1,4 +1,7 @@
-import { AR } from 'js-aruco2';
+import pkg from 'js-aruco2'
+import { generateArucoMarker } from './aruco'
+
+const { AR } = pkg
 
 // Enhanced color analysis utilities
 export interface ColorSample {
@@ -21,6 +24,38 @@ export interface AnalysisResult {
   };
   canvasDimensions?: { width: number; height: number };
 }
+
+interface MarkerCorner {
+  x: number
+  y: number
+}
+
+interface MarkerBounds {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+  width: number
+  height: number
+  center: { x: number; y: number }
+}
+
+interface MarkerCandidate {
+  rawId: number
+  logicalId: number | null
+  corners: MarkerCorner[]
+  bounds: MarkerBounds
+  area: number
+  aspectRatio: number
+}
+
+const EXPECTED_MARKER_PATTERNS = [0, 1, 2, 3].map((id) => ({
+  id,
+  rotations: buildMarkerRotations(generateArucoMarker(id, 100).matrix)
+}))
+
+const MAX_PATTERN_DISTANCE = 4
+const MIN_PATTERN_DISTANCE_GAP = 3
 
 // Get average color from a region, filtering out outliers
 export function getAverageColor(
@@ -71,6 +106,113 @@ export function getAverageColor(
   const b = Math.round(avg.b / count);
 
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+function rotateMatrixClockwise(matrix: number[][]): number[][] {
+  const size = matrix.length
+  return Array.from({ length: size }, (_, row) =>
+    Array.from({ length: size }, (_, col) => matrix[size - col - 1][row])
+  )
+}
+
+function buildMarkerRotations(matrix: number[][]): number[][][] {
+  const rotations = [matrix]
+  for (let i = 1; i < 4; i++) {
+    rotations.push(rotateMatrixClockwise(rotations[i - 1]))
+  }
+  return rotations
+}
+
+function matrixDistance(a: number[][], b: number[][]): number {
+  let distance = 0
+  for (let row = 0; row < a.length; row++) {
+    for (let col = 0; col < a[row].length; col++) {
+      if (a[row][col] !== b[row][col]) {
+        distance++
+      }
+    }
+  }
+  return distance
+}
+
+function getMarkerBounds(corners: MarkerCorner[]): MarkerBounds {
+  const xs = corners.map((corner) => corner.x)
+  const ys = corners.map((corner) => corner.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
+    center: {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2
+    }
+  }
+}
+
+function sampleMarkerMatrix(
+  imageData: ImageData,
+  corners: MarkerCorner[],
+  matrixSize: number = 7
+): number[][] {
+  const bounds = getMarkerBounds(corners)
+  const matrix: number[][] = []
+
+  for (let row = 0; row < matrixSize; row++) {
+    matrix[row] = []
+    for (let col = 0; col < matrixSize; col++) {
+      const startX = bounds.minX + ((col + 0.25) * bounds.width) / matrixSize
+      const endX = bounds.minX + ((col + 0.75) * bounds.width) / matrixSize
+      const startY = bounds.minY + ((row + 0.25) * bounds.height) / matrixSize
+      const endY = bounds.minY + ((row + 0.75) * bounds.height) / matrixSize
+
+      let brightnessSum = 0
+      let count = 0
+
+      for (let y = Math.max(0, Math.floor(startY)); y <= Math.min(imageData.height - 1, Math.floor(endY)); y++) {
+        for (let x = Math.max(0, Math.floor(startX)); x <= Math.min(imageData.width - 1, Math.floor(endX)); x++) {
+          const index = (y * imageData.width + x) * 4
+          brightnessSum += imageData.data[index] + imageData.data[index + 1] + imageData.data[index + 2]
+          count++
+        }
+      }
+
+      const averageBrightness = brightnessSum / Math.max(1, count) / 3
+      matrix[row][col] = averageBrightness > 127 ? 1 : 0
+    }
+  }
+
+  return matrix
+}
+
+function matchMarkerPattern(imageData: ImageData, corners: MarkerCorner[]) {
+  const sampledMatrix = sampleMarkerMatrix(imageData, corners)
+  const scores = EXPECTED_MARKER_PATTERNS
+    .map((pattern) => ({
+      id: pattern.id,
+      distance: Math.min(...pattern.rotations.map((rotation) => matrixDistance(sampledMatrix, rotation)))
+    }))
+    .sort((a, b) => a.distance - b.distance)
+
+  if (scores.length < 2) return null
+
+  const best = scores[0]
+  const second = scores[1]
+
+  if (best.distance > MAX_PATTERN_DISTANCE) return null
+  if ((second.distance - best.distance) < MIN_PATTERN_DISTANCE_GAP) return null
+
+  return {
+    id: best.id,
+    distance: best.distance
+  }
 }
 
 // Enhanced color detection with perspective correction
@@ -128,15 +270,16 @@ export async function analyzeColorChart(
   };
 }
 
-// Marker ID mapping: our generated 7x7 markers (5x5 pattern + border) produce these IDs in ARUCO_MIP_36h12
-// Position 0 (top-left) -> ID 72
-// Position 1 (top-right) -> ID 151 (checkerboard pattern)
-// Position 2 (bottom-left) -> ID 27
-// Position 3 (bottom-right) -> ID 164
+// Marker ID mapping: isolated markers usually decode to these IDs, but in the full chart
+// js-aruco2 can sometimes report alternate IDs due to neighboring swatches. We treat these
+// IDs as hints and fall back to direct 7x7 pattern matching against the rendered marker.
 const MARKER_ID_MAP: { [detected: number]: number } = {
   72: 0,   // top-left
+  178: 0,  // top-left (observed in full chart render)
   151: 1,  // top-right (checkerboard pattern)
+  175: 1,  // top-right (observed in full chart render)
   27: 2,   // bottom-left
+  181: 2,  // bottom-left (observed in full chart render)
   164: 3   // bottom-right
 };
 
@@ -156,7 +299,7 @@ function detectArucoMarkers(imageData: ImageData): Array<{
     console.log(`Raw detection found ${detected.length} markers`);
     if (detected.length > 0) {
       console.log('Raw marker IDs:', detected.map((m: { id: number }) => m.id).join(', '));
-      return processDetectedMarkers(detected);
+      return processDetectedMarkers(detected, imageData);
     }
   } catch (e) {
     console.log('ARUCO_MIP_36h12 detection failed:', e);
@@ -171,7 +314,7 @@ function detectArucoMarkers(imageData: ImageData): Array<{
     console.log(`Default detector found ${detected.length} markers`);
     if (detected.length > 0) {
       console.log('Raw marker IDs:', detected.map((m: { id: number }) => m.id).join(', '));
-      return processDetectedMarkers(detected);
+      return processDetectedMarkers(detected, imageData);
     }
   } catch (e) {
     console.log('Default detector failed:', e);
@@ -181,75 +324,94 @@ function detectArucoMarkers(imageData: ImageData): Array<{
   return [];
 }
 
-function processDetectedMarkers(detectedJsArucoMarkers: Array<{ id: number; corners: Array<{ x: number; y: number }> }>): Array<{
+function processDetectedMarkers(
+  detectedJsArucoMarkers: Array<{ id: number; corners: Array<{ x: number; y: number }> }>,
+  imageData: ImageData
+): Array<{
   id: number;
   corners: Array<{ x: number; y: number }>;
 }> {
   console.log('js-aruco2 raw detected', detectedJsArucoMarkers.length, 'markers');
 
-  // Expected marker IDs from ARUCO_MIP_36h12 dictionary (59, 73, 127, 155)
   const expectedDetectedIds = Object.keys(MARKER_ID_MAP).map(Number);
   console.log('Looking for marker IDs:', expectedDetectedIds);
 
-  const markers = detectedJsArucoMarkers
-    .filter((marker: { id: number }) => {
-      // Only accept our expected corner marker IDs
-      const isExpected = expectedDetectedIds.includes(marker.id);
-      if (isExpected) {
-        console.log(`Found expected marker ID ${marker.id} -> maps to position ${MARKER_ID_MAP[marker.id]}`);
+  const minArea = 200
+  const validCandidates: MarkerCandidate[] = detectedJsArucoMarkers
+    .map((marker) => {
+      const corners = marker.corners.map((corner) => ({ x: corner.x, y: corner.y }))
+      const bounds = getMarkerBounds(corners)
+      const area = bounds.width * bounds.height
+      const aspectRatio = Math.max(bounds.width, bounds.height) / Math.max(1, Math.min(bounds.width, bounds.height))
+
+      return {
+        rawId: marker.id,
+        logicalId: MARKER_ID_MAP[marker.id] ?? null,
+        corners,
+        bounds,
+        area,
+        aspectRatio
       }
-      return isExpected;
     })
-    .map((marker: { id: number; corners: Array<{ x: number; y: number }> }) => ({
-      // Map detected ID to our logical position ID (0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right)
-      id: MARKER_ID_MAP[marker.id],
-      corners: [
-        { x: marker.corners[0].x, y: marker.corners[0].y },
-        { x: marker.corners[1].x, y: marker.corners[1].y },
-        { x: marker.corners[2].x, y: marker.corners[2].y },
-        { x: marker.corners[3].x, y: marker.corners[3].y }
-      ]
-    }))
-    .filter((marker: { id: number; corners: Array<{ x: number; y: number }> }) => {
-      const width = Math.abs(marker.corners[1].x - marker.corners[0].x);
-      const height = Math.abs(marker.corners[2].y - marker.corners[0].y);
-      const area = width * height;
-      const minArea = 200; // Minimum area threshold
-
-      // Check aspect ratio - markers should be roughly square
-      const aspectRatio = Math.max(width, height) / Math.min(width, height);
-      const isSquarish = aspectRatio < 2.0;
-
-      const isValid = area > minArea && isSquarish;
+    .filter((candidate) => {
+      const isValid = candidate.area > minArea && candidate.aspectRatio < 2.0
       if (!isValid) {
-        console.log(`Filtering marker position ${marker.id}: area=${area.toFixed(0)}, aspect=${aspectRatio.toFixed(2)}`);
+        console.log(`Filtering marker ${candidate.rawId}: area=${candidate.area.toFixed(0)}, aspect=${candidate.aspectRatio.toFixed(2)}`)
       }
+      return isValid
+    })
 
-      return isValid;
-    });
+  const patternMatchedMarkers = new Map<number, { id: number; corners: MarkerCorner[]; distance: number; rawId: number }>()
 
-  // Deduplicate - keep only one marker per position ID (the largest one)
-  const uniqueMarkers = new Map<number, { id: number; corners: Array<{ x: number; y: number }> }>();
-  for (const marker of markers) {
-    const existing = uniqueMarkers.get(marker.id);
-    if (!existing) {
-      uniqueMarkers.set(marker.id, marker);
-    } else {
-      const existingArea = Math.abs(existing.corners[1].x - existing.corners[0].x) *
-                          Math.abs(existing.corners[2].y - existing.corners[0].y);
-      const newArea = Math.abs(marker.corners[1].x - marker.corners[0].x) *
-                     Math.abs(marker.corners[2].y - marker.corners[0].y);
-      if (newArea > existingArea) {
-        uniqueMarkers.set(marker.id, marker);
-      }
+  for (const candidate of validCandidates) {
+    const match = matchMarkerPattern(imageData, candidate.corners)
+    if (!match) continue
+
+    const existing = patternMatchedMarkers.get(match.id)
+    if (!existing || match.distance < existing.distance) {
+      patternMatchedMarkers.set(match.id, {
+        id: match.id,
+        corners: candidate.corners,
+        distance: match.distance,
+        rawId: candidate.rawId
+      })
     }
   }
 
-  const finalMarkers = Array.from(uniqueMarkers.values());
-  console.log(`Filtered markers: ${detectedJsArucoMarkers.length} -> ${finalMarkers.length}`);
-  console.log('Valid marker positions:', finalMarkers.map(m => m.id));
+  if (patternMatchedMarkers.size > 0) {
+    const matched = Array.from(patternMatchedMarkers.values())
+      .sort((a, b) => a.id - b.id)
+      .map(({ id, corners, distance, rawId }) => {
+        console.log(`Matched marker pattern ${id} from raw ID ${rawId} with distance ${distance}`)
+        return { id, corners }
+      })
 
-  return finalMarkers;
+    console.log(`Pattern-matched markers: ${detectedJsArucoMarkers.length} -> ${matched.length}`)
+    console.log('Valid marker positions:', matched.map((marker) => marker.id))
+    return matched
+  }
+
+  const uniqueMarkers = new Map<number, { id: number; corners: MarkerCorner[]; area: number }>()
+  for (const candidate of validCandidates) {
+    if (candidate.logicalId === null) continue
+
+    console.log(`Found expected marker ID ${candidate.rawId} -> maps to position ${candidate.logicalId}`)
+
+    const existing = uniqueMarkers.get(candidate.logicalId)
+    if (!existing || candidate.area > existing.area) {
+      uniqueMarkers.set(candidate.logicalId, {
+        id: candidate.logicalId,
+        corners: candidate.corners,
+        area: candidate.area
+      })
+    }
+  }
+
+  const fallbackMarkers = Array.from(uniqueMarkers.values()).map(({ id, corners }) => ({ id, corners }))
+  console.log(`Filtered markers: ${detectedJsArucoMarkers.length} -> ${fallbackMarkers.length}`)
+  console.log('Valid marker positions:', fallbackMarkers.map((marker) => marker.id))
+
+  return fallbackMarkers
 }
 
 function calculateTransform(
