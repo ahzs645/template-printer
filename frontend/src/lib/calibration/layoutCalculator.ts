@@ -21,6 +21,10 @@ export interface CardLayout {
   excludedIndices: number[]; // Grid indices occupied by markers
 }
 
+export function getSwatchSlotCount(layout: CardLayout): number {
+  return (layout.swatchGrid.cols * layout.swatchGrid.rows) - layout.excludedIndices.length
+}
+
 export function calculateCardLayout(
   useMarkers: boolean = true,
   margin: number = 5

@@ -1,4 +1,4 @@
-import type { CardLayout } from "../../lib/calibration/layoutCalculator"
+import { getSwatchSlotCount, type CardLayout } from "../../lib/calibration/layoutCalculator"
 
 interface ColorSwatchChartProps {
   colorChart: string[]
@@ -19,9 +19,11 @@ export function ColorSwatchChart({
   onReplaceSwatch,
   onRemoveSwatch
 }: ColorSwatchChartProps) {
+  const totalSwatches = getSwatchSlotCount(cardLayout)
+
   return (
     <div className="flex-1">
-      <h3 className="text-xl font-medium mb-4">Color Swatch Chart ({useArucoMarkers ? '73' : '77'} colors)</h3>
+      <h3 className="text-xl font-medium mb-4">Color Swatch Chart ({colorChart.length}/{totalSwatches} colors)</h3>
       <div className="grid grid-cols-11 gap-1 p-4 bg-muted/20 rounded-lg">
         {Array.from({ length: 77 }).map((_, gridIndex) => {
           const isMarkerPosition = useArucoMarkers && cardLayout.excludedIndices.includes(gridIndex)

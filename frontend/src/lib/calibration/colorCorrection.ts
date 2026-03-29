@@ -50,6 +50,13 @@ export function applyColorCorrection(svgString: string, profile: ColorProfile): 
   return serializer.serializeToString(svg)
 }
 
+export function correctColorValue(colorValue: string, profile: ColorProfile | null | undefined): string {
+  if (!profile) {
+    return colorValue
+  }
+  return correctColor(colorValue, profile.adjustments)
+}
+
 /**
  * Correct a single color value using the profile adjustments.
  * The profile stores the DIFFERENCE between expected and printed colors,

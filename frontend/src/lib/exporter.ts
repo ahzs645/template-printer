@@ -4,6 +4,8 @@ import 'svg2pdf.js'
 import type { CardData, FieldDefinition, ImageValue, PrintLayout, TemplateMeta } from './types'
 import type { UserData } from './fieldParser'
 import { parseField } from './fieldParser'
+import type { ColorProfile } from './calibration/exportUtils'
+import { applyColorCorrection, correctColorValue } from './calibration/colorCorrection'
 
 // Slot assignment for multi-card layouts
 export type SlotAssignment = {
@@ -74,19 +76,30 @@ function asImageValue(value: CardData[string]): ImageValue | undefined {
   return value as ImageValue
 }
 
+function renderCardSvgMarkup(
+  template: TemplateMeta,
+  fields: FieldDefinition[],
+  cardData: CardData,
+  colorProfile?: ColorProfile | null,
+): string {
+  const svgMarkup = renderSvgWithData(template, fields, cardData)
+  return colorProfile ? applyColorCorrection(svgMarkup, colorProfile) : svgMarkup
+}
+
 export async function exportSingleCard(
   template: TemplateMeta,
   fields: FieldDefinition[],
   cardData: CardData,
   dpi: number = DEFAULT_EXPORT_DPI,
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
-    await exportSingleCardVector(template, fields, cardData)
+    await exportSingleCardVector(template, fields, cardData, colorProfile)
     return
   }
 
-  const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  const canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
   const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
 
   const pdfDoc = await PDFDocument.create()
@@ -123,13 +136,14 @@ export async function exportWithPrintLayout(
   printLayoutSvgPath: string,
   dpi: number = DEFAULT_EXPORT_DPI,
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
-    await exportWithPrintLayoutVector(template, fields, cardData, printLayoutSvgPath)
+    await exportWithPrintLayoutVector(template, fields, cardData, printLayoutSvgPath, colorProfile)
     return
   }
 
-  let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  let canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
   const layout = await loadPrintLayout(printLayoutSvgPath)
 
   const pdfDoc = await PDFDocument.create()
@@ -196,9 +210,10 @@ export async function exportBatchCards(
   dpi: number = DEFAULT_EXPORT_DPI,
   customValues?: Record<string, string>, // Map of field IDs to custom static values
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
-    await exportBatchCardsVector(template, fields, users, fieldMappings, customValues)
+    await exportBatchCardsVector(template, fields, users, fieldMappings, customValues, colorProfile)
     return
   }
 
@@ -222,7 +237,7 @@ export async function exportBatchCards(
     })
 
     // Render this user's card
-    const canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    const canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
     const page = pdfDoc.addPage([widthPoints, heightPoints])
 
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
@@ -263,6 +278,7 @@ export async function exportBatchCardsWithPrintLayout(
   dpi: number = DEFAULT_EXPORT_DPI,
   customValues?: Record<string, string>,
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
     await exportBatchCardsWithPrintLayoutVector(
@@ -272,6 +288,7 @@ export async function exportBatchCardsWithPrintLayout(
       fieldMappings,
       printLayoutSvgPath,
       customValues,
+      colorProfile,
     )
     return
   }
@@ -300,7 +317,7 @@ export async function exportBatchCardsWithPrintLayout(
       }
     })
 
-    let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    let canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
     if (rotate) canvas = rotateCanvas90CW(canvas)
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
@@ -417,13 +434,14 @@ export async function exportWithJsonLayout(
   layout: PrintLayout,
   dpi: number = DEFAULT_EXPORT_DPI,
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
-    await exportWithJsonLayoutVector(template, fields, cardData, layout)
+    await exportWithJsonLayoutVector(template, fields, cardData, layout, colorProfile)
     return
   }
 
-  let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+  let canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
 
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
   const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
@@ -491,6 +509,7 @@ export async function exportBatchCardsWithJsonLayout(
   dpi: number = DEFAULT_EXPORT_DPI,
   customValues?: Record<string, string>,
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
     await exportBatchCardsWithJsonLayoutVector(
@@ -500,6 +519,7 @@ export async function exportBatchCardsWithJsonLayout(
       fieldMappings,
       layout,
       customValues,
+      colorProfile,
     )
     return
   }
@@ -534,7 +554,7 @@ export async function exportBatchCardsWithJsonLayout(
       }
     })
 
-    let canvas = await renderCardToCanvas(template, fields, cardData, dpi)
+    let canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
     if (rotate) canvas = rotateCanvas90CW(canvas)
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
@@ -607,6 +627,7 @@ export async function exportWithSlotAssignments(
   allTemplates?: Map<string, TemplateMeta>,  // Map of template ID to template meta
   allFieldMappings?: Map<string, Record<string, string>>,  // Map of template ID to field mappings
   maintainVectors = false,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   if (maintainVectors) {
     await exportWithSlotAssignmentsVector(
@@ -621,6 +642,7 @@ export async function exportWithSlotAssignments(
       customValues,
       allTemplates,
       allFieldMappings,
+      colorProfile,
     )
     return
   }
@@ -702,7 +724,7 @@ export async function exportWithSlotAssignments(
       })
     }
 
-    let canvas = await renderCardToCanvas(template, templateFields, cardData, dpi)
+    let canvas = await renderCardToCanvas(template, templateFields, cardData, dpi, colorProfile)
     let { widthPoints: cw, heightPoints: ch } = getTemplateSizeInPoints(template)
 
     // Rotate if this card's orientation doesn't match the slot
@@ -775,10 +797,11 @@ async function exportSingleCardVector(
   template: TemplateMeta,
   fields: FieldDefinition[],
   cardData: CardData,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
   const pdf = createVectorPdfDocument(widthPoints, heightPoints)
-  await drawSvgMarkupOnPdf(pdf, renderSvgWithData(template, fields, cardData), 0, 0, widthPoints, heightPoints)
+  await drawSvgMarkupOnPdf(pdf, renderCardSvgMarkup(template, fields, cardData, colorProfile), 0, 0, widthPoints, heightPoints)
   downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-card'}.pdf`)
 }
 
@@ -787,12 +810,13 @@ async function exportWithPrintLayoutVector(
   fields: FieldDefinition[],
   cardData: CardData,
   printLayoutSvgPath: string,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const layout = await loadPrintLayout(printLayoutSvgPath)
   const pdf = createVectorPdfDocument(layout.widthPoints, layout.heightPoints)
   await drawSvgMarkupOnPdf(pdf, layout.backgroundSvg, 0, 0, layout.widthPoints, layout.heightPoints)
 
-  let cardMarkup = renderSvgWithData(template, fields, cardData)
+  let cardMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
   let { widthPoints: cardWidthPoints, heightPoints: cardHeightPoints } = getTemplateSizeInPoints(template)
 
   const firstSlot = layout.placeholders[0]
@@ -819,6 +843,7 @@ async function exportBatchCardsVector(
   users: UserData[],
   fieldMappings: Record<string, string>,
   customValues?: Record<string, string>,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const { widthPoints, heightPoints } = getTemplateSizeInPoints(template)
   const pdf = createVectorPdfDocument(widthPoints, heightPoints)
@@ -838,7 +863,7 @@ async function exportBatchCardsVector(
       }
     })
 
-    await drawSvgMarkupOnPdf(pdf, renderSvgWithData(template, fields, cardData), 0, 0, widthPoints, heightPoints)
+    await drawSvgMarkupOnPdf(pdf, renderCardSvgMarkup(template, fields, cardData, colorProfile), 0, 0, widthPoints, heightPoints)
   }
 
   downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-cards'}-batch-${users.length}-cards.pdf`)
@@ -851,6 +876,7 @@ async function exportBatchCardsWithPrintLayoutVector(
   fieldMappings: Record<string, string>,
   printLayoutSvgPath: string,
   customValues?: Record<string, string>,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const layout = await loadPrintLayout(printLayoutSvgPath)
   const pdf = createVectorPdfDocument(layout.widthPoints, layout.heightPoints)
@@ -874,7 +900,7 @@ async function exportBatchCardsWithPrintLayoutVector(
       }
     })
 
-    let cardMarkup = renderSvgWithData(template, fields, cardData)
+    let cardMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
     if (rotate) {
       cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
     }
@@ -914,13 +940,14 @@ async function exportWithJsonLayoutVector(
   fields: FieldDefinition[],
   cardData: CardData,
   layout: PrintLayout,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
   const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
   const positions = calculateCardPositions(layout, layout.cardsPerPage)
   const pdf = createVectorPdfDocument(pageWidth, pageHeight)
 
-  let cardMarkup = renderSvgWithData(template, fields, cardData)
+  let cardMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
   let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
   const firstPos = positions[0]
   if (firstPos && cardNeedsRotation(cardWidthPt, cardHeightPt, firstPos.width, firstPos.height)) {
@@ -947,6 +974,7 @@ async function exportBatchCardsWithJsonLayoutVector(
   fieldMappings: Record<string, string>,
   layout: PrintLayout,
   customValues?: Record<string, string>,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const pageWidth = parseFloat(layout.pageWidth) * POINTS_PER_INCH
   const pageHeight = parseFloat(layout.pageHeight) * POINTS_PER_INCH
@@ -975,7 +1003,7 @@ async function exportBatchCardsWithJsonLayoutVector(
       }
     })
 
-    let cardMarkup = renderSvgWithData(template, fields, cardData)
+    let cardMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
     if (rotate) {
       cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
     }
@@ -1026,6 +1054,7 @@ async function exportWithSlotAssignmentsVector(
   customValues?: Record<string, string>,
   allTemplates?: Map<string, TemplateMeta>,
   allFieldMappings?: Map<string, Record<string, string>>,
+  colorProfile?: ColorProfile | null,
 ): Promise<void> {
   const pdf = createVectorPdfDocument(
     parseFloat(layout.pageWidth) * POINTS_PER_INCH,
@@ -1092,7 +1121,7 @@ async function exportWithSlotAssignmentsVector(
       })
     }
 
-    let svgMarkup = renderSvgWithData(template, templateFields, slotCardData)
+    let svgMarkup = renderCardSvgMarkup(template, templateFields, slotCardData, colorProfile)
     let { widthPoints: cardWidthPt, heightPoints: cardHeightPt } = getTemplateSizeInPoints(template)
     if (cardNeedsRotation(cardWidthPt, cardHeightPt, slotWidth, slotHeight)) {
       svgMarkup = rotateSvgMarkup90CW(svgMarkup, template.width, template.height)
@@ -1239,6 +1268,7 @@ export async function renderCardToCanvas(
   fields: FieldDefinition[],
   cardData: CardData,
   dpi: number = DEFAULT_EXPORT_DPI,
+  colorProfile?: ColorProfile | null,
 ): Promise<HTMLCanvasElement> {
   const { widthMm, heightMm } = getTemplateSizeInMm(template)
   const canvasWidth = Math.max(1, Math.round((widthMm / MM_PER_INCH) * dpi))
@@ -1265,7 +1295,7 @@ export async function renderCardToCanvas(
   context.fillRect(0, 0, canvasWidth, canvasHeight)
 
   try {
-    const svgMarkup = renderSvgWithData(template, fields, cardData)
+    const svgMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
     // Set explicit width/height on SVG to ensure fonts scale correctly when rendered
     const scaledSvgMarkup = setSvgDimensions(svgMarkup, canvasWidth, canvasHeight)
     const background = await loadSvgAsImage(scaledSvgMarkup)
@@ -1329,7 +1359,7 @@ export async function renderCardToCanvas(
       x: textX,
       y: textY,
       fontSize,
-      color: field.color ?? '#000000',
+      color: correctColorValue(field.color ?? '#000000', colorProfile),
       maxWidth,
       align: field.align ?? 'left',
       fontFamily: field.fontFamily,

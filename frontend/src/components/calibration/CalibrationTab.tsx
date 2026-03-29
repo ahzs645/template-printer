@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Download, Upload, Plus, Trash2, Settings2, ScanLine, Printer } from 'lucide-react'
 import { Slider } from '../ui/slider'
 import { Button } from '../ui/button'
 import { ColorSwatchChart } from './ColorSwatchChart'
 import { useCardLayout, useColorChart, useColorProfiles, useImageAnalysis } from '../../hooks/calibration'
-import { generateSVG, generatePDF, exportTestPrint, importTestPrint, exportProfiles, importProfiles, type TestPrintConfig, type ColorProfile } from '../../lib/calibration/exportUtils'
+import { usePrintLayouts } from '../../hooks/usePrintLayouts'
+import { exportWithJsonLayout } from '../../lib/exporter'
+import { createColorChartTemplate, generateSVG, generatePDF, exportTestPrint, importTestPrint, exportProfiles, importProfiles, type TestPrintConfig, type ColorProfile } from '../../lib/calibration/exportUtils'
 import { generateArucoMarker } from '../../lib/calibration/aruco'
-import { getGridPosition } from '../../lib/calibration/layoutCalculator'
+import { getGridPosition, getSwatchSlotCount } from '../../lib/calibration/layoutCalculator'
 import {
   ImageContainer,
   AnalysisDisplay,
@@ -22,6 +24,7 @@ interface CalibrationTabProps {
 
 export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [selectedPrintLayoutId, setSelectedPrintLayoutId] = useState<string | null>(null)
 
   // Initialize hooks
   const { useArucoMarkers, setUseArucoMarkers, margin, setMargin, cardLayout } = useCardLayout()
@@ -55,8 +58,15 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
     handleImageUpload,
     clearImage
   } = useImageAnalysis()
+  const { printLayouts, isLoading: printLayoutsLoading } = usePrintLayouts()
 
   const [showOverlay, setShowOverlay] = useState(true)
+
+  useEffect(() => {
+    if (!selectedPrintLayoutId && printLayouts.length > 0) {
+      setSelectedPrintLayoutId(printLayouts[0].id)
+    }
+  }, [printLayouts, selectedPrintLayoutId])
 
   const handleCreateProfile = async (
     colorAdjustments: Array<{ color: string, adjustment: { r: number, g: number, b: number } }>,
@@ -118,7 +128,23 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   }
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId)
-  const maxColors = useArucoMarkers ? 73 : 77
+  const maxColors = getSwatchSlotCount(cardLayout)
+  const selectedPrintLayout = printLayouts.find((layout) => layout.id === selectedPrintLayoutId) ?? null
+
+  const handleExportPrintLayout = async () => {
+    if (!selectedPrintLayout) {
+      alert('Select a print layout before exporting the calibration chart.')
+      return
+    }
+
+    try {
+      const template = createColorChartTemplate(cardLayout, colorChart, useArucoMarkers)
+      await exportWithJsonLayout(template, [], {}, selectedPrintLayout, 300, true)
+    } catch (error) {
+      console.error('Failed to export calibration chart with print layout:', error)
+      alert('Failed to export calibration chart with the selected print layout.')
+    }
+  }
 
   if (profilesLoading) {
     return (
@@ -136,14 +162,47 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Chart Card */}
           <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 20, flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Color Calibration Chart</h2>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
                   CR80 Card (85.6mm × 54mm) • {colorChart.length}/{maxColors} colors {useArucoMarkers && '• 4 ArUco markers'}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <select
+                  value={selectedPrintLayoutId ?? ''}
+                  onChange={(event) => setSelectedPrintLayoutId(event.target.value || null)}
+                  disabled={printLayoutsLoading || printLayouts.length === 0}
+                  style={{
+                    minWidth: 220,
+                    height: 32,
+                    borderRadius: 6,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-panel)',
+                    color: 'var(--text-primary)',
+                    padding: '0 10px',
+                  }}
+                  title="Select a print layout for tray-ready calibration exports"
+                >
+                  {printLayouts.length === 0 ? (
+                    <option value="">No print layouts available</option>
+                  ) : (
+                    printLayouts.map((layout) => (
+                      <option key={layout.id} value={layout.id}>
+                        {layout.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void handleExportPrintLayout()}
+                  disabled={!selectedPrintLayout}
+                >
+                  <Printer size={14} style={{ marginRight: 4 }} />
+                  Layout PDF
+                </button>
                 <button className="btn btn-primary btn-sm" onClick={() => generatePDF(cardLayout, colorChart, useArucoMarkers)}>
                   <Download size={14} style={{ marginRight: 4 }} />
                   PDF

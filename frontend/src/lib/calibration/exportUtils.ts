@@ -1,5 +1,6 @@
 import { generateArucoMarker, generateArucoSVG } from './aruco'
-import { getSwatchPosition, type CardLayout } from './layoutCalculator'
+import type { TemplateMeta } from '../types'
+import { getSwatchPosition, getSwatchSlotCount, type CardLayout } from './layoutCalculator'
 
 export interface TestPrintConfig {
   version: string
@@ -28,6 +29,9 @@ export interface ColorProfile {
   updatedAt?: string
   adjustments: Record<string, { r: number; g: number; b: number }>
 }
+
+const SVG_SCALE = 10
+const EMPTY_SWATCH_COLOR = '#E5E7EB'
 
 export function exportTestPrint(
   useArucoMarkers: boolean,
@@ -130,39 +134,7 @@ export function generateSVG(
   colorChart: string[],
   useArucoMarkers: boolean
 ): void {
-  const scale = 10 // Scale factor for SVG (mm to SVG units)
-  const svgWidth = cardLayout.cardWidth * scale
-  const svgHeight = cardLayout.cardHeight * scale
-
-  // Generate ArUco markers
-  const arucoMarkers = useArucoMarkers
-    ? cardLayout.markerPositions.map(pos => {
-      const marker = generateArucoMarker(pos.id, pos.size * scale)
-      const markerSVG = generateArucoSVG(marker)
-      return `<g transform="translate(${pos.x * scale}, ${pos.y * scale})">${markerSVG}</g>`
-    }).join('')
-    : ''
-
-  // Generate color swatches
-  const swatches = colorChart.map((color, index) => {
-    const pos = getSwatchPosition(cardLayout, index)
-    if (!pos) return '' // Skip colors that don't fit
-    return `<rect
-      x="${pos.x * scale}"
-      y="${pos.y * scale}"
-      width="${pos.width * scale}"
-      height="${pos.height * scale}"
-      fill="${color || '#E5E7EB'}"
-    />`
-  }).filter(swatch => swatch !== '').join('')
-
-  const svgContent = `
-    <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100%" height="100%" fill="white"/>
-      ${swatches}
-      ${arucoMarkers}
-    </svg>
-  `
+  const svgContent = buildColorChartSvgMarkup(cardLayout, colorChart, useArucoMarkers)
 
   const blob = new Blob([svgContent], { type: 'image/svg+xml' })
   const url = URL.createObjectURL(blob)
@@ -193,10 +165,11 @@ export async function generatePDF(
     pdf.setFillColor(255, 255, 255)
     pdf.rect(0, 0, cardLayout.cardWidth, cardLayout.cardHeight, 'F')
 
-    // Add swatches
-    colorChart.forEach((color, index) => {
+    // Add swatches, preserving empty slots so the export matches the preview.
+    Array.from({ length: getSwatchSlotCount(cardLayout) }, (_, index) => {
       const pos = getSwatchPosition(cardLayout, index)
       if (!pos) return // Skip colors that don't fit
+      const color = colorChart[index]
 
       if (color) {
         const rgb = hexToRgb(color)
@@ -230,6 +203,65 @@ export async function generatePDF(
   } catch (error) {
     console.error('Error generating PDF:', error)
     alert('Error generating PDF. Please try again.')
+  }
+}
+
+export function buildColorChartSvgMarkup(
+  cardLayout: CardLayout,
+  colorChart: string[],
+  useArucoMarkers: boolean
+): string {
+  const svgWidth = cardLayout.cardWidth * SVG_SCALE
+  const svgHeight = cardLayout.cardHeight * SVG_SCALE
+
+  const arucoMarkers = useArucoMarkers
+    ? cardLayout.markerPositions.map((pos) => {
+      const marker = generateArucoMarker(pos.id, pos.size * SVG_SCALE)
+      const markerSVG = generateArucoSVG(marker)
+      return `<g transform="translate(${pos.x * SVG_SCALE}, ${pos.y * SVG_SCALE})">${markerSVG}</g>`
+    }).join('')
+    : ''
+
+  const swatches = Array.from({ length: getSwatchSlotCount(cardLayout) }, (_, index) => {
+    const pos = getSwatchPosition(cardLayout, index)
+    if (!pos) return ''
+    const color = colorChart[index] || EMPTY_SWATCH_COLOR
+    return `<rect x="${pos.x * SVG_SCALE}" y="${pos.y * SVG_SCALE}" width="${pos.width * SVG_SCALE}" height="${pos.height * SVG_SCALE}" fill="${color}" />`
+  }).filter(Boolean).join('')
+
+  return `
+    <svg
+      width="${svgWidth}"
+      height="${svgHeight}"
+      viewBox="0 0 ${svgWidth} ${svgHeight}"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect width="100%" height="100%" fill="white"/>
+      ${swatches}
+      ${arucoMarkers}
+    </svg>
+  `
+}
+
+export function createColorChartTemplate(
+  cardLayout: CardLayout,
+  colorChart: string[],
+  useArucoMarkers: boolean
+): TemplateMeta {
+  return {
+    name: 'color-swatch-chart.svg',
+    width: cardLayout.cardWidth,
+    height: cardLayout.cardHeight,
+    unit: 'mm',
+    viewBox: {
+      x: 0,
+      y: 0,
+      width: cardLayout.cardWidth * SVG_SCALE,
+      height: cardLayout.cardHeight * SVG_SCALE,
+    },
+    rawSvg: buildColorChartSvgMarkup(cardLayout, colorChart, useArucoMarkers),
+    objectUrl: '',
+    fonts: [],
   }
 }
 

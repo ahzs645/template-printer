@@ -527,6 +527,16 @@ function App() {
     setIsExporting(true)
     setErrorMessage(null)
 
+    const selectedColorProfile = options.colorProfileId
+      ? colorProfiles.find((profile) => profile.id === options.colorProfileId) ?? null
+      : null
+
+    if (options.colorProfileId && !selectedColorProfile) {
+      setIsExporting(false)
+      setErrorMessage('Selected color profile could not be loaded.')
+      return
+    }
+
     // Load font data for text-to-outlines conversion in vector PDF exports
     if (options.format === 'pdf' && options.maintainVectors) {
       try {
@@ -642,6 +652,7 @@ function App() {
                 allTemplates,
                 allFieldMappings,
                 options.maintainVectors,
+                selectedColorProfile,
               )
               setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
             } else {
@@ -655,6 +666,7 @@ function App() {
                 options.resolution,
                 customValuesMap,
                 options.maintainVectors,
+                selectedColorProfile,
               )
               setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with "${jsonLayout.name}" layout.`)
             }
@@ -672,6 +684,7 @@ function App() {
               options.resolution,
               customValuesMap,
               options.maintainVectors,
+              selectedColorProfile,
             )
             setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
           } else {
@@ -683,6 +696,7 @@ function App() {
               options.resolution,
               customValuesMap,
               options.maintainVectors,
+              selectedColorProfile,
             )
             setStatusMessage(`Exported ${selectedUsers.length} cards to PDF.`)
           }
@@ -767,6 +781,7 @@ function App() {
                 allTemplates,
                 allFieldMappings,
                 options.maintainVectors,
+                selectedColorProfile,
               )
               setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
             } else {
@@ -778,6 +793,7 @@ function App() {
                 jsonLayout,
                 options.resolution,
                 options.maintainVectors,
+                selectedColorProfile,
               )
               setStatusMessage(`Exported PDF with "${jsonLayout.name}" layout.`)
             }
@@ -793,10 +809,18 @@ function App() {
               printLayout.svgPath,
               options.resolution,
               options.maintainVectors,
+              selectedColorProfile,
             )
             setStatusMessage(`Exported PDF with print layout "${printLayout.name}".`)
           } else {
-            await exportSingleCard(template, fields, cardData, options.resolution, options.maintainVectors)
+            await exportSingleCard(
+              template,
+              fields,
+              cardData,
+              options.resolution,
+              options.maintainVectors,
+              selectedColorProfile,
+            )
             setStatusMessage(`Exported single card PDF.`)
           }
         } else {
