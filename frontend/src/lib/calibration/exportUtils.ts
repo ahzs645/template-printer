@@ -32,6 +32,24 @@ export interface ColorProfile {
 
 const SVG_SCALE = 10
 const EMPTY_SWATCH_COLOR = '#E5E7EB'
+const PROFILE_SWATCH_KEY_SEPARATOR = '@swatch-'
+
+export function normalizeProfileAdjustmentColor(color: string): string | null {
+  const trimmed = color.trim()
+  const hex = trimmed.match(/^#?([0-9a-f]{6})$/i)
+  if (!hex) return null
+  return `#${hex[1].toUpperCase()}`
+}
+
+export function createProfileAdjustmentKey(color: string, swatchIndex: number): string {
+  const normalizedColor = normalizeProfileAdjustmentColor(color) ?? color.trim()
+  return `${normalizedColor}${PROFILE_SWATCH_KEY_SEPARATOR}${swatchIndex + 1}`
+}
+
+export function getProfileAdjustmentBaseColor(key: string): string {
+  const baseColor = key.split(PROFILE_SWATCH_KEY_SEPARATOR)[0]
+  return normalizeProfileAdjustmentColor(baseColor) ?? baseColor
+}
 
 export function exportTestPrint(
   useArucoMarkers: boolean,
@@ -147,6 +165,64 @@ export function generateSVG(
   URL.revokeObjectURL(url)
 }
 
+export async function renderColorChartToPngDataUrl(
+  cardLayout: CardLayout,
+  colorChart: string[],
+  useArucoMarkers: boolean,
+  scale: number = SVG_SCALE
+): Promise<string> {
+  const svgContent = buildColorChartSvgMarkup(cardLayout, colorChart, useArucoMarkers, scale)
+  const svgBlob = new Blob([svgContent], { type: 'image/svg+xml' })
+  const svgUrl = URL.createObjectURL(svgBlob)
+
+  try {
+    const img = new Image()
+    const imageLoaded = new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('Unable to render calibration chart export.'))
+    })
+
+    img.src = svgUrl
+    await imageLoaded
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(cardLayout.cardWidth * scale)
+    canvas.height = Math.round(cardLayout.cardHeight * scale)
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('Unable to create canvas for calibration chart export.')
+    }
+
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    return canvas.toDataURL('image/png')
+  } finally {
+    URL.revokeObjectURL(svgUrl)
+  }
+}
+
+export async function generatePNG(
+  cardLayout: CardLayout,
+  colorChart: string[],
+  useArucoMarkers: boolean
+): Promise<void> {
+  try {
+    const pngDataUrl = await renderColorChartToPngDataUrl(cardLayout, colorChart, useArucoMarkers)
+    const link = document.createElement('a')
+    link.href = pngDataUrl
+    link.download = 'color-swatch-chart.png'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (error) {
+    console.error('Error generating PNG:', error)
+    alert('Error generating PNG. Please try again.')
+  }
+}
+
 export async function generatePDF(
   cardLayout: CardLayout,
   colorChart: string[],
@@ -209,16 +285,17 @@ export async function generatePDF(
 export function buildColorChartSvgMarkup(
   cardLayout: CardLayout,
   colorChart: string[],
-  useArucoMarkers: boolean
+  useArucoMarkers: boolean,
+  scale: number = SVG_SCALE
 ): string {
-  const svgWidth = cardLayout.cardWidth * SVG_SCALE
-  const svgHeight = cardLayout.cardHeight * SVG_SCALE
+  const svgWidth = cardLayout.cardWidth * scale
+  const svgHeight = cardLayout.cardHeight * scale
 
   const arucoMarkers = useArucoMarkers
     ? cardLayout.markerPositions.map((pos) => {
-      const marker = generateArucoMarker(pos.id, pos.size * SVG_SCALE)
+      const marker = generateArucoMarker(pos.id, pos.size * scale)
       const markerSVG = generateArucoSVG(marker)
-      return `<g transform="translate(${pos.x * SVG_SCALE}, ${pos.y * SVG_SCALE})">${markerSVG}</g>`
+      return `<g transform="translate(${pos.x * scale}, ${pos.y * scale})">${markerSVG}</g>`
     }).join('')
     : ''
 
@@ -226,7 +303,7 @@ export function buildColorChartSvgMarkup(
     const pos = getSwatchPosition(cardLayout, index)
     if (!pos) return ''
     const color = colorChart[index] || EMPTY_SWATCH_COLOR
-    return `<rect x="${pos.x * SVG_SCALE}" y="${pos.y * SVG_SCALE}" width="${pos.width * SVG_SCALE}" height="${pos.height * SVG_SCALE}" fill="${color}" />`
+    return `<rect x="${pos.x * scale}" y="${pos.y * scale}" width="${pos.width * scale}" height="${pos.height * scale}" fill="${color}" />`
   }).filter(Boolean).join('')
 
   return `

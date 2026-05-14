@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Slider } from "../ui/slider"
-import type { ColorProfile } from "../../lib/calibration/exportUtils"
+import { getProfileAdjustmentBaseColor, type ColorProfile } from "../../lib/calibration/exportUtils"
 
 interface ProfileManagerProps {
   selectedColor: string
@@ -153,11 +153,12 @@ export function ProfileManager({
               // Compact View
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto">
                 {Object.entries(selectedProfile.adjustments || {}).map(([color, adjustment]) => {
+                  const baseColor = getProfileAdjustmentBaseColor(color)
                   // Calculate scanned color (original + initial adjustment)
                   const scannedColor = `#${[
-                    Math.max(0, Math.min(255, parseInt(color.slice(1, 3), 16) + adjustment.r)).toString(16).padStart(2, '0'),
-                    Math.max(0, Math.min(255, parseInt(color.slice(3, 5), 16) + adjustment.g)).toString(16).padStart(2, '0'),
-                    Math.max(0, Math.min(255, parseInt(color.slice(5, 7), 16) + adjustment.b)).toString(16).padStart(2, '0')
+                    Math.max(0, Math.min(255, parseInt(baseColor.slice(1, 3), 16) + adjustment.r)).toString(16).padStart(2, '0'),
+                    Math.max(0, Math.min(255, parseInt(baseColor.slice(3, 5), 16) + adjustment.g)).toString(16).padStart(2, '0'),
+                    Math.max(0, Math.min(255, parseInt(baseColor.slice(5, 7), 16) + adjustment.b)).toString(16).padStart(2, '0')
                   ].join('')
                     }`
 
@@ -167,7 +168,7 @@ export function ProfileManager({
                         <div className="flex-1">
                           <div
                             className="w-full h-6 rounded-t border border-gray-300"
-                            style={{ backgroundColor: color }}
+                            style={{ backgroundColor: baseColor }}
                             title="Original"
                           />
                           <div
@@ -178,7 +179,7 @@ export function ProfileManager({
                         </div>
                       </div>
                       <div className="text-xs font-mono text-gray-600">
-                        {color}
+                        {baseColor}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         R{adjustment.r >= 0 ? '+' : ''}{adjustment.r}
@@ -193,10 +194,11 @@ export function ProfileManager({
               // Fine-Tuning View
               <div className="space-y-3 max-h-[600px] overflow-y-auto">
                 {Object.entries(selectedProfile.adjustments || {}).map(([color, adjustment]) => {
+                  const baseColor = getProfileAdjustmentBaseColor(color)
                   // Calculate scanned color (what was actually printed)
-                  const scannedR = parseInt(color.slice(1, 3), 16) + adjustment.r
-                  const scannedG = parseInt(color.slice(3, 5), 16) + adjustment.g
-                  const scannedB = parseInt(color.slice(5, 7), 16) + adjustment.b
+                  const scannedR = parseInt(baseColor.slice(1, 3), 16) + adjustment.r
+                  const scannedG = parseInt(baseColor.slice(3, 5), 16) + adjustment.g
+                  const scannedB = parseInt(baseColor.slice(5, 7), 16) + adjustment.b
                   const scannedColor = `#${[
                     Math.max(0, Math.min(255, scannedR)).toString(16).padStart(2, '0'),
                     Math.max(0, Math.min(255, scannedG)).toString(16).padStart(2, '0'),
@@ -224,10 +226,10 @@ export function ProfileManager({
                             <div className="text-center">
                               <div
                                 className="w-16 h-16 rounded border-2 border-gray-300"
-                                style={{ backgroundColor: color }}
+                                style={{ backgroundColor: baseColor }}
                               />
                               <div className="text-xs mt-1 font-medium">Original</div>
-                              <div className="text-xs text-gray-500">{color}</div>
+                              <div className="text-xs text-gray-500">{baseColor}</div>
                             </div>
                             <div className="text-xl">-&gt;</div>
                             <div className="text-center">

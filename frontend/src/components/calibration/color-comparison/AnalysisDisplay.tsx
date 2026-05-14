@@ -4,7 +4,7 @@ interface AnalysisDisplayProps {
   isAnalyzing: boolean
   colorComparisons: ColorComparison[]
   onCreateProfile?: (
-    adjustments: Array<{ color: string, adjustment: { r: number, g: number, b: number } }>,
+    adjustments: Array<{ color: string, swatchIndex: number, adjustment: { r: number, g: number, b: number } }>,
     profileName: string,
     deviceName: string
   ) => void
@@ -63,12 +63,12 @@ export function AnalysisDisplay({
       overallAccuracy >= 1.5 ? 'fair' : 'poor'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Overall Quality Summary */}
-      <div className={`p-3 rounded-lg border ${getQualityColor(overallQuality)}`}>
-        <div className="flex items-center justify-between">
+      <div className={`p-2 rounded-lg border ${getQualityColor(overallQuality)}`}>
+        <div className="flex items-center justify-between gap-3">
           <span className="font-medium">Overall Color Accuracy: {overallQuality.toUpperCase()}</span>
-          <span className="text-sm">
+          <span className="text-xs">
             {colorComparisons.filter(comp => calculateColorAccuracy(comp).quality === 'excellent').length} excellent, {' '}
             {colorComparisons.filter(comp => calculateColorAccuracy(comp).quality === 'good').length} good, {' '}
             {colorComparisons.filter(comp => calculateColorAccuracy(comp).quality === 'fair').length} fair, {' '}
@@ -78,20 +78,23 @@ export function AnalysisDisplay({
       </div>
 
       {/* Individual Color Comparisons */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}
+      >
         {colorComparisons.map((comparison, index) => {
           const { deltaE, quality } = calculateColorAccuracy(comparison)
 
           return (
-            <div key={index} className="space-y-2 p-3 border rounded-lg bg-white">
+            <div key={index} className="space-y-2 p-2 border rounded-md bg-white">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Color #{index}</span>
+                <span className="text-sm font-medium">Color #{index + 1}</span>
                 <span className={`px-2 py-1 text-xs rounded-full border ${getQualityColor(quality)}`}>
                   {quality.toUpperCase()}
                 </span>
               </div>
 
-              <div className="flex h-12 rounded border">
+              <div className="flex h-9 rounded border">
                 <div className="flex-1 space-y-1">
                   <div
                     className="h-full rounded-l border-r"
@@ -141,8 +144,9 @@ export function AnalysisDisplay({
         <div className="pt-4 border-t">
           <button
             onClick={() => {
-              const adjustments = colorComparisons.map((comp) => ({
+              const adjustments = colorComparisons.map((comp, index) => ({
                 color: comp.original,
+                swatchIndex: index,
                 adjustment: comp.difference
               }))
               onCreateProfile(adjustments, 'Scanned Profile', 'Unknown Device')

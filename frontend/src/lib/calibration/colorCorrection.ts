@@ -1,3 +1,4 @@
+import { getProfileAdjustmentBaseColor } from './exportUtils'
 import type { ColorProfile } from './exportUtils'
 
 /**
@@ -70,9 +71,9 @@ function correctColor(
   const hex = normalizeToHex(colorValue)
   if (!hex) return colorValue
 
-  // Check if we have an exact match in the profile
-  const normalizedHex = hex.toUpperCase()
-  const adjustment = adjustments[normalizedHex] || adjustments[hex.toLowerCase()]
+  // Check if we have an exact match in the profile. Newer profiles keep one
+  // entry per swatch, so duplicate chart colors are averaged when applied.
+  const adjustment = getAverageAdjustmentForColor(hex, adjustments)
 
   if (adjustment) {
     // Apply INVERSE adjustment to compensate for printer drift
@@ -166,7 +167,7 @@ function findClosestColor(
   const maxDistance = 50 // Only match if reasonably close
 
   for (const [color, adjustment] of Object.entries(adjustments)) {
-    const normalized = normalizeToHex(color)
+    const normalized = normalizeToHex(getProfileAdjustmentBaseColor(color))
     if (!normalized) continue
 
     const r = parseInt(normalized.slice(1, 3), 16)
@@ -185,4 +186,22 @@ function findClosestColor(
   }
 
   return closest
+}
+
+function getAverageAdjustmentForColor(
+  targetHex: string,
+  adjustments: Record<string, { r: number; g: number; b: number }>
+): { r: number; g: number; b: number } | null {
+  const normalizedTarget = targetHex.toUpperCase()
+  const matches = Object.entries(adjustments)
+    .filter(([color]) => normalizeToHex(getProfileAdjustmentBaseColor(color))?.toUpperCase() === normalizedTarget)
+    .map(([, adjustment]) => adjustment)
+
+  if (matches.length === 0) return null
+
+  return {
+    r: Math.round(matches.reduce((sum, adjustment) => sum + adjustment.r, 0) / matches.length),
+    g: Math.round(matches.reduce((sum, adjustment) => sum + adjustment.g, 0) / matches.length),
+    b: Math.round(matches.reduce((sum, adjustment) => sum + adjustment.b, 0) / matches.length),
+  }
 }

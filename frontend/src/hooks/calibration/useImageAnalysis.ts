@@ -46,6 +46,11 @@ export function useImageAnalysis() {
     reader.readAsDataURL(file)
   }
 
+  const handleImageData = (imageData: string, colorChart: string[], cardLayout: CardLayout) => {
+    setScannedImage(imageData)
+    analyzeImage(imageData, colorChart, cardLayout)
+  }
+
   const analyzeImage = async (imageData: string, colorChart: string[], cardLayout: CardLayout) => {
     setIsAnalyzing(true)
 
@@ -261,6 +266,7 @@ export function useImageAnalysis() {
     analysisResult,
     canvasRef,
     handleImageUpload,
+    handleImageData,
     clearImage
   }
 }

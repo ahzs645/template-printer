@@ -275,7 +275,8 @@ export class ApiStorageProvider implements StorageProvider {
   async listColorProfiles(): Promise<ColorProfile[]> {
     const response = await fetch('/api/color-profiles')
     if (!response.ok) {
-      throw new Error('Failed to fetch color profiles')
+      const error = await this.safeReadErrorMessage(response)
+      throw new Error(error ?? `Failed to fetch color profiles (${response.status})`)
     }
     return response.json()
   }
@@ -284,7 +285,8 @@ export class ApiStorageProvider implements StorageProvider {
     const response = await fetch(`/api/color-profiles/${id}`)
     if (response.status === 404) return null
     if (!response.ok) {
-      throw new Error('Failed to fetch color profile')
+      const error = await this.safeReadErrorMessage(response)
+      throw new Error(error ?? `Failed to fetch color profile (${response.status})`)
     }
     return response.json()
   }
@@ -297,8 +299,8 @@ export class ApiStorageProvider implements StorageProvider {
     })
 
     if (!response.ok) {
-      const data = await response.json()
-      throw new Error(data.error || 'Failed to save profile')
+      const error = await this.safeReadErrorMessage(response)
+      throw new Error(error ?? `Failed to save profile (${response.status})`)
     }
 
     return response.json()
@@ -312,7 +314,8 @@ export class ApiStorageProvider implements StorageProvider {
     })
 
     if (!response.ok) {
-      throw new Error('Failed to update profile')
+      const error = await this.safeReadErrorMessage(response)
+      throw new Error(error ?? `Failed to update profile (${response.status})`)
     }
 
     return response.json()
@@ -322,7 +325,8 @@ export class ApiStorageProvider implements StorageProvider {
     const response = await fetch(`/api/color-profiles/${id}`, { method: 'DELETE' })
 
     if (!response.ok) {
-      throw new Error('Failed to delete profile')
+      const error = await this.safeReadErrorMessage(response)
+      throw new Error(error ?? `Failed to delete profile (${response.status})`)
     }
   }
 

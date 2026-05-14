@@ -27,7 +27,8 @@ export function ImageContainer({
     <div className="space-y-2">
       <div
         ref={containerRef}
-        className="relative w-full h-[300px] bg-gray-100 rounded-lg border-2 border-border overflow-hidden"
+        className="relative w-full bg-gray-100 rounded-lg border-2 border-border overflow-hidden"
+        style={{ height: 'clamp(220px, 34vh, 360px)' }}
       >
         <img
           ref={imageRef}
@@ -47,7 +48,7 @@ export function ImageContainer({
 
       {/* Debug info panel outside the image */}
       {analysisResult && (
-        <div className="bg-black/10 text-gray-700 text-xs p-3 rounded-lg border">
+        <div className="bg-black/10 text-gray-700 text-xs p-2 rounded-lg border">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="font-semibold mb-1">Detection Status</div>

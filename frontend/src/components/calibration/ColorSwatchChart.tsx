@@ -22,9 +22,12 @@ export function ColorSwatchChart({
   const totalSwatches = getSwatchSlotCount(cardLayout)
 
   return (
-    <div className="flex-1">
-      <h3 className="text-xl font-medium mb-4">Color Swatch Chart ({colorChart.length}/{totalSwatches} colors)</h3>
-      <div className="grid grid-cols-11 gap-1 p-4 bg-muted/20 rounded-lg">
+    <div className="flex-1 min-w-0">
+      <h3 className="text-base font-medium mb-2">Color Swatch Chart ({colorChart.length}/{totalSwatches} colors)</h3>
+      <div
+        className="grid grid-cols-11 bg-muted/20 rounded-lg"
+        style={{ gap: 3, padding: 8, width: 'min(100%, 660px)', margin: '0 auto' }}
+      >
         {Array.from({ length: 77 }).map((_, gridIndex) => {
           const isMarkerPosition = useArucoMarkers && cardLayout.excludedIndices.includes(gridIndex)
 
@@ -33,7 +36,7 @@ export function ColorSwatchChart({
             return (
               <div
                 key={gridIndex}
-                className="aspect-square border-2 border-gray-800 bg-gray-200 rounded-sm flex items-center justify-center"
+                className="aspect-square border-2 border-gray-800 bg-gray-200 rounded-sm flex items-center justify-center min-w-0"
               >
                 <span className="text-xs font-bold text-gray-600">M{cardLayout.markerPositions.find(m => m.gridIndex === gridIndex)?.id}</span>
               </div>
@@ -53,7 +56,7 @@ export function ColorSwatchChart({
           return (
             <div
               key={gridIndex}
-              className="aspect-square border border-border relative group rounded-sm overflow-hidden"
+              className="aspect-square border border-border relative group rounded-sm overflow-hidden min-w-0"
               style={{ backgroundColor: color || '#E5E7EB' }}
               onMouseEnter={() => onSwatchHover(swatchIndex)}
               onMouseLeave={() => onSwatchHover(null)}

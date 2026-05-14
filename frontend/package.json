@@ -11,6 +11,7 @@
     "build:local": "tsc -b && VITE_STORAGE_MODE=local vite build",
     "build:gh-pages": "tsc -b && VITE_STORAGE_MODE=local GITHUB_PAGES=true vite build",
     "lint": "eslint .",
+    "test:calibration": "node scripts/test-calibration-roundtrip.mjs",
     "preview": "vite preview",
     "deploy": "pnpm build:gh-pages && gh-pages -d dist"
   },
