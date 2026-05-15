@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { ApiStorageProvider } from './ApiStorageProvider'
+import { ConvexStorageProvider } from './ConvexStorageProvider'
 import { IndexedDBStorageProvider } from './IndexedDBStorageProvider'
 import type { StorageProvider, StorageMode } from './types'
 
@@ -11,6 +12,7 @@ const StorageContext = createContext<StorageProvider | null>(null)
 // Singleton instances to prevent multiple DB connections
 let apiProviderInstance: ApiStorageProvider | null = null
 let indexedDBProviderInstance: IndexedDBStorageProvider | null = null
+let convexProviderInstance: ConvexStorageProvider | null = null
 
 function getStorageProvider(): StorageProvider {
   if (STORAGE_MODE === 'local') {
@@ -18,6 +20,13 @@ function getStorageProvider(): StorageProvider {
       indexedDBProviderInstance = new IndexedDBStorageProvider()
     }
     return indexedDBProviderInstance
+  }
+
+  if (STORAGE_MODE === 'convex-local' || STORAGE_MODE === 'convex-cloud') {
+    if (!convexProviderInstance) {
+      convexProviderInstance = new ConvexStorageProvider()
+    }
+    return convexProviderInstance
   }
 
   if (!apiProviderInstance) {
@@ -67,6 +76,13 @@ export function getStorageMode(): StorageMode {
  */
 export function isLocalMode(): boolean {
   return STORAGE_MODE === 'local'
+}
+
+/**
+ * Check if running against Convex storage
+ */
+export function isConvexMode(): boolean {
+  return STORAGE_MODE === 'convex-local' || STORAGE_MODE === 'convex-cloud'
 }
 
 /**

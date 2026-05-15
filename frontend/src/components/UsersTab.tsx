@@ -11,6 +11,7 @@ import { parseField } from '../lib/fieldParser'
 import { parseTemplateString, renderSvgWithData } from '../lib/svgTemplate'
 import { useStorage } from '../lib/storage'
 import type { CardData, FieldDefinition, TemplateMeta } from '../lib/types'
+import { hasCanvasDesignSide, renderCanvasDesignSide } from '../lib/canvasDesign'
 import { cn } from '../lib/utils'
 
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
@@ -215,6 +216,39 @@ export function UsersTab({
       return () => { cancelled = true }
     }
 
+    const loadCanvasSide = async (side: 'front' | 'back') => {
+      if (cancelled || !selectedDesign) return
+
+      if (!hasCanvasDesignSide(selectedDesign, side)) {
+        setPreview((prev) => ({
+          ...prev,
+          [side]: { svg: null, loading: false, error: `No ${side} design data.` },
+        }))
+        return
+      }
+
+      setPreview((prev) => ({
+        ...prev,
+        [side]: { ...prev[side], loading: true, error: null },
+      }))
+
+      try {
+        const { svg } = await renderCanvasDesignSide(selectedDesign, side)
+        if (cancelled) return
+        setPreview((prev) => ({
+          ...prev,
+          [side]: { svg, loading: false, error: null },
+        }))
+      } catch (err) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : 'Failed to render.'
+        setPreview((prev) => ({
+          ...prev,
+          [side]: { svg: null, loading: false, error: message },
+        }))
+      }
+    }
+
     const loadSide = async (
       side: 'front' | 'back',
       templateId: string | null | undefined,
@@ -278,8 +312,13 @@ export function UsersTab({
       }
     }
 
-    loadSide('front', selectedDesign.frontTemplateId, frontTemplateSummary)
-    loadSide('back', selectedDesign.backTemplateId, backTemplateSummary)
+    if (selectedDesign.designerMode === 'canvas') {
+      loadCanvasSide('front')
+      loadCanvasSide('back')
+    } else {
+      loadSide('front', selectedDesign.frontTemplateId, frontTemplateSummary)
+      loadSide('back', selectedDesign.backTemplateId, backTemplateSummary)
+    }
 
     return () => { cancelled = true }
   }, [
@@ -563,8 +602,14 @@ export function UsersTab({
                       role="button"
                       tabIndex={0}
                       className={cn('field-item', isSelected && 'field-item--selected')}
-                      onClick={() => user.id && setSelectedUserId(user.id)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { user.id && setSelectedUserId(user.id) } }}
+                      onClick={() => {
+                        if (user.id) setSelectedUserId(user.id)
+                      }}
+                      onKeyDown={(e) => {
+                        if ((e.key === 'Enter' || e.key === ' ') && user.id) {
+                          setSelectedUserId(user.id)
+                        }
+                      }}
                       style={{ alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer' }}
                     >
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', width: '100%' }}>
@@ -615,7 +660,10 @@ export function UsersTab({
                           </button>
                           <button
                             className="btn btn-ghost btn-sm btn-icon"
-                            onClick={(e) => { e.stopPropagation(); user.id && handleDelete(user.id) }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (user.id) handleDelete(user.id)
+                            }}
                             title="Delete"
                             style={{ color: 'var(--danger)' }}
                           >
@@ -801,7 +849,9 @@ export function UsersTab({
                   >
                     <button
                       onClick={() => setPreviewSide('front')}
-                      disabled={!selectedDesign.frontTemplateId}
+                      disabled={selectedDesign.designerMode === 'canvas'
+                        ? !hasCanvasDesignSide(selectedDesign, 'front')
+                        : !selectedDesign.frontTemplateId}
                       style={{
                         flex: 1,
                         padding: '6px 12px',
@@ -809,18 +859,24 @@ export function UsersTab({
                         fontWeight: 500,
                         border: 'none',
                         borderRadius: 4,
-                        cursor: selectedDesign.frontTemplateId ? 'pointer' : 'not-allowed',
+                        cursor: (selectedDesign.designerMode === 'canvas'
+                          ? hasCanvasDesignSide(selectedDesign, 'front')
+                          : selectedDesign.frontTemplateId) ? 'pointer' : 'not-allowed',
                         backgroundColor: previewSide === 'front' ? 'var(--bg-surface)' : 'transparent',
                         color: previewSide === 'front' ? 'var(--text-primary)' : 'var(--text-muted)',
                         boxShadow: previewSide === 'front' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                        opacity: selectedDesign.frontTemplateId ? 1 : 0.5,
+                        opacity: (selectedDesign.designerMode === 'canvas'
+                          ? hasCanvasDesignSide(selectedDesign, 'front')
+                          : selectedDesign.frontTemplateId) ? 1 : 0.5,
                       }}
                     >
                       Front
                     </button>
                     <button
                       onClick={() => setPreviewSide('back')}
-                      disabled={!selectedDesign.backTemplateId}
+                      disabled={selectedDesign.designerMode === 'canvas'
+                        ? !hasCanvasDesignSide(selectedDesign, 'back')
+                        : !selectedDesign.backTemplateId}
                       style={{
                         flex: 1,
                         padding: '6px 12px',
@@ -828,18 +884,24 @@ export function UsersTab({
                         fontWeight: 500,
                         border: 'none',
                         borderRadius: 4,
-                        cursor: selectedDesign.backTemplateId ? 'pointer' : 'not-allowed',
+                        cursor: (selectedDesign.designerMode === 'canvas'
+                          ? hasCanvasDesignSide(selectedDesign, 'back')
+                          : selectedDesign.backTemplateId) ? 'pointer' : 'not-allowed',
                         backgroundColor: previewSide === 'back' ? 'var(--bg-surface)' : 'transparent',
                         color: previewSide === 'back' ? 'var(--text-primary)' : 'var(--text-muted)',
                         boxShadow: previewSide === 'back' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                        opacity: selectedDesign.backTemplateId ? 1 : 0.5,
+                        opacity: (selectedDesign.designerMode === 'canvas'
+                          ? hasCanvasDesignSide(selectedDesign, 'back')
+                          : selectedDesign.backTemplateId) ? 1 : 0.5,
                       }}
                     >
                       Back
                     </button>
                     <button
                       onClick={() => setPreviewSide('both')}
-                      disabled={!(selectedDesign.frontTemplateId && selectedDesign.backTemplateId)}
+                      disabled={selectedDesign.designerMode === 'canvas'
+                        ? !(hasCanvasDesignSide(selectedDesign, 'front') && hasCanvasDesignSide(selectedDesign, 'back'))
+                        : !(selectedDesign.frontTemplateId && selectedDesign.backTemplateId)}
                       style={{
                         flex: 1,
                         padding: '6px 12px',
@@ -847,11 +909,15 @@ export function UsersTab({
                         fontWeight: 500,
                         border: 'none',
                         borderRadius: 4,
-                        cursor: (selectedDesign.frontTemplateId && selectedDesign.backTemplateId) ? 'pointer' : 'not-allowed',
+                        cursor: (selectedDesign.designerMode === 'canvas'
+                          ? hasCanvasDesignSide(selectedDesign, 'front') && hasCanvasDesignSide(selectedDesign, 'back')
+                          : selectedDesign.frontTemplateId && selectedDesign.backTemplateId) ? 'pointer' : 'not-allowed',
                         backgroundColor: previewSide === 'both' ? 'var(--bg-surface)' : 'transparent',
                         color: previewSide === 'both' ? 'var(--text-primary)' : 'var(--text-muted)',
                         boxShadow: previewSide === 'both' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                        opacity: (selectedDesign.frontTemplateId && selectedDesign.backTemplateId) ? 1 : 0.5,
+                        opacity: (selectedDesign.designerMode === 'canvas'
+                          ? hasCanvasDesignSide(selectedDesign, 'front') && hasCanvasDesignSide(selectedDesign, 'back')
+                          : selectedDesign.frontTemplateId && selectedDesign.backTemplateId) ? 1 : 0.5,
                       }}
                     >
                       Both

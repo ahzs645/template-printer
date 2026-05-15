@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react'
-import type { FabricObject } from 'fabric'
+import type { Canvas, FabricObject } from 'fabric'
 import { useFabricCanvas } from './hooks/useFabricCanvas'
 import type { CardSide } from './types'
 
@@ -13,6 +13,7 @@ type DesignerCanvasProps = {
   canvasData?: string | null
   onSelectionChange?: (objects: FabricObject[]) => void
   onCanvasChange?: (json: string) => void
+  onCanvasReady?: (canvas: Canvas | null) => void
   showGrid?: boolean
   gridSize?: number // mm
   snapToGrid?: boolean
@@ -26,6 +27,7 @@ export function DesignerCanvas({
   canvasData,
   onSelectionChange,
   onCanvasChange,
+  onCanvasReady,
   showGrid = true,
   gridSize = 5,
   snapToGrid = false,
@@ -48,6 +50,11 @@ export function DesignerCanvas({
   })
 
   const { canvas, loadFromJSON, toJSON } = fabricCanvas
+
+  useEffect(() => {
+    onCanvasReady?.(canvas)
+    return () => onCanvasReady?.(null)
+  }, [canvas, onCanvasReady])
 
   // Expose canvas methods to parent via ref
   useEffect(() => {

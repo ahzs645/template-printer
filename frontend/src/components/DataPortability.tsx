@@ -1,10 +1,24 @@
 import { useState, useRef } from 'react'
 import { Download, Upload, AlertCircle, CheckCircle } from 'lucide-react'
 import { useStorage, getStorageMode } from '../lib/storage'
-import type { ExportData } from '../lib/storage'
+import type { ExportData, StorageMode } from '../lib/storage'
 
 interface DataPortabilityProps {
   className?: string
+}
+
+function getStorageModeLabel(storageMode: StorageMode): string {
+  switch (storageMode) {
+    case 'local':
+      return 'Local Storage'
+    case 'convex-local':
+      return 'Convex Local'
+    case 'convex-cloud':
+      return 'Convex Cloud'
+    case 'server':
+    default:
+      return 'Server Storage'
+  }
 }
 
 export function DataPortability({ className = '' }: DataPortabilityProps) {
@@ -62,7 +76,8 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
         throw new Error('Invalid backup file format')
       }
 
-      const confirmMessage = storageMode === 'local'
+      const replacesExistingData = storageMode === 'local' || storageMode.startsWith('convex-')
+      const confirmMessage = replacesExistingData
         ? 'This will replace ALL existing data. Are you sure you want to continue?'
         : 'This will import data and may create duplicates. Are you sure you want to continue?'
 
@@ -95,7 +110,7 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
     <div className={`space-y-4 ${className}`}>
       <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
         <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700">
-          {storageMode === 'local' ? 'Local Storage' : 'Server Storage'}
+          {getStorageModeLabel(storageMode)}
         </span>
       </div>
 
@@ -146,7 +161,7 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
 
       <p className="text-xs text-gray-500 dark:text-gray-400">
         Export creates a backup file containing all templates, users, card designs, fonts, and color profiles.
-        {storageMode === 'local' && ' Import will completely replace all existing data.'}
+        {(storageMode === 'local' || storageMode.startsWith('convex-')) && ' Import will completely replace all existing data.'}
         {storageMode === 'server' && ' Import will add data to the existing database.'}
       </p>
     </div>

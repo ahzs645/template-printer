@@ -5,20 +5,54 @@ import { saveAs } from 'file-saver'
 
 import { Button } from './ui/button'
 import { useStorage, getStorageMode } from '../lib/storage'
-import type { ExportData } from '../lib/storage'
+import { ConvexStorageProvider } from '../lib/storage/ConvexStorageProvider'
+import type { ExportData, StorageMode } from '../lib/storage'
 
 type SettingsTabProps = {
   onDataImported?: () => void
 }
 
+function getStorageModeInfo(storageMode: StorageMode) {
+  switch (storageMode) {
+    case 'local':
+      return {
+        label: 'Local Storage (Dexie + IndexedDB)',
+        description: 'Data is stored in your browser. Export regularly to avoid data loss.',
+        local: true,
+      }
+    case 'convex-local':
+      return {
+        label: 'Convex Local Storage',
+        description: 'Data is stored in your local Convex deployment.',
+        local: false,
+      }
+    case 'convex-cloud':
+      return {
+        label: 'Convex Cloud Storage',
+        description: 'Data is stored in your configured Convex cloud deployment.',
+        local: false,
+      }
+    case 'server':
+    default:
+      return {
+        label: 'Server Storage (API)',
+        description: 'Data is stored on the server and persists across sessions.',
+        local: false,
+      }
+  }
+}
+
 export function SettingsTab({ onDataImported }: SettingsTabProps) {
   const storage = useStorage()
   const storageMode = getStorageMode()
+  const storageModeInfo = getStorageModeInfo(storageMode)
   const importInputRef = useRef<HTMLInputElement>(null)
 
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [migratingToConvex, setMigratingToConvex] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const canMigrateToConvex = storageMode === 'local' && Boolean(import.meta.env.VITE_CONVEX_URL)
 
   const handleExport = async () => {
     setExporting(true)
@@ -80,6 +114,35 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
 
   const handleImportClick = () => {
     importInputRef.current?.click()
+  }
+
+  const handleMigrateToConvex = async () => {
+    const confirmed = window.confirm(
+      'This will replace the data in your configured Convex deployment with the current local workspace data. Continue?',
+    )
+    if (!confirmed) return
+
+    setMigratingToConvex(true)
+    setStatus(null)
+
+    try {
+      const exportData = await storage.exportAllData()
+      const convexStorage = new ConvexStorageProvider()
+      await convexStorage.importAllData(exportData)
+
+      setStatus({
+        type: 'success',
+        message: `Copied ${exportData.templates.length} templates, ${exportData.users.length} users, ${exportData.cardDesigns.length} designs, ${exportData.fonts.length} fonts to Convex`,
+      })
+    } catch (error) {
+      console.error('Convex migration failed:', error)
+      setStatus({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to copy data to Convex',
+      })
+    } finally {
+      setMigratingToConvex(false)
+    }
   }
 
   const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +253,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
             alignItems: 'center',
             gap: 8,
           }}>
-            {storageMode === 'local' ? <HardDrive size={18} /> : <Database size={18} />}
+            {storageModeInfo.local ? <HardDrive size={18} /> : <Database size={18} />}
             Storage Mode
           </h2>
 
@@ -205,16 +268,14 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
                 width: 10,
                 height: 10,
                 borderRadius: '50%',
-                backgroundColor: storageMode === 'local' ? 'var(--warning)' : 'var(--success)',
+                backgroundColor: storageModeInfo.local ? 'var(--warning)' : 'var(--success)',
               }} />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>
-                  {storageMode === 'local' ? 'Local Storage (IndexedDB)' : 'Server Storage (API)'}
+                  {storageModeInfo.label}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {storageMode === 'local'
-                    ? 'Data is stored in your browser. Export regularly to avoid data loss.'
-                    : 'Data is stored on the server and persists across sessions.'}
+                  {storageModeInfo.description}
                 </div>
               </div>
             </div>
@@ -254,7 +315,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
                 </div>
                 <Button
                   onClick={handleExport}
-                  disabled={exporting || importing}
+                  disabled={exporting || importing || migratingToConvex}
                   style={{ minWidth: 120 }}
                 >
                   {exporting ? (
@@ -285,7 +346,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
                 <Button
                   variant="outline"
                   onClick={handleImportClick}
-                  disabled={exporting || importing}
+                  disabled={exporting || importing || migratingToConvex}
                   style={{ minWidth: 120 }}
                 >
                   {importing ? (
@@ -304,6 +365,43 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
                 />
               </div>
             </div>
+
+            {storageMode === 'local' && (
+              <div style={{
+                padding: 20,
+                backgroundColor: 'var(--bg-surface)',
+                borderRadius: 8,
+                border: '1px solid var(--border-color)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Copy Local Data to Convex</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      Copies the current Dexie workspace into the Convex deployment configured by VITE_CONVEX_URL.
+                      Existing Convex data for this owner will be replaced.
+                    </div>
+                    {!canMigrateToConvex && (
+                      <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 8 }}>
+                        Run pnpm convex:dev:local once or set VITE_CONVEX_URL before migrating.
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleMigrateToConvex}
+                    disabled={!canMigrateToConvex || exporting || importing || migratingToConvex}
+                    style={{ minWidth: 160 }}
+                  >
+                    {migratingToConvex ? (
+                      <Loader2 size={16} style={{ marginRight: 8 }} className="animate-spin" />
+                    ) : (
+                      <Database size={16} style={{ marginRight: 8 }} />
+                    )}
+                    {migratingToConvex ? 'Copying...' : 'Copy to Convex'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Status Message */}
             {status && (

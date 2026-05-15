@@ -429,10 +429,10 @@ function calculateTransform(
   };
 
   // Find all 4 markers - try expected IDs first
-  let marker0 = markers.find(m => m.id === 0); // Top-left
-  let marker1 = markers.find(m => m.id === 1); // Top-right
-  let marker2 = markers.find(m => m.id === 2); // Bottom-left
-  let marker3 = markers.find(m => m.id === 3); // Bottom-right
+  const marker0 = markers.find(m => m.id === 0); // Top-left
+  const marker1 = markers.find(m => m.id === 1); // Top-right
+  const marker2 = markers.find(m => m.id === 2); // Bottom-left
+  const marker3 = markers.find(m => m.id === 3); // Bottom-right
 
   const foundCount = [marker0, marker1, marker2, marker3].filter(Boolean).length;
   console.log('Expected markers found:', {

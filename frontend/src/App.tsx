@@ -59,6 +59,7 @@ import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
 import { isAutoMappable } from './lib/autoMapping'
 import type { CardData, CardDataValue, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
+import { renderCanvasDesignSide, type CanvasDesignRenderResult } from './lib/canvasDesign'
 import {
   getDefaultField,
   nextFieldId,
@@ -125,6 +126,8 @@ function App() {
     refresh: refreshCardDesigns,
   } = useCardDesigns()
   const [selectedCardDesignId, setSelectedCardDesignId] = useState<string | null>(null)
+  const [selectedExportCardDesignId, setSelectedExportCardDesignId] = useState<string | null>(null)
+  const [exportCanvasDesign, setExportCanvasDesign] = useState<CanvasDesignRenderResult | null>(null)
   const [designDialogOpen, setDesignDialogOpen] = useState(false)
   const [editingDesign, setEditingDesign] = useState<typeof cardDesigns[0] | null>(null)
   const [editingCanvasDesignId, setEditingCanvasDesignId] = useState<string | null>(null)
@@ -296,6 +299,37 @@ function App() {
     return () => { cancelled = true }
   }, [selectedCardDesignId, cardDesigns, cardDesignsLoading, designTemplates])
 
+  useEffect(() => {
+    let cancelled = false
+
+    if (!selectedExportCardDesignId) {
+      setExportCanvasDesign(null)
+      return () => { cancelled = true }
+    }
+
+    const selectedDesign = cardDesigns.find((design) => design.id === selectedExportCardDesignId)
+    if (!selectedDesign) {
+      setExportCanvasDesign(null)
+      return () => { cancelled = true }
+    }
+
+    setExportCanvasDesign(null)
+    renderCanvasDesignSide(selectedDesign, 'front')
+      .then((result) => {
+        if (!cancelled) {
+          setExportCanvasDesign(result)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to prepare canvas design for export:', error)
+          setErrorMessage(error instanceof Error ? error.message : 'Failed to prepare canvas design for export.')
+        }
+      })
+
+    return () => { cancelled = true }
+  }, [selectedExportCardDesignId, cardDesigns])
+
   const selectedField = useMemo(
     () => fields.find((field) => field.id === selectedFieldId) ?? null,
     [fields, selectedFieldId],
@@ -314,6 +348,11 @@ function App() {
       return template.rawSvg
     }
   }, [template, fields, cardData])
+
+  const activeExportTemplate = exportCanvasDesign?.meta ?? template
+  const activeExportFields = exportCanvasDesign?.fields ?? fields
+  const activeExportCardData = exportCanvasDesign ? {} : cardData
+  const activeExportRenderedSvg = exportCanvasDesign?.svg ?? renderedSvg
 
   // Check if a field is mapped
   const isFieldMapped = (field: FieldDefinition): boolean => {
@@ -340,6 +379,7 @@ function App() {
       setCardData(() => ({}))
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(null)
+      setSelectedExportCardDesignId(null)
 
       const baseMessage = autoFields.length
         ? `Imported ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
@@ -401,6 +441,7 @@ function App() {
       setCardData(() => ({}))
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
+      setSelectedExportCardDesignId(null)
 
       const existingMappings = await storage.getFieldMappings(templateSummary.id)
       if (existingMappings.length === 0 && nextFields.length > 0) {
@@ -514,12 +555,17 @@ function App() {
   }
 
   const handleExport = async (options: ExportOptions) => {
-    if (!template) {
-      setErrorMessage('Upload a template before exporting.')
+    const exportTemplate = activeExportTemplate
+    const exportFields = activeExportFields
+    const exportCardData = activeExportCardData
+    const exportTemplateId = exportCanvasDesign ? null : selectedTemplateId
+
+    if (!exportTemplate) {
+      setErrorMessage('Select a template or canvas design before exporting.')
       return
     }
 
-    if (fields.length === 0) {
+    if (exportFields.length === 0 && !exportCanvasDesign) {
       setErrorMessage('Define at least one field before exporting.')
       return
     }
@@ -563,11 +609,11 @@ function App() {
           throw new Error('Select at least one user to export')
         }
 
-        if (!selectedTemplateId) {
-          throw new Error('Template must be saved to use database mode')
+        if (!exportTemplateId) {
+          throw new Error('Template-based database export requires a saved template. Canvas design database export is not available yet.')
         }
 
-        const mappings = await storage.getFieldMappings(selectedTemplateId)
+        const mappings = await storage.getFieldMappings(exportTemplateId)
         const fieldMappingsMap: Record<string, string> = {}
         const customValuesMap: Record<string, string> = {}
         mappings.forEach((m) => {
@@ -605,16 +651,16 @@ function App() {
               const allFieldMappings = new Map<string, Record<string, string>>()
 
               // Add the current template
-              if (template && selectedTemplateId) {
-                allTemplates.set(selectedTemplateId, template)
-                allFieldMappings.set(selectedTemplateId, fieldMappingsMap)
+              if (exportTemplate && exportTemplateId) {
+                allTemplates.set(exportTemplateId, exportTemplate)
+                allFieldMappings.set(exportTemplateId, fieldMappingsMap)
               }
 
               // Load any other templates referenced in slots
               const uniqueTemplateIds = new Set(
                 options.slotAssignments
                   .map(s => s.templateId)
-                  .filter((id): id is string => !!id && id !== selectedTemplateId)
+                  .filter((id): id is string => !!id && id !== exportTemplateId)
               )
 
               for (const templateId of uniqueTemplateIds) {
@@ -639,10 +685,10 @@ function App() {
               }
 
               await exportWithSlotAssignments(
-                template,  // default front template
+                exportTemplate,  // default front template
                 null,      // back template (TODO: add back template support)
-                fields,
-                cardData,  // custom card data for slots set to 'custom'
+                exportFields,
+                exportCardData,  // custom card data for slots set to 'custom'
                 users,
                 fieldMappingsMap,
                 jsonLayout,
@@ -658,8 +704,8 @@ function App() {
             } else {
               // Fallback to old batch behavior (fill pages with selected users)
               await exportBatchCardsWithJsonLayout(
-                template,
-                fields,
+                exportTemplate,
+                exportFields,
                 orderedUsers,
                 fieldMappingsMap,
                 jsonLayout,
@@ -676,8 +722,8 @@ function App() {
               throw new Error('Selected print layout not found')
             }
             await exportBatchCardsWithPrintLayout(
-              template,
-              fields,
+              exportTemplate,
+              exportFields,
               orderedUsers,
               fieldMappingsMap,
               printLayout.svgPath,
@@ -689,8 +735,8 @@ function App() {
             setStatusMessage(`Exported ${orderedUsers.length} cards to PDF with print layout "${printLayout.name}".`)
           } else {
             await exportBatchCards(
-              template,
-              fields,
+              exportTemplate,
+              exportFields,
               selectedUsers,
               fieldMappingsMap,
               options.resolution,
@@ -716,11 +762,11 @@ function App() {
             // If we have slot assignments, use the new per-slot export
             if (options.slotAssignments && options.slotAssignments.length > 0) {
               // Get field mappings for the default template
-              let fieldMappingsMap: Record<string, string> = {}
-              let customValuesMap: Record<string, string> = {}
+              const fieldMappingsMap: Record<string, string> = {}
+              const customValuesMap: Record<string, string> = {}
 
-              if (selectedTemplateId) {
-                const mappings = await storage.getFieldMappings(selectedTemplateId)
+              if (exportTemplateId) {
+                const mappings = await storage.getFieldMappings(exportTemplateId)
                 mappings.forEach((m) => {
                   fieldMappingsMap[m.svgLayerId] = m.standardFieldName
                   if (m.customValue) {
@@ -734,16 +780,16 @@ function App() {
               const allFieldMappings = new Map<string, Record<string, string>>()
 
               // Add the current template
-              if (template && selectedTemplateId) {
-                allTemplates.set(selectedTemplateId, template)
-                allFieldMappings.set(selectedTemplateId, fieldMappingsMap)
+              if (exportTemplate && exportTemplateId) {
+                allTemplates.set(exportTemplateId, exportTemplate)
+                allFieldMappings.set(exportTemplateId, fieldMappingsMap)
               }
 
               // Load any other templates referenced in slots
               const uniqueTemplateIds = new Set(
                 options.slotAssignments
                   .map(s => s.templateId)
-                  .filter((id): id is string => !!id && id !== selectedTemplateId)
+                  .filter((id): id is string => !!id && id !== exportTemplateId)
               )
 
               for (const templateId of uniqueTemplateIds) {
@@ -768,10 +814,10 @@ function App() {
               }
 
               await exportWithSlotAssignments(
-                template,  // default front template
+                exportTemplate,  // default front template
                 null,      // back template (TODO: add back template support)
-                fields,
-                cardData,
+                exportFields,
+                exportCardData,
                 users,
                 fieldMappingsMap,
                 jsonLayout,
@@ -787,9 +833,9 @@ function App() {
             } else {
               // Fallback to filling all slots with the same card
               await exportWithJsonLayout(
-                template,
-                fields,
-                cardData,
+                exportTemplate,
+                exportFields,
+                exportCardData,
                 jsonLayout,
                 options.resolution,
                 options.maintainVectors,
@@ -803,9 +849,9 @@ function App() {
               throw new Error('Selected print layout not found')
             }
             await exportWithPrintLayout(
-              template,
-              fields,
-              cardData,
+              exportTemplate,
+              exportFields,
+              exportCardData,
               printLayout.svgPath,
               options.resolution,
               options.maintainVectors,
@@ -814,9 +860,9 @@ function App() {
             setStatusMessage(`Exported PDF with print layout "${printLayout.name}".`)
           } else {
             await exportSingleCard(
-              template,
-              fields,
-              cardData,
+              exportTemplate,
+              exportFields,
+              exportCardData,
               options.resolution,
               options.maintainVectors,
               selectedColorProfile,
@@ -1060,24 +1106,6 @@ function App() {
     </Ribbon>
   )
 
-  // Render Users Tab ribbon
-  const renderUsersRibbon = () => (
-    <Ribbon>
-      <RibbonGroup title="Users">
-        <RibbonButton
-          icon={<Plus size={18} />}
-          label="Add User"
-          disabled
-        />
-        <RibbonButton
-          icon={<Upload size={18} />}
-          label="Import CSV"
-          disabled
-        />
-      </RibbonGroup>
-    </Ribbon>
-  )
-
   // Render Export Tab ribbon
   const renderExportRibbon = () => (
     <Ribbon>
@@ -1106,7 +1134,7 @@ function App() {
         <RibbonButton
           icon={<FileDown size={18} />}
           label="Export PDF"
-          disabled={!template || isExporting}
+          disabled={!activeExportTemplate || isExporting}
           size="large"
         />
       </RibbonGroup>
@@ -1191,7 +1219,6 @@ function App() {
 
         {/* Ribbon Toolbar */}
         {activeTab === 'design' && designMode !== 'designer' && renderDesignRibbon()}
-        {activeTab === 'users' && renderUsersRibbon()}
         {activeTab === 'export' && renderExportRibbon()}
         {activeTab === 'calibration' && renderCalibrationRibbon()}
 
@@ -1448,7 +1475,9 @@ function App() {
                           <div>
                             <div className="field-item__name">{design.name}</div>
                             <div className="field-item__type">
-                              {design.frontTemplateId && design.backTemplateId
+                              {design.designerMode === 'canvas'
+                                ? 'Canvas design'
+                                : design.frontTemplateId && design.backTemplateId
                                 ? 'Front & Back'
                                 : design.frontTemplateId
                                 ? 'Front only'
@@ -1700,11 +1729,11 @@ function App() {
 
           {activeTab === 'export' && (
             <ExportPage
-                template={selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
-                templateMeta={template}
-                selectedTemplateId={selectedTemplateId}
-                fields={fields}
-                cardData={cardData}
+                template={selectedExportCardDesignId ? null : selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
+                templateMeta={activeExportTemplate}
+                selectedTemplateId={selectedExportCardDesignId ? null : selectedTemplateId}
+                fields={activeExportFields}
+                cardData={activeExportCardData}
                 printTemplates={printTemplates}
                 printTemplatesLoading={printTemplatesLoading}
                 printTemplatesError={printTemplatesError}
@@ -1712,12 +1741,26 @@ function App() {
                 onPrintLayoutUpload={handlePrintLayoutUpload}
                 onExport={handleExport}
                 isExporting={isExporting}
-                renderedSvg={renderedSvg}
+                renderedSvg={activeExportRenderedSvg}
                 users={users}
                 usersLoading={usersLoading}
                 designTemplates={designTemplates}
                 designTemplatesLoading={designTemplatesLoading}
-                onTemplateSelect={handleTemplateSelect}
+                cardDesigns={cardDesigns}
+                selectedCardDesignId={selectedExportCardDesignId}
+                onCardDesignSelect={(designId) => {
+                  setSelectedExportCardDesignId(designId)
+                  if (designId) {
+                    setSelectedTemplateId(null)
+                    setTemplate(null)
+                    setFields([])
+                    setCardData({})
+                  }
+                }}
+                onTemplateSelect={(templateSummary) => {
+                  setSelectedExportCardDesignId(null)
+                  handleTemplateSelect(templateSummary)
+                }}
                 onCardDataChange={handleCardDataChange}
                 colorProfiles={colorProfiles}
                 colorProfilesLoading={colorProfilesLoading}

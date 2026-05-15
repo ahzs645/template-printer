@@ -6,7 +6,7 @@ import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from './ui/select'
 import { Switch } from './ui/switch'
 import type { TemplateSummary } from '../lib/templates'
-import type { FieldDefinition, CardData, PrintLayout } from '../lib/types'
+import type { FieldDefinition, CardData, PrintLayout, CardDesign } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
@@ -50,6 +50,9 @@ export type ExportPageProps = {
   usersLoading: boolean
   designTemplates: TemplateSummary[]
   designTemplatesLoading: boolean
+  cardDesigns: CardDesign[]
+  selectedCardDesignId: string | null
+  onCardDesignSelect: (designId: string | null) => void
   onTemplateSelect: (template: TemplateSummary) => void
   onCardDataChange: (fieldId: string, value: string) => void
   colorProfiles: ColorProfile[]
@@ -149,6 +152,9 @@ export function ExportPage({
   usersLoading,
   designTemplates,
   designTemplatesLoading,
+  cardDesigns,
+  selectedCardDesignId,
+  onCardDesignSelect,
   onTemplateSelect,
   onCardDataChange,
   colorProfiles,
@@ -611,18 +617,32 @@ export function ExportPage({
         <PanelSection title="Card Design">
           {designTemplatesLoading ? (
             <p className="empty-state__text">Loading templates...</p>
-          ) : designTemplates.length === 0 ? (
-            <p className="empty-state__text">No templates. Upload one in Design tab.</p>
+          ) : designTemplates.length === 0 && cardDesigns.length === 0 ? (
+            <p className="empty-state__text">No templates or canvas designs. Create one in Design tab.</p>
           ) : (
             <div className="field-list">
+              {cardDesigns.map((design) => (
+                <button
+                  key={design.id}
+                  type="button"
+                  className={cn('field-item', selectedCardDesignId === design.id && 'field-item--selected')}
+                  onClick={() => onCardDesignSelect(design.id)}
+                >
+                  <div className="field-item__name">{design.name}</div>
+                  <div className="field-item__type">
+                    {design.designerMode === 'canvas' ? 'Canvas design' : 'Card design'}
+                  </div>
+                </button>
+              ))}
               {designTemplates.map((t) => (
                 <button
                   key={t.id}
                   type="button"
-                  className={cn('field-item', template?.id === t.id && 'field-item--selected')}
+                  className={cn('field-item', !selectedCardDesignId && template?.id === t.id && 'field-item--selected')}
                   onClick={() => onTemplateSelect(t)}
                 >
                   <div className="field-item__name">{t.name}</div>
+                  <div className="field-item__type">Template</div>
                 </button>
               ))}
             </div>
@@ -708,7 +728,7 @@ export function ExportPage({
                     className={cn('field-item', exportOptions.selectedUserIds.includes(user.id!) && 'field-item--selected')}
                     onClick={() => toggleUserSelection(user.id!)}
                   >
-                    <div className="field-item__name">{`${user.firstName} ${user.lastName}` || user.id}</div>
+                    <div className="field-item__name">{`${user.firstName} ${user.lastName}`.trim() || user.id}</div>
                     {user.position && <div className="field-item__type">{user.position}</div>}
                   </button>
                 ))}
@@ -1144,7 +1164,7 @@ export function ExportPage({
             style={{ width: '100%', justifyContent: 'center' }}
             onClick={handleExport}
             disabled={
-              !template ||
+              !templateMeta ||
               isExporting ||
               (exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0)
             }

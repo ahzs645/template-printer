@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import type { FabricObject } from 'fabric'
+import { useState, useCallback, useRef } from 'react'
+import type { Canvas, FabricObject } from 'fabric'
 import { Save, X } from 'lucide-react'
 
 import { DockablePanel, PanelSection } from '../ui/dockable-panel'
@@ -66,6 +66,8 @@ export function CardDesignerTab({
   // Canvas refs
   const frontCanvasRef = useRef<ReturnType<typeof useFabricCanvas> | null>(null)
   const backCanvasRef = useRef<ReturnType<typeof useFabricCanvas> | null>(null)
+  const [frontCanvasInstance, setFrontCanvasInstance] = useState<Canvas | null>(null)
+  const [backCanvasInstance, setBackCanvasInstance] = useState<Canvas | null>(null)
 
   // Get current canvas based on active side (for render-time access)
   const currentCanvas = activeSide === 'front' ? frontCanvasRef.current : backCanvasRef.current
@@ -77,10 +79,10 @@ export function CardDesignerTab({
 
   // History for undo/redo
   const frontHistory = useDesignerHistory({
-    canvas: frontCanvasRef.current?.canvas ?? null,
+    canvas: frontCanvasInstance,
   })
   const backHistory = useDesignerHistory({
-    canvas: backCanvasRef.current?.canvas ?? null,
+    canvas: backCanvasInstance,
   })
   const currentHistory = activeSide === 'front' ? frontHistory : backHistory
 
@@ -388,6 +390,7 @@ export function CardDesignerTab({
               canvasData={frontCanvasData}
               onSelectionChange={handleSelectionChange}
               onCanvasChange={handleFrontCanvasChange}
+              onCanvasReady={setFrontCanvasInstance}
               showGrid={showGrid}
               snapToGrid={snapToGrid}
               canvasRef={frontCanvasRef}
@@ -401,6 +404,7 @@ export function CardDesignerTab({
               canvasData={backCanvasData}
               onSelectionChange={handleSelectionChange}
               onCanvasChange={handleBackCanvasChange}
+              onCanvasReady={setBackCanvasInstance}
               showGrid={showGrid}
               snapToGrid={snapToGrid}
               canvasRef={backCanvasRef}

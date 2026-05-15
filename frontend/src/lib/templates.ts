@@ -1,4 +1,4 @@
-import { getStorageInstance, isLocalMode } from './storage'
+import { getStorageInstance, isConvexMode, isLocalMode } from './storage'
 
 export type TemplateType = 'design' | 'print'
 
@@ -14,11 +14,11 @@ export type TemplateSummary = {
 
 /**
  * Load SVG content for a template
- * Handles both server mode (fetch from URL) and local mode (fetch from IndexedDB)
+ * Handles server mode (fetch from URL), Dexie local mode, and Convex storage mode.
  */
 export async function loadTemplateSvgContent(template: TemplateSummary): Promise<string> {
-  // In local mode, svgPath will be 'indexeddb://{id}'
-  if (isLocalMode() || template.svgPath.startsWith('indexeddb://')) {
+  // In local/Convex storage mode, svgPath is a virtual storage pointer.
+  if (isLocalMode() || isConvexMode() || template.svgPath.startsWith('indexeddb://') || template.svgPath.startsWith('convex://')) {
     const storage = getStorageInstance()
     return storage.getTemplateSvgContent(template.id)
   }

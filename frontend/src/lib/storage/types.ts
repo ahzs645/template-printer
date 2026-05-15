@@ -6,7 +6,8 @@ import type { ColorProfile } from '../calibration/exportUtils'
 
 /**
  * Storage provider interface - abstraction layer for data persistence
- * Implemented by ApiStorageProvider (server mode) and IndexedDBStorageProvider (local mode)
+ * Implemented by ApiStorageProvider (server mode), IndexedDBStorageProvider
+ * (Dexie/local mode), and ConvexStorageProvider (Convex local/cloud modes).
  */
 export interface StorageProvider {
   // Templates
@@ -72,4 +73,4 @@ export interface ExportData {
   printLayouts: PrintLayout[]
 }
 
-export type StorageMode = 'server' | 'local'
+export type StorageMode = 'server' | 'local' | 'convex-local' | 'convex-cloud'

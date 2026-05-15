@@ -530,6 +530,35 @@ textarea {
   display: block;
 }
 
+@media (max-width: 700px) {
+  .app-content {
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .app-workspace {
+    min-height: 360px;
+  }
+
+  .dockable-panel {
+    width: 100% !important;
+  }
+
+  .dockable-panel--closed {
+    height: 32px;
+  }
+
+  .dockable-panel--closed .dockable-panel__toggle {
+    flex-direction: row;
+    width: 100%;
+    writing-mode: horizontal-tb;
+  }
+
+  .dockable-panel__content {
+    max-height: 420px;
+  }
+}
+
 /* Reset styles for Fabric.js canvas-container wrapper inside the designer */
 .designer-canvas-wrapper .canvas-container {
   flex: none;

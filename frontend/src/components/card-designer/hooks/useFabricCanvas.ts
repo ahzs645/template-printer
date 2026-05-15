@@ -171,7 +171,7 @@ export function useFabricCanvas(
       fabricCanvas.dispose()
       isInitializedRef.current = false
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [canvasRef, mmToPx, onSelectionChange, onCanvasChange])
 
   // Update canvas size when dimensions change

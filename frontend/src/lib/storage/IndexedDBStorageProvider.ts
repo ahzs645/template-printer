@@ -1,4 +1,4 @@
-import { openDB, type IDBPDatabase } from 'idb'
+import Dexie, { type Table } from 'dexie'
 import type { CardDesign, PrintLayout, TemplateMeta } from '../types'
 import type { TemplateSummary, TemplateType } from '../templates'
 import type { UserData } from '../fieldParser'
@@ -10,7 +10,7 @@ const DB_NAME = 'template-printer'
 const DB_VERSION = 1
 
 // Built-in print layouts for local/offline mode
-const BUILTIN_PRINT_LAYOUTS: PrintLayout[] = [
+export const BUILTIN_PRINT_LAYOUTS: PrintLayout[] = [
   {
     id: 'layout-canon-g',
     sourceId: 10,
@@ -375,90 +375,41 @@ interface FieldMappingRecord extends FieldMapping {
   templateId: string
 }
 
-interface TemplatePrinterDBSchema {
-  templates: {
-    key: string
-    value: TemplateSummary
-    indexes: { 'by-type': TemplateType }
-  }
-  templateContents: {
-    key: string
-    value: TemplateContent
-  }
-  fieldMappings: {
-    key: string
-    value: FieldMappingRecord
-    indexes: { 'by-templateId': string }
-  }
-  users: {
-    key: string
-    value: UserData & { id: string }
-  }
-  cardDesigns: {
-    key: string
-    value: CardDesign
-  }
-  fonts: {
-    key: string
-    value: FontData
-    indexes: { 'by-fontName': string }
-  }
-  colorProfiles: {
-    key: string
-    value: ColorProfile
+class TemplatePrinterDexieDB extends Dexie {
+  templates!: Table<TemplateSummary, string>
+  templateContents!: Table<TemplateContent, string>
+  fieldMappings!: Table<FieldMappingRecord, string>
+  users!: Table<UserData & { id: string }, string>
+  cardDesigns!: Table<CardDesign, string>
+  fonts!: Table<FontData, string>
+  colorProfiles!: Table<ColorProfile, string>
+
+  constructor() {
+    super(DB_NAME)
+
+    this.version(DB_VERSION).stores({
+      templates: 'id, templateType',
+      templateContents: 'id',
+      fieldMappings: 'id, templateId',
+      users: 'id',
+      cardDesigns: 'id',
+      fonts: 'id, fontName',
+      colorProfiles: 'id',
+    })
   }
 }
 
 /**
- * IndexedDB-based storage provider for client-only mode
- * Stores all data in the browser's IndexedDB
+ * Dexie-backed storage provider for client-only mode.
+ * Dexie wraps the browser's IndexedDB with typed tables, indexes, and migrations.
  */
 export class IndexedDBStorageProvider implements StorageProvider {
-  private db: IDBPDatabase<TemplatePrinterDBSchema> | null = null
+  private db: TemplatePrinterDexieDB | null = null
 
-  private async getDB(): Promise<IDBPDatabase<TemplatePrinterDBSchema>> {
+  private async getDB(): Promise<TemplatePrinterDexieDB> {
     if (!this.db) {
-      this.db = await openDB<TemplatePrinterDBSchema>(DB_NAME, DB_VERSION, {
-        upgrade(db) {
-          // Templates store
-          if (!db.objectStoreNames.contains('templates')) {
-            const templateStore = db.createObjectStore('templates', { keyPath: 'id' })
-            templateStore.createIndex('by-type', 'templateType')
-          }
-
-          // Template SVG contents
-          if (!db.objectStoreNames.contains('templateContents')) {
-            db.createObjectStore('templateContents', { keyPath: 'id' })
-          }
-
-          // Field mappings
-          if (!db.objectStoreNames.contains('fieldMappings')) {
-            const mappingStore = db.createObjectStore('fieldMappings', { keyPath: 'id' })
-            mappingStore.createIndex('by-templateId', 'templateId')
-          }
-
-          // Users
-          if (!db.objectStoreNames.contains('users')) {
-            db.createObjectStore('users', { keyPath: 'id' })
-          }
-
-          // Card designs
-          if (!db.objectStoreNames.contains('cardDesigns')) {
-            db.createObjectStore('cardDesigns', { keyPath: 'id' })
-          }
-
-          // Fonts
-          if (!db.objectStoreNames.contains('fonts')) {
-            const fontStore = db.createObjectStore('fonts', { keyPath: 'id' })
-            fontStore.createIndex('by-fontName', 'fontName')
-          }
-
-          // Color profiles
-          if (!db.objectStoreNames.contains('colorProfiles')) {
-            db.createObjectStore('colorProfiles', { keyPath: 'id' })
-          }
-        },
-      })
+      this.db = new TemplatePrinterDexieDB()
+      await this.db.open()
     }
     return this.db
   }
@@ -471,14 +422,14 @@ export class IndexedDBStorageProvider implements StorageProvider {
   async listTemplates(type?: TemplateType): Promise<TemplateSummary[]> {
     const db = await this.getDB()
     if (type) {
-      return db.getAllFromIndex('templates', 'by-type', type)
+      return db.templates.where('templateType').equals(type).toArray()
     }
-    return db.getAll('templates')
+    return db.templates.toArray()
   }
 
   async getTemplate(id: string): Promise<TemplateSummary | null> {
     const db = await this.getDB()
-    return (await db.get('templates', id)) ?? null
+    return (await db.templates.get(id)) ?? null
   }
 
   async createTemplate(file: File, metadata: TemplateMeta, type: TemplateType): Promise<TemplateSummary> {
@@ -494,15 +445,17 @@ export class IndexedDBStorageProvider implements StorageProvider {
       createdAt: new Date().toISOString(),
     }
 
-    await db.put('templates', template)
-    await db.put('templateContents', { id, svgContent })
+    await db.transaction('rw', db.templates, db.templateContents, async () => {
+      await db.templates.put(template)
+      await db.templateContents.put({ id, svgContent })
+    })
 
     return template
   }
 
   async updateTemplate(id: string, updates: { name?: string; description?: string | null }): Promise<TemplateSummary> {
     const db = await this.getDB()
-    const template = await db.get('templates', id)
+    const template = await db.templates.get(id)
     if (!template) {
       throw new Error('Template not found')
     }
@@ -512,7 +465,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
       ...updates,
     }
 
-    await db.put('templates', updated)
+    await db.templates.put(updated)
     return updated
   }
 
@@ -520,19 +473,16 @@ export class IndexedDBStorageProvider implements StorageProvider {
     const db = await this.getDB()
 
     // Delete template and its content
-    await db.delete('templates', id)
-    await db.delete('templateContents', id)
-
-    // Delete associated field mappings
-    const mappings = await db.getAllFromIndex('fieldMappings', 'by-templateId', id)
-    for (const mapping of mappings) {
-      await db.delete('fieldMappings', mapping.id)
-    }
+    await db.transaction('rw', db.templates, db.templateContents, db.fieldMappings, async () => {
+      await db.templates.delete(id)
+      await db.templateContents.delete(id)
+      await db.fieldMappings.where('templateId').equals(id).delete()
+    })
   }
 
   async getTemplateSvgContent(id: string): Promise<string> {
     const db = await this.getDB()
-    const content = await db.get('templateContents', id)
+    const content = await db.templateContents.get(id)
     if (!content) {
       throw new Error('Template content not found')
     }
@@ -542,7 +492,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
   // Field Mappings
   async getFieldMappings(templateId: string): Promise<FieldMapping[]> {
     const db = await this.getDB()
-    const mappings = await db.getAllFromIndex('fieldMappings', 'by-templateId', templateId)
+    const mappings = await db.fieldMappings.where('templateId').equals(templateId).toArray()
     return mappings.map(({ svgLayerId, standardFieldName, customValue }) => ({
       svgLayerId,
       standardFieldName,
@@ -554,20 +504,16 @@ export class IndexedDBStorageProvider implements StorageProvider {
     const db = await this.getDB()
 
     // Delete existing mappings for this template
-    const existing = await db.getAllFromIndex('fieldMappings', 'by-templateId', templateId)
-    for (const mapping of existing) {
-      await db.delete('fieldMappings', mapping.id)
-    }
+    await db.transaction('rw', db.fieldMappings, async () => {
+      await db.fieldMappings.where('templateId').equals(templateId).delete()
 
-    // Save new mappings
-    for (const mapping of mappings) {
-      const record: FieldMappingRecord = {
+      const records = mappings.map((mapping) => ({
         id: this.generateId('mapping'),
         templateId,
         ...mapping,
-      }
-      await db.put('fieldMappings', record)
-    }
+      }))
+      await db.fieldMappings.bulkPut(records)
+    })
 
     return mappings
   }
@@ -575,12 +521,12 @@ export class IndexedDBStorageProvider implements StorageProvider {
   // Users
   async listUsers(): Promise<UserData[]> {
     const db = await this.getDB()
-    return db.getAll('users')
+    return db.users.toArray()
   }
 
   async getUser(id: string): Promise<UserData | null> {
     const db = await this.getDB()
-    return (await db.get('users', id)) ?? null
+    return (await db.users.get(id)) ?? null
   }
 
   async createUser(userData: Omit<UserData, 'id'>): Promise<UserData> {
@@ -595,13 +541,13 @@ export class IndexedDBStorageProvider implements StorageProvider {
       updatedAt: now,
     } as UserData & { id: string; createdAt: string; updatedAt: string }
 
-    await db.put('users', user)
+    await db.users.put(user)
     return user
   }
 
   async updateUser(id: string, updates: Partial<UserData>): Promise<UserData> {
     const db = await this.getDB()
-    const user = await db.get('users', id)
+    const user = await db.users.get(id)
     if (!user) {
       throw new Error('User not found')
     }
@@ -613,19 +559,19 @@ export class IndexedDBStorageProvider implements StorageProvider {
       updatedAt: new Date().toISOString(),
     } as UserData & { id: string; updatedAt: string }
 
-    await db.put('users', updated)
+    await db.users.put(updated)
     return updated
   }
 
   async deleteUser(id: string): Promise<void> {
     const db = await this.getDB()
-    await db.delete('users', id)
+    await db.users.delete(id)
   }
 
   // Card Designs
   async listCardDesigns(): Promise<CardDesign[]> {
     const db = await this.getDB()
-    const designs = await db.getAll('cardDesigns')
+    const designs = await db.cardDesigns.toArray()
 
     // Populate template references
     for (const design of designs) {
@@ -642,7 +588,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
 
   async getCardDesign(id: string): Promise<CardDesign | null> {
     const db = await this.getDB()
-    const design = await db.get('cardDesigns', id)
+    const design = await db.cardDesigns.get(id)
     if (!design) return null
 
     // Populate template references
@@ -677,7 +623,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
       updatedAt: now,
     }
 
-    await db.put('cardDesigns', design)
+    await db.cardDesigns.put(design)
 
     // Populate template references for return value
     if (design.frontTemplateId) {
@@ -692,7 +638,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
 
   async updateCardDesign(id: string, updates: Partial<CardDesignPayload>): Promise<CardDesign> {
     const db = await this.getDB()
-    const design = await db.get('cardDesigns', id)
+    const design = await db.cardDesigns.get(id)
     if (!design) {
       throw new Error('Card design not found')
     }
@@ -704,7 +650,7 @@ export class IndexedDBStorageProvider implements StorageProvider {
       updatedAt: new Date().toISOString(),
     }
 
-    await db.put('cardDesigns', updated)
+    await db.cardDesigns.put(updated)
 
     // Populate template references
     if (updated.frontTemplateId) {
@@ -719,23 +665,23 @@ export class IndexedDBStorageProvider implements StorageProvider {
 
   async deleteCardDesign(id: string): Promise<void> {
     const db = await this.getDB()
-    await db.delete('cardDesigns', id)
+    await db.cardDesigns.delete(id)
   }
 
   // Fonts
   async listFonts(): Promise<FontData[]> {
     const db = await this.getDB()
-    return db.getAll('fonts')
+    return db.fonts.toArray()
   }
 
   async uploadFont(fontName: string, file: File): Promise<FontData> {
     const db = await this.getDB()
 
     // Check if font with same name exists
-    const existing = await db.getAllFromIndex('fonts', 'by-fontName', fontName)
+    const existing = await db.fonts.where('fontName').equals(fontName).toArray()
     if (existing.length > 0) {
       // Delete existing font with same name
-      await db.delete('fonts', existing[0].id)
+      await db.fonts.delete(existing[0].id)
     }
 
     // Convert file to base64
@@ -756,27 +702,25 @@ export class IndexedDBStorageProvider implements StorageProvider {
       createdAt: new Date().toISOString(),
     }
 
-    await db.put('fonts', font)
+    await db.fonts.put(font)
     return font
   }
 
   async deleteFont(fontName: string): Promise<void> {
     const db = await this.getDB()
-    const fonts = await db.getAllFromIndex('fonts', 'by-fontName', fontName)
-    for (const font of fonts) {
-      await db.delete('fonts', font.id)
-    }
+    const fonts = await db.fonts.where('fontName').equals(fontName).toArray()
+    await db.fonts.bulkDelete(fonts.map((font) => font.id))
   }
 
   // Color Profiles
   async listColorProfiles(): Promise<ColorProfile[]> {
     const db = await this.getDB()
-    return db.getAll('colorProfiles')
+    return db.colorProfiles.toArray()
   }
 
   async getColorProfile(id: string): Promise<ColorProfile | null> {
     const db = await this.getDB()
-    return (await db.get('colorProfiles', id)) ?? null
+    return (await db.colorProfiles.get(id)) ?? null
   }
 
   async createColorProfile(profile: Omit<ColorProfile, 'id'>): Promise<ColorProfile> {
@@ -791,13 +735,13 @@ export class IndexedDBStorageProvider implements StorageProvider {
       updatedAt: now,
     }
 
-    await db.put('colorProfiles', colorProfile)
+    await db.colorProfiles.put(colorProfile)
     return colorProfile
   }
 
   async updateColorProfile(id: string, updates: Partial<ColorProfile>): Promise<ColorProfile> {
     const db = await this.getDB()
-    const profile = await db.get('colorProfiles', id)
+    const profile = await db.colorProfiles.get(id)
     if (!profile) {
       throw new Error('Color profile not found')
     }
@@ -809,13 +753,13 @@ export class IndexedDBStorageProvider implements StorageProvider {
       updatedAt: new Date().toISOString(),
     }
 
-    await db.put('colorProfiles', updated)
+    await db.colorProfiles.put(updated)
     return updated
   }
 
   async deleteColorProfile(id: string): Promise<void> {
     const db = await this.getDB()
-    await db.delete('colorProfiles', id)
+    await db.colorProfiles.delete(id)
   }
 
   // Print Layouts (read-only built-in layouts for local mode)
@@ -831,18 +775,18 @@ export class IndexedDBStorageProvider implements StorageProvider {
   async exportAllData(): Promise<ExportData> {
     const db = await this.getDB()
 
-    const templates = await db.getAll('templates')
-    const users = await db.getAll('users')
-    const cardDesigns = await db.getAll('cardDesigns')
-    const fonts = await db.getAll('fonts')
-    const colorProfiles = await db.getAll('colorProfiles')
+    const templates = await db.templates.toArray()
+    const users = await db.users.toArray()
+    const cardDesigns = await db.cardDesigns.toArray()
+    const fonts = await db.fonts.toArray()
+    const colorProfiles = await db.colorProfiles.toArray()
 
     // Get SVG contents and field mappings
     const templateSvgContents: Record<string, string> = {}
     const fieldMappings: Record<string, FieldMapping[]> = {}
 
     for (const template of templates) {
-      const content = await db.get('templateContents', template.id)
+      const content = await db.templateContents.get(template.id)
       if (content) {
         templateSvgContents[template.id] = content.svgContent
       }
@@ -871,27 +815,37 @@ export class IndexedDBStorageProvider implements StorageProvider {
     const db = await this.getDB()
 
     // Clear existing data
-    const stores: (keyof TemplatePrinterDBSchema)[] = [
-      'templates',
-      'templateContents',
-      'fieldMappings',
-      'users',
-      'cardDesigns',
-      'fonts',
-      'colorProfiles',
-    ]
-
-    for (const store of stores) {
-      await db.clear(store)
-    }
+    await db.transaction(
+      'rw',
+      [
+        db.templates,
+        db.templateContents,
+        db.fieldMappings,
+        db.users,
+        db.cardDesigns,
+        db.fonts,
+        db.colorProfiles,
+      ],
+      async () => {
+        await Promise.all([
+          db.templates.clear(),
+          db.templateContents.clear(),
+          db.fieldMappings.clear(),
+          db.users.clear(),
+          db.cardDesigns.clear(),
+          db.fonts.clear(),
+          db.colorProfiles.clear(),
+        ])
+      },
+    )
 
     // Import templates
     for (const template of data.templates) {
-      await db.put('templates', template)
+      await db.templates.put(template)
 
       const svgContent = data.templateSvgContents[template.id]
       if (svgContent) {
-        await db.put('templateContents', { id: template.id, svgContent })
+        await db.templateContents.put({ id: template.id, svgContent })
       }
 
       const mappings = data.fieldMappings[template.id]
@@ -902,22 +856,22 @@ export class IndexedDBStorageProvider implements StorageProvider {
 
     // Import card designs
     for (const design of data.cardDesigns) {
-      await db.put('cardDesigns', design)
+      await db.cardDesigns.put(design)
     }
 
     // Import users
     for (const user of data.users) {
-      await db.put('users', user as UserData & { id: string })
+      await db.users.put(user as UserData & { id: string })
     }
 
     // Import fonts
     for (const font of data.fonts) {
-      await db.put('fonts', font)
+      await db.fonts.put(font)
     }
 
     // Import color profiles
     for (const profile of data.colorProfiles) {
-      await db.put('colorProfiles', profile)
+      await db.colorProfiles.put(profile)
     }
   }
 }

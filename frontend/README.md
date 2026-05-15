@@ -11,6 +11,18 @@ pnpm dev
 
 The dev server runs on <http://localhost:5173>. Production builds are generated with `pnpm build` and output to `dist/`.
 
+## Storage Modes
+
+The app uses a shared storage provider interface, so UI code does not talk directly to a database.
+
+| Mode | Command | Backing store |
+|------|---------|---------------|
+| `server` | `pnpm dev` | Existing Express API routes. |
+| `local` | `pnpm dev:local` | Dexie over browser IndexedDB. |
+| `convex-local` | `pnpm convex:dev:local` and `pnpm dev:convex-local` | Local Convex deployment. |
+
+Local mode is the browser-only/offline path. Convex local mode is for developing against a local Convex backend and requires `VITE_CONVEX_URL` from `.env.local`; `pnpm convex:dev:local` creates that file the first time it runs.
+
 ## Workflow
 
 1. **Prepare an Illustrator template**
@@ -58,7 +70,12 @@ The dev server runs on <http://localhost:5173>. Production builds are generated 
 | Command | Description |
 |---------|-------------|
 | `pnpm dev` | Start the Vite development server with HMR. |
+| `pnpm dev:local` | Start Vite with Dexie/IndexedDB browser storage. |
+| `pnpm convex:dev:local` | Start a local Convex deployment and generate Convex environment values. |
+| `pnpm dev:convex-local` | Start Vite against the local Convex deployment. |
 | `pnpm build` | Type-check and generate a production build. |
+| `pnpm build:local` | Type-check and build with Dexie local storage mode. |
+| `pnpm build:convex-local` | Type-check and build with Convex storage mode. |
 | `pnpm preview` | Preview the production build locally. |
 
 ## Next Steps
@@ -66,4 +83,4 @@ The dev server runs on <http://localhost:5173>. Production builds are generated 
 - Extend export logic to place two cards per sheet for the Canon MP tray layout.
 - Hook up a barcode renderer (e.g. `JsBarcode`) during PDF generation.
 - Add batch mode support (CSV import + multi-card export).
-- Persist templates and field definitions in local storage or IndexedDB.
+- Add cloud auth and ownership rules before using Convex mode for shared production data.
