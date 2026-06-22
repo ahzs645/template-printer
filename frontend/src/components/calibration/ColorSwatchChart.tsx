@@ -1,4 +1,4 @@
-import { getSwatchSlotCount, type CardLayout } from "../../lib/calibration/layoutCalculator"
+import { getSwatchIndexForGridIndex, getSwatchSlotCount, type CardLayout } from "../../lib/calibration/layoutCalculator"
 
 interface ColorSwatchChartProps {
   colorChart: string[]
@@ -43,13 +43,8 @@ export function ColorSwatchChart({
             )
           }
 
-          // Calculate swatch index (excluding markers)
-          let swatchIndex = 0
-          for (let i = 0; i < gridIndex; i++) {
-            if (!cardLayout.excludedIndices.includes(i)) {
-              swatchIndex++
-            }
-          }
+          const swatchIndex = getSwatchIndexForGridIndex(cardLayout, gridIndex)
+          if (swatchIndex === null) return null
 
           const color = colorChart[swatchIndex]
 

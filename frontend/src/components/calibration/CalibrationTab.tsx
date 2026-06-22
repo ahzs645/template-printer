@@ -8,7 +8,7 @@ import { usePrintLayouts } from '../../hooks/usePrintLayouts'
 import { exportWithJsonLayout } from '../../lib/exporter'
 import { createColorChartTemplate, createProfileAdjustmentKey, generateSVG, generatePDF, generatePNG, getProfileAdjustmentBaseColor, renderColorChartToPngDataUrl, exportTestPrint, importTestPrint, exportProfiles, importProfiles, type TestPrintConfig, type ColorProfile } from '../../lib/calibration/exportUtils'
 import { generateArucoMarker } from '../../lib/calibration/aruco'
-import { getGridPosition, getSwatchSlotCount } from '../../lib/calibration/layoutCalculator'
+import { getGridPosition, getSwatchIndexForGridIndex, getSwatchSlotCount } from '../../lib/calibration/layoutCalculator'
 import {
   ImageContainer,
   AnalysisDisplay,
@@ -171,7 +171,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   // Swatch Generator Mode - Dashboard Layout
   if (mode === 'swatch') {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(620px, 1fr) minmax(280px, 340px)', gap: 12, padding: 12, height: '100%', overflow: 'auto', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 340px)', gap: 12, padding: 12, height: '100%', overflow: 'auto', alignItems: 'start' }}>
         {/* Main Content - Chart */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
           {/* Chart Card */}
@@ -407,6 +407,8 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                 if (isMarkerPosition) {
                   const markerData = cardLayout.markerPositions.find(m => m.gridIndex === gridIndex)
                   if (!markerData) return null
+                  const marker = generateArucoMarker(markerData.id)
+                  const matrixSize = marker.matrix.length
 
                   return (
                     <div
@@ -421,11 +423,10 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                         backgroundColor: 'white'
                       }}
                     >
-                      <div style={{ width: '100%', height: '100%', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gridTemplateRows: 'repeat(6, 1fr)' }}>
-                        {Array.from({ length: 36 }).map((_, cellIdx) => {
-                          const row = Math.floor(cellIdx / 6)
-                          const col = cellIdx % 6
-                          const marker = generateArucoMarker(markerData.id)
+                      <div style={{ width: '100%', height: '100%', display: 'grid', gridTemplateColumns: `repeat(${matrixSize}, 1fr)`, gridTemplateRows: `repeat(${matrixSize}, 1fr)` }}>
+                        {Array.from({ length: matrixSize * matrixSize }).map((_, cellIdx) => {
+                          const row = Math.floor(cellIdx / matrixSize)
+                          const col = cellIdx % matrixSize
                           const isBlack = marker.matrix[row] && marker.matrix[row][col] === 0
                           return (
                             <div
@@ -438,12 +439,8 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                     </div>
                   )
                 } else {
-                  let swatchIndex = 0
-                  for (let i = 0; i < gridIndex; i++) {
-                    if (!cardLayout.excludedIndices.includes(i)) {
-                      swatchIndex++
-                    }
-                  }
+                  const swatchIndex = getSwatchIndexForGridIndex(cardLayout, gridIndex)
+                  if (swatchIndex === null) return null
 
                   const color = colorChart[swatchIndex]
 
@@ -479,7 +476,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   // Color Comparison Mode - Split View
   if (mode === 'compare') {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: scannedImage ? 'minmax(300px, 0.75fr) minmax(560px, 1.25fr)' : '1fr', gap: 12, padding: 12, height: '100%', overflow: 'auto', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: scannedImage ? 'minmax(0, 0.75fr) minmax(0, 1.25fr)' : 'minmax(0, 1fr)', gap: 12, padding: 12, height: '100%', overflow: 'auto', alignItems: 'start' }}>
         {/* Left - Expected Colors / Upload */}
         <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', position: scannedImage ? 'sticky' : 'static', top: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -492,18 +489,63 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(11, 1fr)', gap: 2, marginBottom: 12 }}>
-            {colorChart.map((color, index) => (
-              <div
-                key={index}
-                style={{
-                  aspectRatio: '1',
-                  backgroundColor: color,
-                  borderRadius: 2,
-                  border: '1px solid var(--border)'
-                }}
-                title={`#${index + 1}: ${color}`}
-              />
-            ))}
+            {Array.from({ length: cardLayout.swatchGrid.cols * cardLayout.swatchGrid.rows }).map((_, gridIndex) => {
+              const isMarkerPosition = cardLayout.excludedIndices.includes(gridIndex)
+
+              if (isMarkerPosition) {
+                const markerPosition = cardLayout.markerPositions.find(m => m.gridIndex === gridIndex)
+                return (
+                  <div
+                    key={`marker-${gridIndex}`}
+                    style={{
+                      aspectRatio: '1',
+                      borderRadius: 2,
+                      border: '1px solid #1f2937',
+                      background: '#e5e7eb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: '#4b5563',
+                    }}
+                    title={`Marker M${markerPosition?.id ?? ''}`}
+                  >
+                    M{markerPosition?.id}
+                  </div>
+                )
+              }
+
+              const swatchIndex = getSwatchIndexForGridIndex(cardLayout, gridIndex)
+              if (swatchIndex === null || swatchIndex >= colorChart.length) {
+                return (
+                  <div
+                    key={`empty-${gridIndex}`}
+                    style={{
+                      aspectRatio: '1',
+                      backgroundColor: '#E5E7EB',
+                      borderRadius: 2,
+                      border: '1px solid var(--border)'
+                    }}
+                    title="Empty swatch slot"
+                  />
+                )
+              }
+
+              const color = colorChart[swatchIndex]
+              return (
+                <div
+                  key={`swatch-${gridIndex}`}
+                  style={{
+                    aspectRatio: '1',
+                    backgroundColor: color,
+                    borderRadius: 2,
+                    border: '1px solid var(--border)'
+                  }}
+                  title={`Swatch #${swatchIndex + 1}: ${color}`}
+                />
+              )
+            })}
           </div>
 
           {!scannedImage && (

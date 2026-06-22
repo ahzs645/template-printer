@@ -25,6 +25,21 @@ export function getSwatchSlotCount(layout: CardLayout): number {
   return (layout.swatchGrid.cols * layout.swatchGrid.rows) - layout.excludedIndices.length
 }
 
+export function getSwatchIndexForGridIndex(layout: CardLayout, gridIndex: number): number | null {
+  const totalGridPositions = layout.swatchGrid.cols * layout.swatchGrid.rows
+  if (gridIndex < 0 || gridIndex >= totalGridPositions) return null
+  if (layout.excludedIndices.includes(gridIndex)) return null
+
+  let swatchIndex = 0
+  for (let i = 0; i < gridIndex; i++) {
+    if (!layout.excludedIndices.includes(i)) {
+      swatchIndex++
+    }
+  }
+
+  return swatchIndex
+}
+
 export function calculateCardLayout(
   useMarkers: boolean = true,
   margin: number = 5
@@ -156,27 +171,7 @@ export function getSwatchPosition(
   while (gridIndex < totalGridPositions) {
     if (!layout.excludedIndices.includes(gridIndex)) {
       if (swatchCount === swatchIndex) {
-        // Found the position for this swatch
-        const row = Math.floor(gridIndex / layout.swatchGrid.cols);
-        const col = gridIndex % layout.swatchGrid.cols;
-
-        // Calculate centered position
-        const totalGapWidth = layout.swatchGrid.gap * (layout.swatchGrid.cols - 1);
-        const totalGapHeight = layout.swatchGrid.gap * (layout.swatchGrid.rows - 1);
-        const actualGridWidth = (layout.swatchGrid.cols * layout.swatchGrid.swatchWidth) + totalGapWidth;
-        const actualGridHeight = (layout.swatchGrid.rows * layout.swatchGrid.swatchHeight) + totalGapHeight;
-        const centerX = (layout.cardWidth - actualGridWidth) / 2;
-        const centerY = (layout.cardHeight - actualGridHeight) / 2;
-
-        const x = centerX + (col * (layout.swatchGrid.swatchWidth + layout.swatchGrid.gap));
-        const y = centerY + (row * (layout.swatchGrid.swatchHeight + layout.swatchGrid.gap));
-
-        return {
-          x,
-          y,
-          width: layout.swatchGrid.swatchWidth,
-          height: layout.swatchGrid.swatchHeight
-        };
+        return getGridPosition(layout, gridIndex);
       }
       swatchCount++;
     }

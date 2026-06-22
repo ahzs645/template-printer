@@ -24,34 +24,38 @@ export function useImageOverlay(
     if (!image.naturalWidth || !image.naturalHeight) return null
 
     const containerRect = container.getBoundingClientRect()
+    const imageRect = image.getBoundingClientRect()
+    const containerStyle = window.getComputedStyle(container)
+    const borderLeft = Number.parseFloat(containerStyle.borderLeftWidth) || 0
+    const borderTop = Number.parseFloat(containerStyle.borderTopWidth) || 0
 
     // Ensure container has dimensions
     if (containerRect.width === 0 || containerRect.height === 0) return null
 
     const imageAspect = image.naturalWidth / image.naturalHeight
-    const containerAspect = containerRect.width / containerRect.height
+    const imageElementAspect = imageRect.width / imageRect.height
+    const imageElementLeft = imageRect.left - containerRect.left - borderLeft
+    const imageElementTop = imageRect.top - containerRect.top - borderTop
 
-    let imageWidth, imageHeight, imageLeft, imageTop
+    let renderedWidth, renderedHeight, renderedLeft, renderedTop
 
-    if (imageAspect > containerAspect) {
-      // Image is wider - constrained by container width
-      imageWidth = containerRect.width
-      imageHeight = containerRect.width / imageAspect
-      imageLeft = 0
-      imageTop = (containerRect.height - imageHeight) / 2
+    if (imageAspect > imageElementAspect) {
+      renderedWidth = imageRect.width
+      renderedHeight = imageRect.width / imageAspect
+      renderedLeft = imageElementLeft
+      renderedTop = imageElementTop + ((imageRect.height - renderedHeight) / 2)
     } else {
-      // Image is taller - constrained by container height
-      imageHeight = containerRect.height
-      imageWidth = containerRect.height * imageAspect
-      imageTop = 0
-      imageLeft = (containerRect.width - imageWidth) / 2
+      renderedHeight = imageRect.height
+      renderedWidth = imageRect.height * imageAspect
+      renderedTop = imageElementTop
+      renderedLeft = imageElementLeft + ((imageRect.width - renderedWidth) / 2)
     }
 
     return {
-      width: imageWidth,
-      height: imageHeight,
-      left: imageLeft,
-      top: imageTop
+      width: renderedWidth,
+      height: renderedHeight,
+      left: renderedLeft,
+      top: renderedTop
     }
   }, [containerRef, imageRef])
 

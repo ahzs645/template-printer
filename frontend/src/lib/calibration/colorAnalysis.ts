@@ -25,6 +25,12 @@ export interface AnalysisResult {
   canvasDimensions?: { width: number; height: number };
 }
 
+interface AnalysisLayoutOptions {
+  margin?: number
+  gap?: number
+  excludedIndices?: number[]
+}
+
 interface MarkerCorner {
   x: number
   y: number
@@ -220,7 +226,8 @@ export async function analyzeColorChart(
   canvas: HTMLCanvasElement,
   expectedColors: string[],
   cardDimensions: { width: number; height: number },
-  swatchLayout: { cols: number; rows: number }
+  swatchLayout: { cols: number; rows: number },
+  layoutOptions: AnalysisLayoutOptions = {}
 ): Promise<AnalysisResult> {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get canvas context');
@@ -242,7 +249,7 @@ export async function analyzeColorChart(
   console.log(`[DEBUG v2] Checking marker count: ${detectedMarkers.length} >= 3? ${detectedMarkers.length >= 3}`);
   if (detectedMarkers.length >= 3) {
     console.log(`[v2] Found ${detectedMarkers.length} markers, calculating transform.`);
-    transform = calculateTransform(detectedMarkers, cardDimensions);
+    transform = calculateTransform(detectedMarkers, cardDimensions, layoutOptions);
 
     if (transform.transformPoint) {
       console.log('Extracting colors with perspective correction.');
@@ -251,7 +258,8 @@ export async function analyzeColorChart(
         expectedColors,
         transform,
         swatchLayout,
-        cardDimensions
+        cardDimensions,
+        layoutOptions
       );
     } else {
       console.warn('Transform point function not available after calculating transform.');
@@ -416,7 +424,8 @@ function processDetectedMarkers(
 
 function calculateTransform(
   markers: Array<{ id: number; corners: Array<{ x: number; y: number }> }>,
-  cardDimensions: { width: number; height: number }
+  cardDimensions: { width: number; height: number },
+  layoutOptions: AnalysisLayoutOptions = {}
 ): AnalysisResult['transform'] {
   console.log('Calculating transform from', markers.length, 'markers');
   console.log('Available marker IDs:', markers.map(m => m.id));
@@ -457,8 +466,8 @@ function calculateTransform(
   // Calculate grid layout EXACTLY matching layoutCalculator.ts
   const gridCols = 11;
   const gridRows = 7;
-  const gap = 0.5;
-  const margin = 5;
+  const gap = layoutOptions.gap ?? 0.5;
+  const margin = layoutOptions.margin ?? 5;
 
   const totalGapWidth = gap * (gridCols - 1);
   const totalGapHeight = gap * (gridRows - 1);
@@ -665,19 +674,20 @@ function extractColorsWithTransform(
   expectedColors: string[],
   transform: AnalysisResult['transform'],
   swatchLayout: { cols: number; rows: number },
-  cardDimensions: { width: number; height: number }
+  cardDimensions: { width: number; height: number },
+  layoutOptions: AnalysisLayoutOptions = {}
 ): ColorSample[] {
   const samples: ColorSample[] = [];
 
   // ArUco markers are at grid positions: 0, 10, 66, 76
-  const markerPositions = [0, 10, 66, 76];
+  const markerPositions = layoutOptions.excludedIndices ?? [0, 10, 66, 76];
   let colorIndex = 0;
 
   // Calculate grid layout EXACTLY matching layoutCalculator.ts and calculateTransform
   const gridCols = swatchLayout.cols;
   const gridRows = swatchLayout.rows;
-  const gap = 0.5;
-  const margin = 5;
+  const gap = layoutOptions.gap ?? 0.5;
+  const margin = layoutOptions.margin ?? 5;
 
   const totalGapWidth = gap * (gridCols - 1);
   const totalGapHeight = gap * (gridRows - 1);

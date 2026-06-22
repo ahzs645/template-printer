@@ -1,6 +1,6 @@
 import type { CardLayout } from '../../../lib/calibration/layoutCalculator'
 import type { AnalysisResult } from '../../../lib/calibration/colorAnalysis'
-import { getGridPosition } from '../../../lib/calibration/layoutCalculator'
+import { getGridPosition, getSwatchIndexForGridIndex } from '../../../lib/calibration/layoutCalculator'
 
 interface GridOverlayProps {
   cardLayout: CardLayout
@@ -120,13 +120,8 @@ export function GridOverlay({
           )
         }
 
-        // Calculate swatch index for color sampling positions
-        let swatchIndex = 0
-        for (let i = 0; i < gridIndex; i++) {
-          if (!cardLayout.excludedIndices.includes(i)) {
-            swatchIndex++
-          }
-        }
+        const swatchIndex = getSwatchIndexForGridIndex(cardLayout, gridIndex)
+        if (swatchIndex === null) return null
 
         if (swatchIndex >= colorChart.length) return null
 

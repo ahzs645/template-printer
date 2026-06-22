@@ -1,6 +1,6 @@
 import { Slider } from "../ui/slider"
 import { generateArucoMarker } from "../../lib/calibration/aruco"
-import { getGridPosition, type CardLayout } from "../../lib/calibration/layoutCalculator"
+import { getGridPosition, getSwatchIndexForGridIndex, type CardLayout } from "../../lib/calibration/layoutCalculator"
 
 interface CardPreviewProps {
   cardLayout: CardLayout
@@ -110,13 +110,8 @@ export function CardPreview({
               )
             } else {
               // Render color swatch
-              // Calculate swatch index
-              let swatchIndex = 0
-              for (let i = 0; i < gridIndex; i++) {
-                if (!cardLayout.excludedIndices.includes(i)) {
-                  swatchIndex++
-                }
-              }
+              const swatchIndex = getSwatchIndexForGridIndex(cardLayout, gridIndex)
+              if (swatchIndex === null) return null
 
               const color = colorChart[swatchIndex]
 

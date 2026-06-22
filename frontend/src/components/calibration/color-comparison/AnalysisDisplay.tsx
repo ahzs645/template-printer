@@ -66,7 +66,7 @@ export function AnalysisDisplay({
     <div className="space-y-3">
       {/* Overall Quality Summary */}
       <div className={`p-2 rounded-lg border ${getQualityColor(overallQuality)}`}>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="font-medium">Overall Color Accuracy: {overallQuality.toUpperCase()}</span>
           <span className="text-xs">
             {colorComparisons.filter(comp => calculateColorAccuracy(comp).quality === 'excellent').length} excellent, {' '}
@@ -94,22 +94,22 @@ export function AnalysisDisplay({
                 </span>
               </div>
 
-              <div className="flex h-9 rounded border">
-                <div className="flex-1 space-y-1">
+              <div className="space-y-1">
+                <div className="flex h-9 rounded border overflow-hidden">
                   <div
-                    className="h-full rounded-l border-r"
+                    className="flex-1 border-r"
                     style={{ backgroundColor: comparison.original }}
                     title={`Original: ${comparison.original}`}
                   />
-                  <div className="text-xs text-center text-muted-foreground">Original</div>
-                </div>
-                <div className="flex-1 space-y-1">
                   <div
-                    className="h-full rounded-r"
+                    className="flex-1"
                     style={{ backgroundColor: comparison.scanned }}
                     title={`Scanned: ${comparison.scanned}`}
                   />
-                  <div className="text-xs text-center text-muted-foreground">Scanned</div>
+                </div>
+                <div className="grid grid-cols-2 text-xs text-center text-muted-foreground">
+                  <div>Original</div>
+                  <div>Scanned</div>
                 </div>
               </div>
 

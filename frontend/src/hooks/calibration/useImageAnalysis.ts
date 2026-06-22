@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { analyzeColorChart, type AnalysisResult } from '../../lib/calibration/colorAnalysis'
 import type { CardLayout } from '../../lib/calibration/layoutCalculator'
-import { getGridPosition } from '../../lib/calibration/layoutCalculator'
+import { getGridPosition, getSwatchIndexForGridIndex } from '../../lib/calibration/layoutCalculator'
 
 export interface ColorComparison {
   original: string
@@ -100,7 +100,12 @@ export function useImageAnalysis() {
             canvas,
             colorChart,
             { width: cardLayout.cardWidth, height: cardLayout.cardHeight },
-            { cols: cardLayout.swatchGrid.cols, rows: cardLayout.swatchGrid.rows }
+            { cols: cardLayout.swatchGrid.cols, rows: cardLayout.swatchGrid.rows },
+            {
+              margin: cardLayout.margin,
+              gap: cardLayout.swatchGrid.gap,
+              excludedIndices: cardLayout.excludedIndices,
+            }
           )
 
           console.log('Analysis result:', result)
@@ -134,13 +139,8 @@ export function useImageAnalysis() {
                 continue
               }
 
-              // Calculate swatch index using EXACT same logic as CardPreview
-              let swatchIndex = 0
-              for (let i = 0; i < gridIndex; i++) {
-                if (!cardLayout.excludedIndices.includes(i)) {
-                  swatchIndex++
-                }
-              }
+              const swatchIndex = getSwatchIndexForGridIndex(cardLayout, gridIndex)
+              if (swatchIndex === null) continue
 
               // Only process if we have a color for this swatch
               if (swatchIndex >= colorChart.length) {
