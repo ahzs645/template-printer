@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Circle,
   ClipboardCheck,
+  IdCard as Badge2,
 } from 'lucide-react'
 
 import './App.css'
@@ -64,6 +65,7 @@ import { InlineSvg } from './components/InlineSvg'
 import { CardBlankDialog } from './components/CardBlankDialog'
 import { BarcodeScanDialog } from './components/BarcodeScanDialog'
 import { TestCardsDialog } from './components/TestCardsDialog'
+import { LanyardDialog } from './components/LanyardDialog'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
@@ -130,6 +132,7 @@ function App() {
   const [blankDialogOpen, setBlankDialogOpen] = useState(false)
   const [scanDialogOpen, setScanDialogOpen] = useState(false)
   const [testCardsOpen, setTestCardsOpen] = useState(false)
+  const [lanyardOpen, setLanyardOpen] = useState(false)
   // Non-destructive card guides drawn over the preview.
   const [showMagStripeGuide, setShowMagStripeGuide] = useState(false)
   const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
@@ -1423,6 +1426,12 @@ function App() {
               onClick={() => setTestCardsOpen(true)}
               disabled={!template}
             />
+            <RibbonButton
+              icon={<Badge2 size={18} />}
+              label="Lanyard"
+              onClick={() => setLanyardOpen(true)}
+              disabled={!renderedSvg}
+            />
           </RibbonGroup>
 
           <RibbonGroup title="Guides">
@@ -2303,6 +2312,21 @@ function App() {
         fields={fields}
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
+      />
+
+      {/* Lanyard Dialog */}
+      <LanyardDialog
+        open={lanyardOpen}
+        onOpenChange={setLanyardOpen}
+        frontSvg={activeSide === 'back' ? otherSidePreview?.svg ?? renderedSvg : renderedSvg}
+        backSvg={activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null}
+        widthMm={cardSizeMm.width}
+        heightMm={cardSizeMm.height}
+        hasMagneticStripe={showMagStripeGuide}
+        punch={punchGuide}
+        punchShape={punchShapeGuide}
+        onPunchChange={setPunchGuide}
+        onPunchShapeChange={setPunchShapeGuide}
       />
 
       {/* Test Cards Dialog */}
