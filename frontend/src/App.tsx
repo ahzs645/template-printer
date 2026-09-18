@@ -61,6 +61,8 @@ import { FieldMappingDialog, type FieldMapping } from './components/FieldMapping
 import { ShareTemplateDialog } from './components/ShareTemplateDialog'
 import { InlineSvg } from './components/InlineSvg'
 import { CardBlankDialog } from './components/CardBlankDialog'
+import { BarcodeScanDialog } from './components/BarcodeScanDialog'
+import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
 import {
@@ -123,6 +125,7 @@ function App() {
   const [activeSide, setActiveSide] = useState<CardSide>('front')
   const [otherSidePreview, setOtherSidePreview] = useState<{ name: string; svg: string } | null>(null)
   const [blankDialogOpen, setBlankDialogOpen] = useState(false)
+  const [scanDialogOpen, setScanDialogOpen] = useState(false)
   // Non-destructive card guides drawn over the preview.
   const [showMagStripeGuide, setShowMagStripeGuide] = useState(false)
   const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
@@ -706,6 +709,18 @@ function App() {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to create the blank template')
     }
+  }
+
+  /**
+   * Set a field up from a barcode read out of an image: the symbology it uses
+   * and the value it carries become the field's type and its default.
+   */
+  const handleApplyScan = (scan: ScannedBarcode) => {
+    if (!selectedField || !scan.symbology) return
+    handleFieldChange(selectedField.id, 'type', 'barcode')
+    handleFieldChange(selectedField.id, 'barcodeSymbology', scan.symbology)
+    handleFieldChange(selectedField.id, 'defaultValue', scan.text)
+    setStatusMessage(`Read a ${scan.formatName.replace(/_/g, ' ')} barcode and applied it to "${selectedField.label}".`)
   }
 
   const handleOpenShare = () => {
@@ -1379,6 +1394,11 @@ function App() {
               disabled={!selectedField || isSharedReadOnly}
             />
             <RibbonDivider />
+            <RibbonButton
+              icon={<ScanLine size={18} />}
+              label="Read Barcode"
+              onClick={() => setScanDialogOpen(true)}
+            />
             <RibbonButton
               icon={<Settings size={18} />}
               label="Map Fields"
@@ -2265,6 +2285,14 @@ function App() {
         fields={fields}
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
+      />
+
+      {/* Barcode Scan Dialog */}
+      <BarcodeScanDialog
+        open={scanDialogOpen}
+        onOpenChange={setScanDialogOpen}
+        targetFieldLabel={selectedField && !isSharedReadOnly ? selectedField.label : null}
+        onApply={selectedField && !isSharedReadOnly ? handleApplyScan : undefined}
       />
 
       {/* New Blank Template Dialog */}
