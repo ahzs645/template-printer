@@ -282,6 +282,26 @@ const compositeLastFirstField: FieldDescriptor = {
   defaultFormatId: 'last-comma-first',
 }
 
+const compositeStackedField: FieldDescriptor = {
+  id: 'fullNameStacked',
+  baseId: 'fullName',
+  label: 'Full Name (stacked)',
+  description: 'Forces a hard line break between the name parts, for artwork that stacks the name over two lines.',
+  formats: [
+    { id: 'first-linebreak-last', label: 'First / Last', suffix: 'First_LineBreak_Last', sample: 'John\nSmith' },
+    {
+      id: 'first-middleinitial-linebreak-last',
+      label: 'First M. / Last',
+      suffix: 'First_MiddleInitial_LineBreak_Last',
+      sample: 'John A.\nSmith',
+    },
+    { id: 'last-linebreak-first', label: 'Last / First', suffix: 'Last_LineBreak_First', sample: 'Smith\nJohn' },
+    { id: 'last-comma-linebreak-first', label: 'Last, / First', suffix: 'Last_Comma_LineBreak_First', sample: 'Smith,\nJohn' },
+  ],
+  capitalization: FULLNAME_CAPITALIZATION,
+  defaultFormatId: 'first-linebreak-last',
+}
+
 const FIELD_CATEGORIES: FieldCategory[] = [
   {
     id: 'individual-name',
@@ -300,6 +320,12 @@ const FIELD_CATEGORIES: FieldCategory[] = [
     label: 'Composite Names – Last, First',
     description: 'Last name first with a comma (common for ID badges).',
     fields: [compositeLastFirstField],
+  },
+  {
+    id: 'composite-stacked',
+    label: 'Composite Names – Stacked over two lines',
+    description: 'Keeps the first and last name on their own lines regardless of how short the name is.',
+    fields: [compositeStackedField],
   },
   {
     id: 'text-fields',
@@ -324,10 +350,7 @@ function applyCapitalization(sample: string, variantId: CapitalizationVariantId)
     case 'AllCaps':
       return sample.toUpperCase()
     case 'TitleCase':
-      return sample
-        .split(' ')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ')
+      return sample.toLowerCase().replace(/(^|[\s-])(\S)/g, (_match, boundary, char) => boundary + char.toUpperCase())
     case 'LowerCase':
       return sample.toLowerCase()
     default:
@@ -576,7 +599,7 @@ export function FieldNamingTab() {
               </Button>
             </div>
             {exampleOutput && (
-              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280', whiteSpace: 'pre-line' }}>
                 Example output: {exampleOutput}
               </p>
             )}
@@ -632,7 +655,7 @@ export function FieldNamingTab() {
                           {entry.formatLabel ? ` • ${entry.formatLabel}` : ''}
                           {entry.capitalizationLabel ? ` • ${entry.capitalizationLabel}` : ''}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#52525b', marginTop: '0.25rem' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#52525b', marginTop: '0.25rem', whiteSpace: 'pre-line' }}>
                           Example: {entry.exampleOutput}
                         </div>
                       </div>

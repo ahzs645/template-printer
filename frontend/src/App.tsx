@@ -17,6 +17,13 @@ import {
   Pencil,
   CreditCard,
   PenTool,
+  Share2,
+  Eye,
+  AlertTriangle,
+  Circle,
+  ClipboardCheck,
+  IdCard as Badge2,
+  Ruler,
 } from 'lucide-react'
 
 import './App.css'
@@ -54,6 +61,39 @@ import { useCardDesigns } from './hooks/useCardDesigns'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
+import { ShareTemplateDialog } from './components/ShareTemplateDialog'
+import { InlineSvg } from './components/InlineSvg'
+import { CardBlankDialog } from './components/CardBlankDialog'
+import { BarcodeScanDialog } from './components/BarcodeScanDialog'
+import { TestCardsDialog } from './components/TestCardsDialog'
+import { LanyardDialog } from './components/LanyardDialog'
+import { CardAreaDialog } from './components/CardAreaDialog'
+import { trimRectInMm, type AppliedCardArea } from './lib/cardTrim'
+import {
+  createTemplatePackage,
+  isTemplatePackage,
+  packageFileName,
+  readTemplatePackage,
+} from './lib/templatePackage'
+import {
+  clearPackageUrlFromLocation,
+  describePackageSource,
+  fetchPackage,
+  forgetOpenedPackage,
+  readPackageUrl,
+  recallOpenedPackage,
+  rememberOpenedPackage,
+} from './lib/packageUrl'
+import type { ScannedBarcode } from './lib/barcodeScanner'
+import { CardGuideOverlay } from './components/CardGuideOverlay'
+import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
+import {
+  buildSharedTemplatePayload,
+  clearShareTarget,
+  decodeSharedTemplate,
+  readShareTarget,
+  type SharedTemplatePayload,
+} from './lib/shareLink'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments, setOutlineFontBuffers, clearOutlineFontBuffers } from './lib/exporter'
 import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
@@ -70,12 +110,25 @@ import {
 import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
+import { assignCardSides, suggestDesignName, type CardSide } from './lib/cardSides'
 import { cn } from './lib/utils'
+
+/**
+ * A link is opened once per page load, not once per mount.
+ *
+ * StrictMode mounts the app twice, and these both write to the library, so a
+ * per-instance guard would let the second mount import everything again.
+ */
+let linkPackageHandled = false
+let shareLinkHandled = false
 
 type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
 type DesignMode = 'import' | 'designer' | 'designs'
 
 const PREVIEW_BASE_WIDTH = 420
+const PREVIEW_MIN_WIDTH = 220
+// Breathing room between the card and the edges of its container.
+const PREVIEW_GUTTER = 16
 
 function App() {
   const storage = useStorage()
@@ -95,6 +148,31 @@ function App() {
   const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
+  const [fieldCustomValues, setFieldCustomValues] = useState<Record<string, string>>({})
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [sharePayload, setSharePayload] = useState<SharedTemplatePayload | null>(null)
+  // Set when the open template arrived through a view-only share link.
+  const [isSharedReadOnly, setIsSharedReadOnly] = useState(false)
+  const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
+  // The card design the open template belongs to, so both sides can be shown
+  // and switched between while editing.
+  const [linkedDesignId, setLinkedDesignId] = useState<string | null>(null)
+  const [activeSide, setActiveSide] = useState<CardSide>('front')
+  const [otherSidePreview, setOtherSidePreview] = useState<{ name: string; svg: string } | null>(null)
+  const [blankDialogOpen, setBlankDialogOpen] = useState(false)
+  const [scanDialogOpen, setScanDialogOpen] = useState(false)
+  const [testCardsOpen, setTestCardsOpen] = useState(false)
+  const [lanyardOpen, setLanyardOpen] = useState(false)
+  const [cardAreaOpen, setCardAreaOpen] = useState(false)
+  // Non-destructive card guides drawn over the preview.
+  const [showMagStripeGuide, setShowMagStripeGuide] = useState(false)
+  const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
+  const [punchGuide, setPunchGuide] = useState<PunchPosition>('none')
+  const [punchShapeGuide, setPunchShapeGuide] = useState<PunchShape>('slot')
+  const [linkLoading, setLinkLoading] = useState<string | null>(null)
+  // The result of a ?url= load, reported outside the side panels so it is
+  // readable when those are collapsed (which is the default on a phone).
+  const [linkResult, setLinkResult] = useState<{ ok: boolean; text: string } | null>(null)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
@@ -179,16 +257,21 @@ function App() {
       storage.getFieldMappings(selectedTemplateId)
         .then(mappings => {
           const mappingsMap: Record<string, string> = {}
+          const customMap: Record<string, string> = {}
           mappings.forEach(m => {
             mappingsMap[m.svgLayerId] = m.standardFieldName
+            if (m.customValue !== undefined) customMap[m.svgLayerId] = m.customValue
           })
           setFieldMappings(mappingsMap)
+          setFieldCustomValues(customMap)
         })
         .catch(() => {
           setFieldMappings({})
+          setFieldCustomValues({})
         })
     } else {
       setFieldMappings({})
+      setFieldCustomValues({})
     }
   }, [selectedTemplateId, fields, fieldMappingsVersion, storage])
 
@@ -335,8 +418,29 @@ function App() {
     [fields, selectedFieldId],
   )
 
+  // Width of the canvas area, watched so the preview fits whatever space the
+  // current layout gives it (a phone gives it far less than a desktop).
+  const [canvasNode, setCanvasNode] = useState<HTMLDivElement | null>(null)
+  const [canvasWidth, setCanvasWidth] = useState(PREVIEW_BASE_WIDTH + PREVIEW_GUTTER)
+
+  useEffect(() => {
+    if (!canvasNode || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0
+      if (width > 0) setCanvasWidth(width)
+    })
+    observer.observe(canvasNode)
+    return () => observer.disconnect()
+  }, [canvasNode])
+
   const previewRatio = template ? template.height / template.width : 54 / 86
-  const previewWidth = PREVIEW_BASE_WIDTH
+  // The field overlays are positioned from previewWidth, so the preview has to
+  // be measured rather than clamped in CSS: on a phone 420px would run off the
+  // right edge, and a CSS-only clamp would leave the overlays behind.
+  const previewWidth = Math.max(
+    PREVIEW_MIN_WIDTH,
+    Math.min(PREVIEW_BASE_WIDTH, canvasWidth - PREVIEW_GUTTER),
+  )
   const previewHeight = previewWidth * previewRatio
 
   const renderedSvg = useMemo(() => {
@@ -362,11 +466,100 @@ function App() {
     return isAutoMappable(field)
   }
 
+  /**
+   * Import a single SVG into the editor and save it to the library.
+   * Returns the saved template so a caller can link a pair together.
+   */
+  const importTemplateFile = async (file: File, { activate }: { activate: boolean }) => {
+    const { metadata, autoFields } = await parseTemplate(file)
+    const nextFields = autoFields.length > 0 ? autoFields : []
+
+    if (activate) {
+      resetPreviousObjectUrl(metadata.objectUrl)
+      setTemplate(metadata)
+      registerTemplateFonts(metadata.fonts)
+      setFields(nextFields)
+      setCardData(() => ({}))
+      setSelectedFieldId(autoFields[0]?.id ?? null)
+      setSelectedExportCardDesignId(null)
+      setTemplateWarnings(metadata.warnings ?? [])
+    }
+
+    const savedTemplate = await storage.createTemplate(file, metadata, 'design')
+    const autoMappings = generateAutoMappings(nextFields)
+    if (autoMappings.length > 0) {
+      await storage.saveFieldMappings(savedTemplate.id, autoMappings)
+    }
+
+    return { savedTemplate, metadata, fields: nextFields, autoMappings }
+  }
+
+  /**
+   * Import a front and a back together and link them into a card design, so a
+   * pair of exports from Illustrator becomes a usable card in one step.
+   */
+  const handleTemplatePairUpload = async (files: File[]) => {
+    const parsed = await Promise.all(
+      files.map(async (file) => {
+        const { autoFields } = await parseTemplate(file)
+        return { file, fileName: file.name, fields: autoFields }
+      }),
+    )
+
+    const { front, back } = assignCardSides([parsed[0], parsed[1]])
+
+    const frontResult = await importTemplateFile(front.file, { activate: true })
+    const backResult = await importTemplateFile(back.file, { activate: false })
+    await reloadDesignTemplates()
+
+    setSelectedTemplateId(frontResult.savedTemplate.id)
+    setActiveSide('front')
+
+    const design = await createCardDesign({
+      name: suggestDesignName(front.fileName, back.fileName),
+      description: null,
+      frontTemplateId: frontResult.savedTemplate.id,
+      backTemplateId: backResult.savedTemplate.id,
+    })
+    setLinkedDesignId(design.id)
+    setOtherSidePreview({ name: backResult.savedTemplate.name, svg: backResult.metadata.rawSvg })
+    refreshCardDesigns()
+
+    setFieldMappingsVersion((v) => v + 1)
+    setStatusMessage(
+      `Imported "${front.fileName}" as the front and "${back.fileName}" as the back, ` +
+        `linked as the card design "${design.name}".`,
+    )
+  }
+
   const handleTemplateUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const selected = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (!file) return
+    if (selected.length === 0) return
     setErrorMessage(null)
+
+    const packaged = selected.find(isTemplatePackage)
+    if (packaged) {
+      try {
+        await handleOpenPackage(packaged)
+      } catch (error) {
+        console.error(error)
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to open the package')
+      }
+      return
+    }
+
+    if (selected.length >= 2) {
+      try {
+        await handleTemplatePairUpload(selected.slice(0, 2))
+      } catch (error) {
+        console.error(error)
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to import the template pair')
+      }
+      return
+    }
+
+    const file = selected[0]
 
     try {
       const { metadata, autoFields } = await parseTemplate(file)
@@ -385,6 +578,10 @@ function App() {
         ? `Imported ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
         : 'Template imported. No placeholders detected - add fields manually to continue.'
       setStatusMessage(baseMessage)
+      setTemplateWarnings(metadata.warnings ?? [])
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      setActiveSide('front')
 
       try {
         const savedTemplate = await storage.createTemplate(file, metadata, 'design')
@@ -443,6 +640,9 @@ function App() {
       setSelectedTemplateId(templateSummary.id)
       setSelectedExportCardDesignId(null)
 
+      setTemplateWarnings(metadata.warnings ?? [])
+      await syncLinkedDesign(templateSummary.id)
+
       const existingMappings = await storage.getFieldMappings(templateSummary.id)
       if (existingMappings.length === 0 && nextFields.length > 0) {
         const autoMappings = generateAutoMappings(nextFields)
@@ -466,6 +666,501 @@ function App() {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load template')
     }
   }
+
+  /**
+   * Note which card design (if any) the open template belongs to, and load the
+   * other side so both can be shown together.
+   */
+  const syncLinkedDesign = async (templateId: string | null) => {
+    if (!templateId) {
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      return
+    }
+
+    const design = cardDesigns.find(
+      (candidate) => candidate.frontTemplateId === templateId || candidate.backTemplateId === templateId,
+    )
+    if (!design) {
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      return
+    }
+
+    setLinkedDesignId(design.id)
+    const side: CardSide = design.frontTemplateId === templateId ? 'front' : 'back'
+    setActiveSide(side)
+
+    const otherId = side === 'front' ? design.backTemplateId : design.frontTemplateId
+    if (!otherId) {
+      setOtherSidePreview(null)
+      return
+    }
+
+    const otherSummary = designTemplates.find((candidate) => candidate.id === otherId)
+    if (!otherSummary) {
+      setOtherSidePreview(null)
+      return
+    }
+
+    try {
+      const svg = await loadTemplateSvgContent(otherSummary)
+      setOtherSidePreview({ name: otherSummary.name, svg })
+    } catch (error) {
+      console.error('Failed to load the other side of the card', error)
+      setOtherSidePreview(null)
+    }
+  }
+
+  const linkedDesign = linkedDesignId ? cardDesigns.find((design) => design.id === linkedDesignId) ?? null : null
+
+  /**
+   * The card's physical size, for guides that are specified in millimetres.
+   *
+   * Once a card area is set this is the trim line, not the artwork around it —
+   * a magnetic stripe sits a fixed distance from the card's edge, not from the
+   * edge of the bleed. Templates measured in pixels fall back to ID-1.
+   */
+  const cardSizeMm = useMemo(() => {
+    if (template?.cardArea) {
+      return { width: template.cardArea.trimWidthMm, height: template.cardArea.trimHeightMm }
+    }
+    if (template?.unit === 'mm' && template.width && template.height) {
+      return { width: template.width, height: template.height }
+    }
+    return { width: ID1_WIDTH_MM, height: ID1_HEIGHT_MM }
+  }, [template])
+
+  /**
+   * Where the card sits inside the artwork, in millimetres. The preview shows
+   * the whole artwork, so guides drawn over it have to be offset by the bleed.
+   */
+  const cardOriginMm = useMemo(() => {
+    if (!template?.cardArea) return { x: 0, y: 0 }
+    const artwork = template.viewBox ?? { x: 0, y: 0, width: template.width, height: template.height }
+    const rect = trimRectInMm(template.cardArea.trimBox, artwork, template.width, template.height)
+    return { x: rect.x, y: rect.y }
+  }, [template])
+
+  /** The artwork's full physical size, bleed included. */
+  const artworkSizeMm = useMemo(() => {
+    if (template?.unit === 'mm' && template.width && template.height) {
+      return { width: template.width, height: template.height }
+    }
+    return cardSizeMm
+  }, [template, cardSizeMm])
+
+  /**
+   * Bring the other side of the linked card design into the editor.
+   */
+  const handleSwitchSide = async (side: CardSide) => {
+    if (!linkedDesign || side === activeSide) return
+    const targetId = side === 'front' ? linkedDesign.frontTemplateId : linkedDesign.backTemplateId
+    if (!targetId) return
+    const summary = designTemplates.find((candidate) => candidate.id === targetId)
+    if (!summary) {
+      setErrorMessage(`The ${side} template is no longer in your library.`)
+      return
+    }
+    await handleTemplateSelect(summary)
+  }
+
+  /**
+   * Open the Card Design dialog with the template currently in the editor
+   * already chosen, so linking a back to it is one step.
+   */
+  const handleLinkSides = () => {
+    if (linkedDesign) {
+      setEditingDesign(linkedDesign)
+      setDesignFormData({
+        name: linkedDesign.name,
+        description: linkedDesign.description ?? '',
+        frontTemplateId: linkedDesign.frontTemplateId ?? '',
+        backTemplateId: linkedDesign.backTemplateId ?? '',
+      })
+    } else {
+      const current = selectedTemplateId ? designTemplates.find((t) => t.id === selectedTemplateId) : null
+      setEditingDesign(null)
+      setDesignFormData({
+        name: current?.name.replace(/\.svg$/i, '') ?? '',
+        description: '',
+        frontTemplateId: selectedTemplateId ?? '',
+        backTemplateId: '',
+      })
+    }
+    setDesignDialogOpen(true)
+  }
+
+  /**
+   * Load a generated blank into the editor and save it to the library, so it
+   * behaves exactly like an imported template.
+   */
+  const handleOpenBlank = async (fileName: string, svg: string) => {
+    setErrorMessage(null)
+    try {
+      const file = new File([svg], fileName, { type: 'image/svg+xml' })
+      const { savedTemplate, fields: blankFields } = await importTemplateFile(file, { activate: true })
+      await reloadDesignTemplates()
+      setSelectedTemplateId(savedTemplate.id)
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      setFieldMappingsVersion((v) => v + 1)
+      setStatusMessage(
+        `Created "${fileName}" with ${blankFields.length} placeholder${blankFields.length === 1 ? '' : 's'}.`,
+      )
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to create the blank template')
+    }
+  }
+
+  /**
+   * Set a field up from a barcode read out of an image: the symbology it uses
+   * and the value it carries become the field's type and its default.
+   */
+  const handleApplyScan = (scan: ScannedBarcode) => {
+    if (!selectedField || !scan.symbology) return
+    handleFieldChange(selectedField.id, 'type', 'barcode')
+    handleFieldChange(selectedField.id, 'barcodeSymbology', scan.symbology)
+    handleFieldChange(selectedField.id, 'defaultValue', scan.text)
+    setStatusMessage(`Read a ${scan.formatName.replace(/_/g, ' ')} barcode and applied it to "${selectedField.label}".`)
+  }
+
+  /**
+   * Adopt a chosen card area: re-read the template at its corrected size so the
+   * preview, the guides and the export all agree on how big the card is.
+   */
+  const handleApplyCardArea = async (applied: AppliedCardArea, formatId: string, keepBleed: boolean) => {
+    if (!template) return
+    setErrorMessage(null)
+    try {
+      const { metadata, autoFields } = await parseTemplateString(applied.svg, template.name)
+      resetPreviousObjectUrl(metadata.objectUrl)
+      setTemplate({
+        ...metadata,
+        cardArea: {
+          formatId,
+          keepBleed,
+          bleedMm: applied.bleedMm,
+          trimBox: applied.trimBox,
+          trimWidthMm: applied.trimWidthMm,
+          trimHeightMm: applied.trimHeightMm,
+        },
+      })
+      registerTemplateFonts(metadata.fonts)
+      // Cropping moves every coordinate, so the fields have to be re-read.
+      const nextFields = keepBleed && fields.length > 0 ? fields : autoFields
+      setFields(nextFields)
+      setSelectedFieldId((current) => (nextFields.some((f) => f.id === current) ? current : nextFields[0]?.id ?? null))
+      setStatusMessage(
+        `Card area set: printing at ${applied.widthMm} × ${applied.heightMm} mm.` +
+          (applied.bleedMm ? ` Bleed kept at ${applied.bleedMm.top} mm.` : ' Bleed cropped away.') +
+          (applied.trimLineRemoved ? ' Trim line removed.' : ''),
+      )
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Could not apply the card area.')
+    }
+  }
+
+  /**
+   * Build a package: the design, what its layers mean, and the fonts it asks
+   * for, so it opens somewhere else without the fonts being loaded again.
+   */
+  const handleDownloadPackage = async () => {
+    if (!template?.rawSvg) return
+
+    const mappingsFor = (mappings: Record<string, string>, customs: Record<string, string>): FieldMapping[] =>
+      Object.entries(mappings).map(([svgLayerId, standardFieldName]) => ({
+        svgLayerId,
+        standardFieldName,
+        ...(customs[svgLayerId] !== undefined ? { customValue: customs[svgLayerId] } : {}),
+      }))
+
+    const availableFonts = await storage.listFonts()
+
+    // A linked pair is packaged whole, so the other side comes along with it.
+    let back: { template: TemplateMeta; fields: FieldDefinition[]; mappings: FieldMapping[] } | null = null
+    const otherId = linkedDesign
+      ? activeSide === 'front'
+        ? linkedDesign.backTemplateId
+        : linkedDesign.frontTemplateId
+      : null
+    if (otherId) {
+      const summary = designTemplates.find((candidate) => candidate.id === otherId)
+      if (summary) {
+        try {
+          const svgText = await loadTemplateSvgContent(summary)
+          const parsed = await parseTemplateString(svgText, summary.name)
+          const otherMappings = await storage.getFieldMappings(summary.id)
+          back = { template: parsed.metadata, fields: parsed.autoFields, mappings: otherMappings }
+        } catch (error) {
+          console.error('Could not add the other side to the package', error)
+        }
+      }
+    }
+
+    const sampleData: Record<string, string> = {}
+    for (const [key, value] of Object.entries(cardData)) {
+      if (typeof value === 'string' && value.trim()) sampleData[key] = value
+    }
+
+    const front = { template, fields, mappings: mappingsFor(fieldMappings, fieldCustomValues) }
+    const { blob, manifest } = await createTemplatePackage({
+      name: linkedDesign?.name ?? template.name,
+      front: activeSide === 'back' && back ? back : front,
+      back: activeSide === 'back' && back ? front : back,
+      availableFonts,
+      sampleData,
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = packageFileName(manifest.name)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+
+    const missing = manifest.missingFonts?.length
+      ? ` ${manifest.missingFonts.length} font${manifest.missingFonts.length === 1 ? '' : 's'} could not be included: ${manifest.missingFonts.join(', ')}.`
+      : ''
+    setStatusMessage(
+      `Packaged "${manifest.name}" with ${manifest.fonts.length} font${manifest.fonts.length === 1 ? '' : 's'}.${missing}`,
+    )
+  }
+
+  /**
+   * Open a package: both sides, their mappings, and the fonts, registered under
+   * the names the artwork asks for.
+   */
+  const handleOpenPackage = async (file: File) => {
+    const loaded = await readTemplatePackage(file)
+
+    for (const font of loaded.fonts) {
+      try {
+        await loadFontFile(font.name, font.file)
+      } catch (error) {
+        console.error(`Could not load the packaged font "${font.name}"`, error)
+      }
+    }
+
+    const importSide = async (side: typeof loaded.front, activate: boolean) => {
+      const svgFile = new File([side.svg], side.name || 'template.svg', { type: 'image/svg+xml' })
+      const { savedTemplate, metadata } = await importTemplateFile(svgFile, { activate })
+      if (side.mappings.length > 0) {
+        await storage.saveFieldMappings(savedTemplate.id, side.mappings)
+      }
+      if (activate) {
+        // Fields and the card area were settled when the package was made.
+        if (side.fields.length > 0) setFields(side.fields)
+        if (side.cardArea) setTemplate({ ...metadata, cardArea: side.cardArea })
+      }
+      return savedTemplate
+    }
+
+    const frontTemplate = await importSide(loaded.front, true)
+    const backTemplate = loaded.back ? await importSide(loaded.back, false) : null
+    await reloadDesignTemplates()
+    setSelectedTemplateId(frontTemplate.id)
+    setActiveSide('front')
+
+    let designId: string | null = null
+    if (backTemplate) {
+      const design = await createCardDesign({
+        name: loaded.manifest.name,
+        description: null,
+        frontTemplateId: frontTemplate.id,
+        backTemplateId: backTemplate.id,
+      })
+      designId = design.id
+      setLinkedDesignId(design.id)
+      setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })
+      refreshCardDesigns()
+    } else {
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+    }
+
+    setCardData(() => ({ ...(loaded.manifest.sampleData ?? {}) }))
+    setFieldMappingsVersion((v) => v + 1)
+    setStatusMessage(
+      `Opened "${loaded.manifest.name}" with ${loaded.fonts.length} font${loaded.fonts.length === 1 ? '' : 's'}` +
+        `${loaded.back ? ' and both sides' : ''}.`,
+    )
+
+    return {
+      name: loaded.manifest.name,
+      frontTemplateId: frontTemplate.id,
+      backTemplateId: backTemplate?.id ?? null,
+      designId,
+    }
+  }
+
+  /**
+   * Open the design a ?url= link points at.
+   *
+   * Someone following the link may never have used the app, or may have been
+   * here before and already have it — so a package already opened in this
+   * browser is reopened rather than imported a second time.
+   */
+  const handlePackageUrl = async (url: string) => {
+    const source = describePackageSource(url)
+    setLinkLoading(source)
+    setErrorMessage(null)
+    // Show the design the link is opening, rather than whatever tab the app
+    // happens to start on.
+    setActiveTab('design')
+    setDesignMode('import')
+
+    try {
+      const fetched = await fetchPackage(url)
+      const seen = recallOpenedPackage(fetched.hash)
+
+      if (seen) {
+        // Ask storage rather than the template list in state: this runs on
+        // mount, before that list has loaded.
+        const existing = await storage.getTemplate(seen.frontTemplateId).catch(() => null)
+        if (existing) {
+          await reloadDesignTemplates()
+          await handleTemplateSelect(existing)
+          const message = `Reopened "${seen.name}" — you already have this design.`
+          setStatusMessage(message)
+          setLinkResult({ ok: true, text: message })
+          return
+        }
+        // It was opened before but has since been deleted, so import it again.
+        forgetOpenedPackage(fetched.hash)
+      }
+
+      const file = new File([fetched.blob], 'card-design.zip', { type: 'application/zip' })
+      const result = await handleOpenPackage(file)
+
+      if (result && fetched.hash) {
+        rememberOpenedPackage({
+          hash: fetched.hash,
+          frontTemplateId: result.frontTemplateId,
+          backTemplateId: result.backTemplateId,
+          designId: result.designId,
+          name: result.name,
+          openedAt: new Date().toISOString(),
+        })
+      }
+      const message = `Opened "${result?.name ?? 'the design'}" from ${source}.`
+      setStatusMessage(message)
+      setLinkResult({ ok: true, text: message })
+    } catch (error) {
+      console.error(error)
+      const message = error instanceof Error ? error.message : 'Could not open the design from that link.'
+      setErrorMessage(message)
+      setLinkResult({ ok: false, text: message })
+    } finally {
+      setLinkLoading(null)
+      // Drop the parameter either way, so a refresh does not fetch it again.
+      clearPackageUrlFromLocation()
+    }
+  }
+
+  const handleOpenShare = () => {
+    if (!template?.rawSvg) return
+    const mappings: FieldMapping[] = Object.entries(fieldMappings).map(([svgLayerId, standardFieldName]) => ({
+      svgLayerId,
+      standardFieldName,
+    }))
+    setSharePayload(
+      buildSharedTemplatePayload({
+        name: template.name,
+        svg: template.rawSvg,
+        fields,
+        mappings,
+        cardData,
+      }),
+    )
+    setShareDialogOpen(true)
+  }
+
+  /**
+   * Take a template that arrived read-only and make it the user's own, so it
+   * can be edited and saved to their library.
+   */
+  const handleCopySharedTemplate = () => {
+    setIsSharedReadOnly(false)
+    setStatusMessage('Shared template unlocked for editing. Use Open to save it into your library.')
+  }
+
+  // Open the design a ?url= link points at. Runs once per page load.
+  useEffect(() => {
+    if (linkPackageHandled) return
+    const url = readPackageUrl(window.location.search)
+    if (!url) return
+    linkPackageHandled = true
+    void handlePackageUrl(url)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Import a template carried in the location hash. Runs once per page load.
+  useEffect(() => {
+    if (shareLinkHandled) return
+    const target = readShareTarget(window.location.hash)
+    if (!target) return
+    shareLinkHandled = true
+
+    let cancelled = false
+
+    const importShared = async () => {
+      try {
+        const shared = await decodeSharedTemplate(target.payload)
+        const { metadata, autoFields } = await parseTemplateString(shared.svg, shared.name || 'shared-template.svg')
+        if (cancelled) return
+
+        resetPreviousObjectUrl(metadata.objectUrl)
+        setTemplate(metadata)
+        registerTemplateFonts(metadata.fonts)
+
+        const nextFields = shared.fields?.length ? shared.fields : autoFields
+        setFields(nextFields)
+        setCardData(() => ({ ...(shared.sampleData ?? {}) }))
+        setSelectedFieldId(nextFields[0]?.id ?? null)
+        setSelectedTemplateId(null)
+        setSelectedExportCardDesignId(null)
+
+        const mappings = shared.mappings?.length ? shared.mappings : generateAutoMappings(nextFields)
+        const mappingsMap: Record<string, string> = {}
+        mappings.forEach((mapping) => {
+          mappingsMap[mapping.svgLayerId] = mapping.standardFieldName
+        })
+        setFieldMappings(mappingsMap)
+
+        setTemplateWarnings(metadata.warnings ?? [])
+        setLinkedDesignId(null)
+        setOtherSidePreview(null)
+        setIsSharedReadOnly(target.mode === 'view')
+        setActiveTab('design')
+        setDesignMode('import')
+        setStatusMessage(
+          target.mode === 'view'
+            ? `Opened shared template "${metadata.name}" in view-only mode.`
+            : `Opened shared template "${metadata.name}". Use Open to save it to your library.`,
+        )
+      } catch (error) {
+        console.error(error)
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : 'Could not open the shared template.')
+        }
+      } finally {
+        // Drop the fragment either way, so a refresh doesn't replay a bad link.
+        clearShareTarget()
+      }
+    }
+
+    void importShared()
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleFieldSelect = (fieldId: string) => {
     setSelectedFieldId(fieldId)
@@ -1004,9 +1699,27 @@ function App() {
             <input
               ref={templateUploadInputRef}
               type="file"
-              accept="image/svg+xml"
+              accept="image/svg+xml,.zip"
+              multiple
               onChange={handleTemplateUpload}
               style={{ display: 'none' }}
+            />
+            <RibbonButton
+              icon={<Plus size={18} />}
+              label="New Blank"
+              onClick={() => setBlankDialogOpen(true)}
+            />
+            <RibbonButton
+              icon={<CreditCard size={18} />}
+              label={linkedDesign ? 'Edit Pair' : 'Link Front/Back'}
+              onClick={handleLinkSides}
+              disabled={!selectedTemplateId || isSharedReadOnly}
+            />
+            <RibbonButton
+              icon={<Share2 size={18} />}
+              label="Share"
+              onClick={handleOpenShare}
+              disabled={!template?.rawSvg}
             />
           </RibbonGroup>
 
@@ -1015,25 +1728,88 @@ function App() {
               icon={<Plus size={18} />}
               label="Add"
               onClick={handleAddField}
+              disabled={isSharedReadOnly}
             />
             <RibbonButton
               icon={<Copy size={18} />}
               label="Duplicate"
               onClick={() => selectedField && handleDuplicateField(selectedField.id)}
-              disabled={!selectedField}
+              disabled={!selectedField || isSharedReadOnly}
             />
             <RibbonButton
               icon={<Trash2 size={18} />}
               label="Delete"
               onClick={() => selectedField && handleDeleteField(selectedField.id)}
-              disabled={!selectedField}
+              disabled={!selectedField || isSharedReadOnly}
             />
             <RibbonDivider />
+            <RibbonButton
+              icon={<ScanLine size={18} />}
+              label="Read Barcode"
+              onClick={() => setScanDialogOpen(true)}
+            />
             <RibbonButton
               icon={<Settings size={18} />}
               label="Map Fields"
               onClick={handleOpenFieldMapping}
-              disabled={!selectedTemplateId || !template?.rawSvg}
+              disabled={!selectedTemplateId || !template?.rawSvg || isSharedReadOnly}
+            />
+          </RibbonGroup>
+
+          <RibbonGroup title="Check">
+            <RibbonButton
+              icon={<ClipboardCheck size={18} />}
+              label="Test Cards"
+              onClick={() => setTestCardsOpen(true)}
+              disabled={!template}
+            />
+            <RibbonButton
+              icon={<Badge2 size={18} />}
+              label="Lanyard"
+              onClick={() => setLanyardOpen(true)}
+              disabled={!renderedSvg}
+            />
+          </RibbonGroup>
+
+          <RibbonGroup title="Guides">
+            <RibbonButton
+              icon={<CreditCard size={18} />}
+              label="Mag Stripe"
+              onClick={() => setShowMagStripeGuide((value) => !value)}
+              active={showMagStripeGuide}
+              disabled={!template}
+            />
+            <RibbonButton
+              icon={<ScanLine size={18} />}
+              label={punchGuide === 'none' ? 'Punch' : PUNCH_POSITION_LABELS[punchGuide]}
+              onClick={() =>
+                setPunchGuide((current) => {
+                  const order = PUNCH_POSITIONS
+                  return order[(order.indexOf(current) + 1) % order.length]
+                })
+              }
+              active={punchGuide !== 'none'}
+              disabled={!template}
+            />
+            <RibbonButton
+              icon={<Circle size={18} />}
+              label={punchShapeGuide === 'slot' ? 'Slot' : 'Round'}
+              onClick={() => setPunchShapeGuide((shape) => (shape === 'slot' ? 'round' : 'slot'))}
+              disabled={!template || punchGuide === 'none'}
+            />
+            <RibbonButton
+              icon={<Settings2 size={18} />}
+              label="Safe Area"
+              onClick={() => setShowSafeAreaGuide((value) => !value)}
+              active={showSafeAreaGuide}
+              disabled={!template}
+            />
+            <RibbonButton
+              icon={<Ruler size={18} />}
+              label="Card Area"
+              onClick={() => setCardAreaOpen(true)}
+              active={Boolean(template?.cardArea)}
+              disabled={!template}
             />
           </RibbonGroup>
 
@@ -1214,6 +1990,30 @@ function App() {
 
       {/* Main Content Area */}
       <div className="app-main">
+        {/* How a ?url= load went. It sits above the tabs rather than in a side
+            panel, which starts collapsed on a phone and would go unread. */}
+        {linkResult && (
+          <div
+            className="link-result-banner"
+            role={linkResult.ok ? 'status' : 'alert'}
+            style={{
+              background: linkResult.ok ? '#ecfdf5' : '#fef2f2',
+              borderBottom: `1px solid ${linkResult.ok ? '#a7f3d0' : '#fecaca'}`,
+              color: linkResult.ok ? '#065f46' : '#991b1b',
+            }}
+          >
+            <span className="link-result-banner__text">{linkResult.text}</span>
+            <button
+              type="button"
+              className="link-result-banner__close"
+              onClick={() => setLinkResult(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Design Mode Tabs */}
         {activeTab === 'design' && renderDesignModeTabs()}
 
@@ -1369,6 +2169,66 @@ function App() {
                   )}
                 </PanelSection>
 
+                {/* Shared read-only notice */}
+                {isSharedReadOnly && (
+                  <div
+                    className="status-message"
+                    style={{
+                      margin: '8px 0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      background: 'var(--muted, #f4f4f5)',
+                      color: 'var(--muted-foreground, #52525b)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Eye size={14} />
+                      Shared template, opened read-only.
+                    </span>
+                    <Button type="button" size="sm" variant="outline" onClick={handleCopySharedTemplate}>
+                      Make a copy to edit
+                    </Button>
+                  </div>
+                )}
+
+                {template?.trimCandidates?.length && !template.cardArea ? (
+                  <div
+                    className="status-message"
+                    style={{
+                      margin: '8px 0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      background: 'var(--bg-surface-alt, #f4f4f5)',
+                      color: 'var(--text-muted, #52525b)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <Ruler size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span>
+                        This artwork has a trim line inside the canvas. Until you say which rectangle
+                        is the card, the whole canvas is used and the printed size is guessed from the
+                        file's units.
+                      </span>
+                    </span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCardAreaOpen(true)}>
+                      Set card area…
+                    </Button>
+                  </div>
+                ) : null}
+
+                {templateWarnings.map((warning) => (
+                  <div
+                    key={warning}
+                    className="status-message status-message--warning"
+                    style={{ margin: '8px 0', display: 'flex', gap: 6, alignItems: 'flex-start' }}
+                  >
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>{warning}</span>
+                  </div>
+                ))}
+
                 {/* Status Messages */}
                 {statusMessage && (
                   <div className="status-message status-message--success" style={{ margin: '8px 0' }}>
@@ -1384,22 +2244,67 @@ function App() {
 
               {/* Main Canvas */}
               <div className="app-workspace">
-                <div className="canvas-container">
+                <div className="canvas-container" ref={setCanvasNode}>
                   {template && renderedSvg ? (
-                    <div
-                      className="canvas-preview"
-                      style={{ width: previewWidth, height: previewHeight }}
-                    >
-                      <div style={{ position: 'absolute', inset: 0 }} dangerouslySetInnerHTML={{ __html: renderedSvg }} />
-                      {fields.map((field) => (
-                        <PreviewField
-                          key={`preview-${field.id}`}
-                          field={field}
-                          value={cardData[field.id] as CardDataValue}
-                          width={previewWidth}
-                          height={previewHeight}
-                        />
-                      ))}
+                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        {linkedDesign && (
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            {activeSide} · editing
+                          </span>
+                        )}
+                        <div
+                          className="canvas-preview"
+                          style={{ width: previewWidth, height: previewHeight }}
+                        >
+                          <div style={{ position: 'absolute', inset: 0 }} dangerouslySetInnerHTML={{ __html: renderedSvg }} />
+                          {fields.map((field) => (
+                            <PreviewField
+                              key={`preview-${field.id}`}
+                              field={field}
+                              value={cardData[field.id] as CardDataValue}
+                              width={previewWidth}
+                              height={previewHeight}
+                            />
+                          ))}
+                          <CardGuideOverlay
+                            artworkWidthMm={artworkSizeMm.width}
+                            artworkHeightMm={artworkSizeMm.height}
+                            cardWidthMm={cardSizeMm.width}
+                            cardHeightMm={cardSizeMm.height}
+                            cardOriginXMm={cardOriginMm.x}
+                            cardOriginYMm={cardOriginMm.y}
+                            previewWidth={previewWidth}
+                            previewHeight={previewHeight}
+                            magneticStripe={showMagStripeGuide}
+                            punch={punchGuide}
+                            punchShape={punchShapeGuide}
+                            safeArea={showSafeAreaGuide}
+                          />
+                        </div>
+                      </div>
+
+                      {linkedDesign && otherSidePreview && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            {activeSide === 'front' ? 'back' : 'front'}
+                          </span>
+                          <button
+                            type="button"
+                            title={`Edit the ${activeSide === 'front' ? 'back' : 'front'} of this card`}
+                            onClick={() => handleSwitchSide(activeSide === 'front' ? 'back' : 'front')}
+                            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', opacity: 0.6 }}
+                          >
+                            <InlineSvg
+                              className="canvas-preview"
+                              style={{ width: previewWidth, height: previewHeight }}
+                              markup={otherSidePreview.svg}
+                              name="editor-other-side"
+                            />
+                          </button>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Click to edit this side</span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="empty-state">
@@ -1514,10 +2419,15 @@ function App() {
                       flexWrap: 'wrap',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      padding: 24
+                      padding: 24,
+                      // Track the container instead of the cards' natural
+                      // width, so a narrow screen scales them down.
+                      width: '100%',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box',
                     }}>
                       {/* Front Side */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minWidth: 0, maxWidth: '100%' }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                           Front
                         </div>
@@ -1525,29 +2435,30 @@ function App() {
                           const preview = designPreview.front
                           if (preview.loading) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</p>
                               </div>
                             )
                           }
                           if (preview.error) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: 24 }}>{preview.error}</p>
                               </div>
                             )
                           }
                           if (preview.svg) {
                             return (
-                              <div
+                              <InlineSvg
                                 className="canvas-preview"
-                                style={{ width: 450 }}
-                                dangerouslySetInnerHTML={{ __html: preview.svg }}
+                                style={{ width: 450, maxWidth: '100%' }}
+                                markup={preview.svg}
+                                name="design-front"
                               />
                             )
                           }
                           return (
-                            <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                            <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                               <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No template</p>
                             </div>
                           )
@@ -1555,7 +2466,7 @@ function App() {
                       </div>
 
                       {/* Back Side */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minWidth: 0, maxWidth: '100%' }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                           Back
                         </div>
@@ -1563,29 +2474,30 @@ function App() {
                           const preview = designPreview.back
                           if (preview.loading) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</p>
                               </div>
                             )
                           }
                           if (preview.error) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: 24 }}>{preview.error}</p>
                               </div>
                             )
                           }
                           if (preview.svg) {
                             return (
-                              <div
+                              <InlineSvg
                                 className="canvas-preview"
-                                style={{ width: 450 }}
-                                dangerouslySetInnerHTML={{ __html: preview.svg }}
+                                style={{ width: 450, maxWidth: '100%' }}
+                                markup={preview.svg}
+                                name="design-back"
                               />
                             )
                           }
                           return (
-                            <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                            <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                               <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No template</p>
                             </div>
                           )
@@ -1805,6 +2717,94 @@ function App() {
         onSave={handleSaveFieldMappings}
       />
 
+      {/* Loading a design from a ?url= link. Shown over everything, because on a
+          phone the sidebar this would otherwise report into is off screen. */}
+      {linkLoading && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'rgba(9, 9, 11, 0.55)',
+            padding: '1.5rem',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '0.75rem',
+              padding: '1.25rem 1.5rem',
+              maxWidth: 360,
+              textAlign: 'center',
+              boxShadow: '0 20px 45px rgba(0,0,0,0.3)',
+            }}
+          >
+            <p style={{ margin: 0, fontWeight: 600, color: '#18181b' }}>Opening card design…</p>
+            <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
+              Downloading from {linkLoading}, with its fonts.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Card Area Dialog */}
+      <CardAreaDialog
+        open={cardAreaOpen}
+        onOpenChange={setCardAreaOpen}
+        template={template}
+        onApply={handleApplyCardArea}
+      />
+
+      {/* Lanyard Dialog */}
+      <LanyardDialog
+        open={lanyardOpen}
+        onOpenChange={setLanyardOpen}
+        frontSvg={activeSide === 'back' ? otherSidePreview?.svg ?? renderedSvg : renderedSvg}
+        backSvg={activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null}
+        widthMm={cardSizeMm.width}
+        heightMm={cardSizeMm.height}
+        artworkWidthMm={artworkSizeMm.width}
+        artworkHeightMm={artworkSizeMm.height}
+        cardOriginXMm={cardOriginMm.x}
+        cardOriginYMm={cardOriginMm.y}
+        hasMagneticStripe={showMagStripeGuide}
+        punch={punchGuide}
+        punchShape={punchShapeGuide}
+        onPunchChange={setPunchGuide}
+        onPunchShapeChange={setPunchShapeGuide}
+      />
+
+      {/* Test Cards Dialog */}
+      <TestCardsDialog
+        open={testCardsOpen}
+        onOpenChange={setTestCardsOpen}
+        template={template}
+        fields={fields}
+        fieldMappings={fieldMappings}
+        customValues={fieldCustomValues}
+      />
+
+      {/* Barcode Scan Dialog */}
+      <BarcodeScanDialog
+        open={scanDialogOpen}
+        onOpenChange={setScanDialogOpen}
+        targetFieldLabel={selectedField && !isSharedReadOnly ? selectedField.label : null}
+        onApply={selectedField && !isSharedReadOnly ? handleApplyScan : undefined}
+      />
+
+      {/* New Blank Template Dialog */}
+      <CardBlankDialog open={blankDialogOpen} onOpenChange={setBlankDialogOpen} onOpenInEditor={handleOpenBlank} />
+
+      {/* Share Template Dialog */}
+      <ShareTemplateDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        payload={sharePayload}
+        onDownloadPackage={handleDownloadPackage}
+      />
+
       {/* Layer Naming Helper Dialog */}
       <Dialog open={layerNamingDialogOpen} onOpenChange={setLayerNamingDialogOpen}>
         <DialogContent
@@ -1872,7 +2872,8 @@ function App() {
                 setDesignDialogOpen(false)
                 setEditingDesign(null)
                 setDesignFormData({ name: '', description: '', frontTemplateId: '', backTemplateId: '' })
-                refreshCardDesigns()
+                await refreshCardDesigns()
+                if (selectedTemplateId) await syncLinkedDesign(selectedTemplateId)
               } catch (err) {
                 setDesignFormError(err instanceof Error ? err.message : 'Failed to save')
               } finally {

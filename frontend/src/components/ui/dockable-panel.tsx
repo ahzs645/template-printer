@@ -2,6 +2,17 @@ import { useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
+// Matches the stacked layout breakpoint in index.css. On a phone the panels
+// sit under the card, so starting them collapsed keeps the card on screen.
+const STACKED_LAYOUT_QUERY = '(max-width: 768px)'
+
+function isStackedLayout(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false
+  }
+  return window.matchMedia(STACKED_LAYOUT_QUERY).matches
+}
+
 type DockablePanelProps = {
   title: string
   children: ReactNode
@@ -19,7 +30,7 @@ export function DockablePanel({
   width = 280,
   className,
 }: DockablePanelProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const [isOpen, setIsOpen] = useState(() => defaultOpen && !isStackedLayout())
 
   const ChevronIcon = side === 'left'
     ? (isOpen ? ChevronLeft : ChevronRight)

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 162">
+  <defs>
+    <style>
+      .cls-1, .cls-2, .cls-3, .cls-4, .cls-5, .cls-6 {
+        fill: #010101;
+      }
+
+      .cls-2 {
+        font-size: 12.07px;
+      }
+
+      .cls-2, .cls-4, .cls-5 {
+        font-family: HelveticaNeue, 'Helvetica Neue';
+      }
+
+      .cls-7 {
+        stroke: #010101;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-7, .cls-8 {
+        fill: #fff;
+      }
+
+      .cls-9 {
+        letter-spacing: -.07em;
+      }
+
+      .cls-10 {
+        letter-spacing: -.04em;
+      }
+
+      .cls-11 {
+        letter-spacing: -.03em;
+      }
+
+      .cls-3 {
+        font-family: Codabarlarge, Codabarlarge;
+        font-size: 20.07px;
+      }
+
+      .cls-4 {
+        font-size: 7.04px;
+      }
+
+      .cls-5 {
+        font-size: 6.34px;
+      }
+
+      .cls-12 {
+        letter-spacing: .02em;
+      }
+
+      .cls-6 {
+        font-family: HelveticaNeue-Medium, 'Helvetica Neue';
+        font-size: 10px;
+        font-weight: 500;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g id="Card_2" data-name="Card 2">
+      <rect class="cls-8" x="0" width="252" height="162"/>
+      <rect class="cls-7" x="4.5" y="4.5" width="243" height="153"/>
+    </g>
+    <rect class="cls-1" y="16.34" width="252" height="36.46"/>
+    <text class="cls-6" transform="translate(34.62 68.02)"><tspan x="0" y="0">University of Northe</tspan><tspan class="cls-12" x="91.7" y="0">r</tspan><tspan x="95.4" y="0">n British Columbia</tspan></text>
+    <text class="cls-4" transform="translate(46.87 76.95)"><tspan x="0" y="0">3333 University </tspan><tspan class="cls-10" x="50.59" y="0">W</tspan><tspan x="56.85" y="0">a</tspan><tspan class="cls-9" x="60.63" y="0">y</tspan><tspan x="63.63" y="0">, Prince Geo</tspan><tspan class="cls-11" x="102.6" y="0">r</tspan><tspan x="104.75" y="0">ge, BC V2N 4Z9</tspan></text>
+    <text class="cls-5" transform="translate(56.82 144.54)"><tspan x="0" y="0">NONTRANFERABLE - REPLACEMENT CHARGE</tspan></text>
+    <text id="customLibraryNumberLabel" class="cls-2" transform="translate(31.83 100.74)"><tspan x="0" y="0">Library Number: </tspan></text>
+    <text id="studentId" class="cls-2" transform="translate(121.5 100.74)"><tspan x="0" y="0">12345678901234</tspan></text>
+    <text id="barcode_codabar_studentId" class="cls-3" transform="translate(30.22 137.76)"><tspan x="0" y="0">2002014682274023</tspan></text>
+  </g>
+</svg>

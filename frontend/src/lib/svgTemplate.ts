@@ -1,4 +1,9 @@
 import opentype from 'opentype.js'
+
+import { generateBarcodeSvg, isBarcodeFontFamily } from './barcode'
+import { detectTrimCandidates, isWorthSuggesting } from './cardTrim'
+import { isImageFieldName } from './standardFields'
+import { parseBarcodeLayerId } from './standardFields'
 import type {
   CardData,
   CardDataValue,
@@ -82,35 +87,49 @@ function parseFontFamily(value: string | null | undefined): string | undefined {
   return entries[0]
 }
 
-function getFontFamily(node: Element): string | undefined {
-  const direct = parseFontFamily(node.getAttribute('font-family'))
-  if (direct) return direct
-  const styleAttr = node.getAttribute('style')
-  if (!styleAttr) return undefined
-  const styleMatch = styleAttr.match(/font-family\s*:\s*([^;]+)/i)
-  return styleMatch ? parseFontFamily(styleMatch[1]) : undefined
-}
-
-function getFontWeight(node: Element): number | undefined {
-  const attr = node.getAttribute('font-weight')
-  const weight = attr ? Number.parseInt(attr, 10) : undefined
-  if (Number.isFinite(weight)) return weight
-  const styleAttr = node.getAttribute('style')
-  if (!styleAttr) return undefined
-  const styleMatch = styleAttr.match(/font-weight\s*:\s*([^;]+)/i)
-  if (!styleMatch) return undefined
-  const parsed = Number.parseInt(styleMatch[1], 10)
+function parseFontWeight(value: string | null | undefined): number | undefined {
+  if (!value) return undefined
+  const normalized = value.replace(/['";]/g, '').trim().toLowerCase()
+  if (normalized === 'bold') return 700
+  if (normalized === 'normal') return 400
+  const parsed = Number.parseInt(normalized, 10)
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-function getFillColor(node: Element): string | undefined {
+function getFontFamily(node: Element, cssStyles?: CssTextStyles): string | undefined {
+  const direct = parseFontFamily(node.getAttribute('font-family'))
+  if (direct) return direct
+  const styleAttr = node.getAttribute('style')
+  if (styleAttr) {
+    const styleMatch = styleAttr.match(/font-family\s*:\s*([^;]+)/i)
+    const parsed = styleMatch ? parseFontFamily(styleMatch[1]) : undefined
+    if (parsed) return parsed
+  }
+  return cssStyles ? readCssTextStyle(node, cssStyles, 'fontFamily') : undefined
+}
+
+function getFontWeight(node: Element, cssStyles?: CssTextStyles): number | undefined {
+  const attr = parseFontWeight(node.getAttribute('font-weight'))
+  if (attr !== undefined) return attr
+  const styleAttr = node.getAttribute('style')
+  if (styleAttr) {
+    const styleMatch = styleAttr.match(/font-weight\s*:\s*([^;]+)/i)
+    const parsed = styleMatch ? parseFontWeight(styleMatch[1]) : undefined
+    if (parsed !== undefined) return parsed
+  }
+  return cssStyles ? readCssTextStyle(node, cssStyles, 'fontWeight') : undefined
+}
+
+function getFillColor(node: Element, cssStyles?: CssTextStyles): string | undefined {
   const attr = node.getAttribute('fill')
   if (attr && attr.toLowerCase() !== 'none') return attr
   const styleAttr = node.getAttribute('style')
-  if (!styleAttr) return undefined
-  const styleMatch = styleAttr.match(/fill\s*:\s*([^;]+)/i)
-  const color = styleMatch ? styleMatch[1].trim() : undefined
-  return color && color.toLowerCase() !== 'none' ? color : undefined
+  if (styleAttr) {
+    const styleMatch = styleAttr.match(/fill\s*:\s*([^;]+)/i)
+    const color = styleMatch ? styleMatch[1].trim() : undefined
+    if (color && color.toLowerCase() !== 'none') return color
+  }
+  return cssStyles ? readCssTextStyle(node, cssStyles, 'fill') : undefined
 }
 
 function getTextPosition(node: Element): { x?: number; y?: number } {
@@ -158,45 +177,117 @@ function asImageValue(value: CardDataValue | undefined): ImageValue | undefined 
   return value as ImageValue
 }
 
+type CssTextStyle = {
+  fontSize?: number
+  fontFamily?: string
+  fontWeight?: number
+  fill?: string
+}
+
+type CssTextStyles = Map<string, CssTextStyle>
+
 /**
- * Parse CSS rules from SVG <style> blocks and build a map of class -> font-size
+ * Parse CSS rules from SVG <style> blocks and build a map of class -> text styles.
+ *
+ * Illustrator (and most vector editors) exports text styling as `.cls-1 { ... }`
+ * rules rather than inline attributes, so anything that reads styling straight
+ * off an element has to consult this map as well.
  */
-function parseCssFontSizes(svg: Document): Map<string, number> {
-  const fontSizeMap = new Map<string, number>()
+function parseCssTextStyles(svg: Document): CssTextStyles {
+  const styleMap: CssTextStyles = new Map()
   const styleElements = svg.querySelectorAll('style')
 
   for (const styleEl of styleElements) {
     const cssText = styleEl.textContent || ''
     // Match CSS rules like: .cls-5 { font-size: 10.6px; } or .cls-3, .cls-4, .cls-5 { font-size: 10.6px; }
-    const rulePattern = /([^{]+)\{([^}]+)\}/g
+    const rulePattern = /([^{}]+)\{([^}]*)\}/g
     let match
     while ((match = rulePattern.exec(cssText)) !== null) {
       const selectors = match[1]
       const declarations = match[2]
 
-      // Check if this rule has a font-size declaration
-      const fontSizeMatch = declarations.match(/font-size\s*:\s*([0-9.]+)(?:px)?/i)
-      if (!fontSizeMatch) continue
+      const declared: CssTextStyle = {}
 
-      const fontSize = parseFloat(fontSizeMatch[1])
-      if (!Number.isFinite(fontSize)) continue
+      const fontSizeMatch = declarations.match(/font-size\s*:\s*([0-9.]+)(?:px)?/i)
+      if (fontSizeMatch) {
+        const fontSize = parseFloat(fontSizeMatch[1])
+        if (Number.isFinite(fontSize)) declared.fontSize = fontSize
+      }
+
+      const fontFamilyMatch = declarations.match(/font-family\s*:\s*([^;]+)/i)
+      if (fontFamilyMatch) {
+        const fontFamily = parseFontFamily(fontFamilyMatch[1])
+        if (fontFamily) declared.fontFamily = fontFamily
+      }
+
+      const fontWeightMatch = declarations.match(/font-weight\s*:\s*([^;]+)/i)
+      if (fontWeightMatch) {
+        const fontWeight = parseFontWeight(fontWeightMatch[1])
+        if (fontWeight !== undefined) declared.fontWeight = fontWeight
+      }
+
+      const fillMatch = declarations.match(/fill\s*:\s*([^;]+)/i)
+      if (fillMatch) {
+        const fill = fillMatch[1].trim()
+        if (fill && fill.toLowerCase() !== 'none') declared.fill = fill
+      }
+
+      if (Object.keys(declared).length === 0) continue
 
       // Extract class names from selectors (e.g., ".cls-5" -> "cls-5")
       const classPattern = /\.([a-zA-Z0-9_-]+)/g
       let classMatch
       while ((classMatch = classPattern.exec(selectors)) !== null) {
-        fontSizeMap.set(classMatch[1], fontSize)
+        const className = classMatch[1]
+        styleMap.set(className, { ...styleMap.get(className), ...declared })
       }
     }
   }
 
-  return fontSizeMap
+  return styleMap
+}
+
+/**
+ * Look up a single CSS text property for an element, checking the element's own
+ * classes first and then the classes of its first tspan (Illustrator often puts
+ * the styling on the tspan rather than the <text> wrapper).
+ */
+function readCssTextStyle<K extends keyof CssTextStyle>(
+  node: Element,
+  cssStyles: CssTextStyles,
+  property: K,
+): CssTextStyle[K] | undefined {
+  const own = readCssTextStyleForElement(node, cssStyles, property)
+  if (own !== undefined) return own
+
+  const tspan = node.querySelector('tspan')
+  return tspan ? readCssTextStyleForElement(tspan, cssStyles, property) : undefined
+}
+
+/**
+ * Look up a CSS text property using only the classes declared on this element.
+ */
+function readCssTextStyleForElement<K extends keyof CssTextStyle>(
+  element: Element,
+  cssStyles: CssTextStyles,
+  property: K,
+): CssTextStyle[K] | undefined {
+  const classAttr = element.getAttribute('class')
+  if (!classAttr) return undefined
+
+  const classes = classAttr.split(/\s+/)
+  // Later classes win, mirroring how the browser resolves equal-specificity rules.
+  for (let i = classes.length - 1; i >= 0; i -= 1) {
+    const value = cssStyles.get(classes[i])?.[property]
+    if (value !== undefined) return value
+  }
+  return undefined
 }
 
 /**
  * Get font size for an element, checking attributes, style attribute, and CSS classes
  */
-function getFontSize(node: Element, cssFontSizes: Map<string, number>): number | undefined {
+function getFontSize(node: Element, cssStyles: CssTextStyles): number | undefined {
   // 1. Check direct font-size attribute
   const attrSize = readNumeric(node.getAttribute('font-size'))
   if (attrSize !== undefined) return attrSize
@@ -211,41 +302,22 @@ function getFontSize(node: Element, cssFontSizes: Map<string, number>): number |
     }
   }
 
-  // 3. Check CSS classes (also check child tspans which may have the class)
-  const classAttr = node.getAttribute('class')
-  if (classAttr) {
-    const classes = classAttr.split(/\s+/)
-    for (const cls of classes) {
-      const size = cssFontSizes.get(cls)
-      if (size !== undefined) return size
-    }
-  }
-
-  // 4. Check first tspan's class for font-size
-  const tspan = node.querySelector('tspan')
-  if (tspan) {
-    const tspanClass = tspan.getAttribute('class')
-    if (tspanClass) {
-      const classes = tspanClass.split(/\s+/)
-      for (const cls of classes) {
-        const size = cssFontSizes.get(cls)
-        if (size !== undefined) return size
-      }
-    }
-  }
-
-  return undefined
+  // 3. Check CSS classes on the element, then on its first tspan
+  return readCssTextStyle(node, cssStyles, 'fontSize')
 }
 
 /**
- * Group tspan children of a text element by their effective y position
- * to detect multi-line text layouts.
+ * Read the visual line layout of a text element.
+ *
+ * tspans are grouped by their effective y position, so words that an editor
+ * split for kerning are rejoined, and the spacing between the first two lines
+ * is reported so replacement text can keep the template's own leading.
  */
-function groupTspansByLine(textElement: Element): string[] {
+function readTextLayout(textElement: Element): { lines: string[]; lineHeight?: number } {
   const tspans = Array.from(textElement.querySelectorAll('tspan'))
   if (tspans.length === 0) {
     const content = textElement.textContent?.trim()
-    return content ? [content] : []
+    return { lines: content ? [content] : [] }
   }
 
   const lineGroups = new Map<number, string[]>()
@@ -267,10 +339,25 @@ function groupTspansByLine(textElement: Element): string[] {
     lineGroups.set(roundedY, existing)
   }
 
-  return Array.from(lineGroups.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([, texts]) => texts.join('').trim())
-    .filter((line) => line.length > 0)
+  const ordered = Array.from(lineGroups.entries()).sort(([a], [b]) => a - b)
+  const lines = ordered.map(([, texts]) => texts.join('').trim()).filter((line) => line.length > 0)
+
+  let lineHeight: number | undefined
+  if (ordered.length > 1) {
+    const spacing = ordered[1][0] - ordered[0][0]
+    if (Number.isFinite(spacing) && spacing > 0) lineHeight = spacing
+  }
+
+  return { lines, lineHeight }
+}
+
+/**
+ * Read the visual lines of a text element, rejoining tspans that belong to the
+ * same line. Exported for the field mapping UI, which shows the placeholder
+ * text sitting in each layer.
+ */
+export function readTextElementLines(textElement: Element): string[] {
+  return readTextLayout(textElement).lines
 }
 
 /**
@@ -353,7 +440,7 @@ function wrapTextToLines(
 function extractTextFields(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
   const textNodes = Array.from(svg.querySelectorAll('text'))
   const fields: FieldDefinition[] = []
-  const cssFontSizes = parseCssFontSizes(svg)
+  const cssStyles = parseCssTextStyles(svg)
   let index = 1
 
   for (const node of textNodes) {
@@ -362,15 +449,16 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
     if (!content) continue
 
     const { x, y } = getTextPosition(node)
-    const fontFamily = getFontFamily(node)
-    const fontSize = getFontSize(node, cssFontSizes) ?? 16
-    const fontWeight = getFontWeight(node)
-    const color = getFillColor(node) ?? '#000000'
+    const fontFamily = getFontFamily(node, cssStyles)
+    const fontSize = getFontSize(node, cssStyles) ?? 16
+    const fontWeight = getFontWeight(node, cssStyles)
+    const color = getFillColor(node, cssStyles) ?? '#000000'
     const anchor = node.getAttribute('text-anchor')?.toLowerCase()
     const align: FieldDefinition['align'] = anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left'
 
-    // Detect multi-line tspan layout and compute wrap width
-    const lineTexts = groupTspansByLine(node)
+    // Detect multi-line tspan layout, and reuse the template's own line spacing
+    // and widest line as the wrap budget.
+    const { lines: lineTexts, lineHeight } = readTextLayout(node)
     const isMultiLine = lineTexts.length > 1
     let wrapWidth: number | undefined
     if (isMultiLine) {
@@ -382,9 +470,14 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
     const idBase = idBaseFromSource || slugify(content)
     const id = `${idBase || 'text'}_${index}`
 
+    const barcodeLayer = parseBarcodeLayerId(sourceId)
+
     fields.push({
       id,
-      label: content,
+      // Editors split a single word across tspans to apply kerning, so the raw
+      // textContent runs them together ("ParniyaPeykamiyan"). Rebuild the label
+      // from the grouped lines instead.
+      label: lineTexts.join(' ') || content,
       type: 'text',
       x: toPercent(x, dimensions.width, 10 + index * 5),
       y: toPercent(y, dimensions.height, 10 + index * 5),
@@ -395,7 +488,11 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
       fontFamily,
       fontWeight,
       sourceId,
-      wrapWidth,
+      wrapWidth: barcodeLayer ? undefined : wrapWidth,
+      lineHeight,
+      ...(barcodeLayer
+        ? { type: 'barcode' as const, barcodeSymbology: barcodeLayer.symbology }
+        : {}),
     })
 
     index += 1
@@ -404,25 +501,38 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
   return dedupeFields(fields)
 }
 
+/**
+ * Find the placeholders that hold an image.
+ *
+ * A designer might draw one as a group, as a plain rectangle, or as an empty
+ * <image>, so all three count. The id has to name an image field (photo,
+ * signature, logo) or read like one.
+ */
 function extractImagePlaceholders(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
-  const groups = Array.from(svg.querySelectorAll('g[id]'))
+  const candidates = Array.from(svg.querySelectorAll('g[id], rect[id], image[id]'))
   const fields: FieldDefinition[] = []
+  const claimed: Element[] = []
   let index = 1
 
-  for (const group of groups) {
-    const id = group.getAttribute('id')
+  for (const node of candidates) {
+    const id = node.getAttribute('id')
     if (!id) continue
+    if (node.closest('defs')) continue
     if (PLACEHOLDER_PATTERN.test(id)) continue
-    if (!/photo|image/i.test(id)) continue
+    if (!/photo|image/i.test(id) && !isImageFieldName(id)) continue
+    // A group and a rectangle inside it are the same placeholder, not two.
+    if (claimed.some((element) => element !== node && element.contains(node))) continue
 
-    const rect = group.querySelector('rect')
-    const x = readNumeric(rect?.getAttribute('x'))
-    const y = readNumeric(rect?.getAttribute('y'))
-    const width = readNumeric(rect?.getAttribute('width'))
-    const height = readNumeric(rect?.getAttribute('height'))
+    // A group carries its geometry on the first rectangle inside it.
+    const box = node.tagName.toLowerCase() === 'g' ? node.querySelector('rect') : node
+    const width = readNumeric(box?.getAttribute('width'))
+    const height = readNumeric(box?.getAttribute('height'))
     if (width === undefined || height === undefined) continue
 
-    const sourceId = ensureNodeId(group, 'image-field', index)
+    const x = readNumeric(box?.getAttribute('x'))
+    const y = readNumeric(box?.getAttribute('y'))
+    const sourceId = ensureNodeId(node, 'image-field', index)
+    claimed.push(node)
 
     fields.push({
       id: slugify(id) || `image_${index}`,
@@ -440,6 +550,26 @@ function extractImagePlaceholders(svg: Document, dimensions: { width?: number; h
   }
 
   return dedupeFields(fields)
+}
+
+/**
+ * Font families that only appear on layers which are replaced by generated
+ * barcodes. Those layers never render as text, so the font is not needed.
+ */
+function collectRedundantBarcodeFonts(svg: Document, cssStyles: CssTextStyles): Set<string> {
+  const barcodeOnly = new Set<string>()
+  const usedElsewhere = new Set<string>()
+
+  for (const node of Array.from(svg.querySelectorAll('text'))) {
+    if (node.closest('defs')) continue
+    const family = getFontFamily(node, cssStyles)
+    if (!family) continue
+    if (parseBarcodeLayerId(node.getAttribute('id') || '')) barcodeOnly.add(family)
+    else usedElsewhere.add(family)
+  }
+
+  for (const family of usedElsewhere) barcodeOnly.delete(family)
+  return barcodeOnly
 }
 
 export function extractFontFamilies(svg: Document): string[] {
@@ -466,6 +596,11 @@ export function extractFontFamilies(svg: Document): string[] {
     }
   })
 
+  // Drop families only used by layers that become generated barcodes.
+  for (const family of collectRedundantBarcodeFonts(svg, parseCssTextStyles(svg))) {
+    fonts.delete(family)
+  }
+
   return Array.from(fonts)
 }
 
@@ -491,7 +626,7 @@ export function buildCanvasFontString(fontFamily: string | undefined, fontWeight
 function extractPlaceholders(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
   const nodes = Array.from(svg.querySelectorAll('[id]'))
   const fields: FieldDefinition[] = []
-  const cssFontSizes = parseCssFontSizes(svg)
+  const cssStyles = parseCssTextStyles(svg)
   let fallbackOffset = 10
   let index = 0
 
@@ -513,9 +648,9 @@ function extractPlaceholders(svg: Document, dimensions: { width?: number; height
     const yPercent = toPercent(y, dimensions.height, fallbackOffset)
     const widthPercent = width !== undefined ? toPercent(width, dimensions.width, 20) : undefined
     const heightPercent = height !== undefined ? toPercent(height, dimensions.height, 10) : undefined
-    const fontFamily = getFontFamily(node)
-    const fontWeight = getFontWeight(node)
-    const color = getFillColor(node) ?? '#000000'
+    const fontFamily = getFontFamily(node, cssStyles)
+    const fontWeight = getFontWeight(node, cssStyles)
+    const color = getFillColor(node, cssStyles) ?? '#000000'
     const anchor = node.getAttribute('text-anchor')?.toLowerCase()
     const align: FieldDefinition['align'] = anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left'
     const sourceId = ensureNodeId(node, 'placeholder-field', index)
@@ -528,7 +663,7 @@ function extractPlaceholders(svg: Document, dimensions: { width?: number; height
       y: yPercent,
       width: widthPercent,
       height: heightPercent,
-      fontSize: getFontSize(node, cssFontSizes) ?? 16,
+      fontSize: getFontSize(node, cssStyles) ?? 16,
       color,
       align,
       auto: true,
@@ -617,6 +752,12 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
       : undefined
 
   const fonts = extractFontFamilies(doc)
+  const warnings = collectTemplateWarnings(doc, fonts)
+
+  const canvasBox = viewBox ?? { x: 0, y: 0, width, height }
+  const trimCandidates = detectTrimCandidates(doc, canvasBox).filter((candidate) =>
+    isWorthSuggesting(candidate, canvasBox),
+  )
   const placeholderFields = extractPlaceholders(doc, { width, height })
   const textFields = placeholderFields.length > 0 ? [] : extractTextFields(doc, { width, height })
   const imageFields = placeholderFields.length > 0 ? [] : extractImagePlaceholders(doc, { width, height })
@@ -632,6 +773,8 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
     objectUrl,
     viewBox,
     fonts,
+    warnings: warnings.length > 0 ? warnings : undefined,
+    trimCandidates: trimCandidates.length > 0 ? trimCandidates : undefined,
   }
 
   const autoFields = placeholderFields.length > 0 ? placeholderFields : [...textFields, ...imageFields]
@@ -639,14 +782,160 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
   return { metadata, autoFields }
 }
 
+/**
+ * Rewrite the ids and CSS class names inside an SVG so several of them can
+ * share one HTML document without colliding.
+ *
+ * Illustrator names every class `cls-1`, `cls-2`, ... and every layer `Layer_1`,
+ * so a card front and a card back inlined side by side end up fighting over the
+ * same names: an inline <style> block is document-global, and the last one
+ * loaded wins. On the reference artwork this makes the back card's
+ * `.cls-1 { fill: none }` erase the name on the front card.
+ *
+ * Handles ids, `url(#...)` and `href="#..."` references (in attributes and
+ * inside <style> text), and class names declared in the SVG's own stylesheet.
+ */
+export function scopeSvgElement(root: Element, prefix: string): void {
+  if (!prefix) return
+
+  const elements: Element[] = [root, ...Array.from(root.querySelectorAll('*'))]
+
+  // 1. Collect and rename ids.
+  const idMap = new Map<string, string>()
+  for (const element of elements) {
+    const id = element.getAttribute('id')
+    if (!id) continue
+    const scopedId = `${prefix}${id}`
+    idMap.set(id, scopedId)
+    element.setAttribute('id', scopedId)
+  }
+
+  // 2. Collect the class names this SVG's own stylesheet declares. Classes that
+  //    only appear in a class attribute carry no styling, so leave them alone.
+  const styleElements = elements.filter((element) => element.tagName.toLowerCase() === 'style')
+  const classMap = new Map<string, string>()
+  for (const styleEl of styleElements) {
+    const css = styleEl.textContent || ''
+    for (const match of css.matchAll(CSS_CLASS_SELECTOR_PATTERN)) {
+      classMap.set(match[1], `${prefix}${match[1]}`)
+    }
+  }
+
+  // 3. Rewrite the stylesheet itself.
+  for (const styleEl of styleElements) {
+    let css = styleEl.textContent || ''
+    css = css.replace(CSS_CLASS_SELECTOR_PATTERN, (match, name: string) => {
+      const scoped = classMap.get(name)
+      return scoped ? `.${scoped}` : match
+    })
+    css = css.replace(URL_REFERENCE_PATTERN, (match, id: string) => {
+      const scoped = idMap.get(id)
+      return scoped ? `url(#${scoped})` : match
+    })
+    styleEl.textContent = css
+  }
+
+  // 4. Rewrite class attributes and any attribute referencing an id.
+  for (const element of elements) {
+    const classAttr = element.getAttribute('class')
+    if (classAttr) {
+      const scoped = classAttr
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((name) => classMap.get(name) ?? name)
+        .join(' ')
+      element.setAttribute('class', scoped)
+    }
+
+    if (idMap.size === 0) continue
+
+    for (const attr of Array.from(element.attributes)) {
+      const { name, value } = attr
+      if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
+        const scoped = idMap.get(value.slice(1))
+        if (scoped) element.setAttribute(name, `#${scoped}`)
+        continue
+      }
+      if (value.includes('url(#')) {
+        element.setAttribute(
+          name,
+          value.replace(URL_REFERENCE_PATTERN, (match, id: string) => {
+            const scoped = idMap.get(id)
+            return scoped ? `url(#${scoped})` : match
+          }),
+        )
+      }
+    }
+  }
+}
+
+// A CSS class selector: a dot followed by an identifier. The leading
+// [_a-zA-Z-] requirement keeps it from matching decimals such as `.26px`.
+const CSS_CLASS_SELECTOR_PATTERN = /\.(-?[_a-zA-Z][\w-]*)/g
+const URL_REFERENCE_PATTERN = /url\(\s*#([^)\s]+)\s*\)/g
+
+/**
+ * String form of {@link scopeSvgElement}, for markup that is about to be
+ * injected into a page alongside other SVGs.
+ */
+export function scopeSvgMarkup(svgMarkup: string, prefix: string): string {
+  if (!svgMarkup || !prefix) return svgMarkup
+  try {
+    const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml')
+    const root = doc.documentElement
+    if (!root || root.querySelector('parsererror')) return svgMarkup
+    scopeSvgElement(root, prefix)
+    return new XMLSerializer().serializeToString(root)
+  } catch (error) {
+    console.error('Failed to scope SVG markup', error)
+    return svgMarkup
+  }
+}
+
+/**
+ * Turn an arbitrary string into something usable as an id and class prefix.
+ */
+export function toSvgScopePrefix(value: string): string {
+  const cleaned = value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  return cleaned ? `${cleaned}-` : ''
+}
+
+/**
+ * Problems worth raising as soon as a template is imported.
+ */
+function collectTemplateWarnings(doc: Document, fonts: string[]): string[] {
+  const warnings: string[] = []
+
+  const barcodeFonts = fonts.filter(isBarcodeFontFamily)
+  if (barcodeFonts.length > 0) {
+    const cssStyles = parseCssTextStyles(doc)
+    const drawnWithFont = Array.from(doc.querySelectorAll('text')).filter((node) => {
+      if (node.closest('defs')) return false
+      const family = getFontFamily(node, cssStyles)
+      return isBarcodeFontFamily(family) && !parseBarcodeLayerId(node.getAttribute('id') || '')
+    })
+
+    if (drawnWithFont.length > 0) {
+      warnings.push(
+        `This template draws ${drawnWithFont.length} barcode${drawnWithFont.length === 1 ? '' : 's'} ` +
+          `with the "${barcodeFonts.join('", "')}" font. Rename the layer to barcode_<symbology> ` +
+          '(e.g. barcode_codabar_studentId) to generate a real barcode instead — a font-drawn barcode ' +
+          'prints as plain text if the font is missing, and carries no start/stop characters or quiet zone.',
+      )
+    }
+  }
+
+  return warnings
+}
+
 export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(template.rawSvg, 'image/svg+xml')
   const svgRoot = doc.documentElement
 
-  // Bake CSS font-sizes into inline attributes for all text elements and tspans
-  // This ensures font styling is preserved even when tspan structure changes
-  bakeCssFontSizes(doc)
+  // Bake CSS text styling into inline attributes for all text elements and tspans
+  // This ensures font and colour styling survive the tspan structure changes below
+  bakeCssTextStyles(doc)
 
   for (const field of fields) {
     if (!field.sourceId) continue
@@ -659,60 +948,176 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
       continue
     }
 
+    if (field.type === 'barcode') {
+      applySvgBarcodeField(doc, target, field, resolveFieldText(field, cardData[field.id]), {
+        width: template.viewBox?.width ?? template.width,
+        height: template.viewBox?.height ?? template.height,
+      })
+      continue
+    }
+
     if (field.type !== 'text') continue
-    const value = cardData[field.id]
-    const textValue = typeof value === 'string' ? value : undefined
-    applySvgTextField(doc, target, field, textValue)
+    applySvgTextField(doc, target, field, resolveFieldText(field, cardData[field.id]))
   }
 
   return new XMLSerializer().serializeToString(svgRoot)
 }
 
 /**
- * Bake CSS font-sizes into inline font-size attributes for all text elements and tspans.
- * This preserves font styling when tspan structure is modified during text replacement.
+ * The text a field should draw: the card's own value, or the field's default
+ * when that value is missing.
  */
-function bakeCssFontSizes(doc: Document): void {
-  const cssFontSizes = parseCssFontSizes(doc)
+function resolveFieldText(field: FieldDefinition, value: CardDataValue | undefined): string | undefined {
+  if (typeof value === 'string' && value.trim().length > 0) return value
+  const fallback = field.defaultValue?.trim()
+  return fallback ? fallback : undefined
+}
 
-  // Process all text elements
+/**
+ * Bake CSS text styling (font-size, font-family, font-weight and fill) into
+ * inline attributes for every text element and tspan.
+ *
+ * Illustrator exports put this styling in a <style> block keyed by class. Those
+ * rules are lost as soon as the tspan structure is rewritten during text
+ * replacement, and downstream consumers (svg2pdf, the text-to-outlines pass)
+ * read presentation attributes rather than resolving the stylesheet, so the
+ * values are pinned onto the elements up front.
+ */
+function bakeCssTextStyles(doc: Document): void {
+  const cssStyles = parseCssTextStyles(doc)
+  if (cssStyles.size === 0) return
+
   const textElements = doc.querySelectorAll('text')
   for (const textEl of textElements) {
-    // Skip if already has inline font-size
-    if (!textEl.hasAttribute('font-size')) {
-      const fontSize = getCssFontSizeForElement(textEl, cssFontSizes)
-      if (fontSize !== undefined) {
-        textEl.setAttribute('font-size', String(fontSize))
-      }
-    }
+    bakeCssTextStylesForElement(textEl, cssStyles)
 
-    // Process all tspans within this text element
     const tspans = textEl.querySelectorAll('tspan')
     for (const tspan of tspans) {
-      // Skip if already has inline font-size
-      if (!tspan.hasAttribute('font-size')) {
-        const fontSize = getCssFontSizeForElement(tspan, cssFontSizes)
-        if (fontSize !== undefined) {
-          tspan.setAttribute('font-size', String(fontSize))
-        }
-      }
+      bakeCssTextStylesForElement(tspan, cssStyles)
+    }
+  }
+}
+
+const BAKED_TEXT_STYLES: Array<[keyof CssTextStyle, string]> = [
+  ['fontSize', 'font-size'],
+  ['fontFamily', 'font-family'],
+  ['fontWeight', 'font-weight'],
+  ['fill', 'fill'],
+]
+
+function bakeCssTextStylesForElement(element: Element, cssStyles: CssTextStyles): void {
+  for (const [property, attribute] of BAKED_TEXT_STYLES) {
+    // Anything already set inline was authored deliberately, so leave it alone.
+    if (element.hasAttribute(attribute)) continue
+    const value = readCssTextStyleForElement(element, cssStyles, property)
+    if (value !== undefined) {
+      element.setAttribute(attribute, String(value))
     }
   }
 }
 
 /**
- * Get font-size from CSS classes for an element (doesn't check parent/children)
+ * Replace a barcode layer with generated bars.
+ *
+ * The placeholder in the artwork is a <text> element, so its font size is what
+ * the designer sized the barcode to. The generated barcode is scaled to that
+ * height and sits on the same baseline, which is where a barcode font would
+ * have drawn it.
  */
-function getCssFontSizeForElement(element: Element, cssFontSizes: Map<string, number>): number | undefined {
-  const classAttr = element.getAttribute('class')
-  if (!classAttr) return undefined
+function applySvgBarcodeField(
+  doc: Document,
+  element: Element,
+  field: FieldDefinition,
+  rawValue: string | undefined,
+  dimensions?: { width?: number; height?: number },
+): void {
+  // The placeholder in the artwork is a sample value, so use it until real data
+  // arrives — otherwise the designer only ever sees the un-encoded digits.
+  const value = (rawValue?.trim() || field.label?.trim()) ?? ''
+  const symbology = field.barcodeSymbology
+  if (!value || !symbology) return
 
-  const classes = classAttr.split(/\s+/)
-  for (const cls of classes) {
-    const size = cssFontSizes.get(cls)
-    if (size !== undefined) return size
+  const cssStyles = parseCssTextStyles(doc)
+  const targetHeight = field.fontSize ?? getFontSize(element, cssStyles) ?? 16
+  // Width and height are optional overrides expressed as a percentage of the
+  // card, for when the natural aspect of the symbology is not what the artwork
+  // needs. A wider barcode has wider bars, which scans more reliably.
+  const targetWidth =
+    field.width !== undefined && dimensions?.width
+      ? (field.width / 100) * dimensions.width
+      : undefined
+  const explicitHeight =
+    field.height !== undefined && dimensions?.height
+      ? (field.height / 100) * dimensions.height
+      : undefined
+
+  let barcode
+  try {
+    barcode = generateBarcodeSvg({
+      symbology,
+      text: value,
+      color: field.color,
+    })
+  } catch (error) {
+    // A barcode that cannot be encoded must not silently become something that
+    // looks like one, so leave the placeholder in place and say why.
+    console.error(`Could not generate the ${symbology} barcode for "${value}"`, error)
+    return
   }
-  return undefined
+
+  const barcodeDoc = new DOMParser().parseFromString(barcode.svg, 'image/svg+xml')
+  const barcodeRoot = barcodeDoc.documentElement
+  if (!barcodeRoot || barcodeRoot.querySelector('parsererror')) return
+
+  const heightScale = (explicitHeight ?? targetHeight) / barcode.height
+  const scaleX = targetWidth !== undefined ? targetWidth / barcode.width : heightScale
+  const scaleY = heightScale
+  const scaledWidth = barcode.width * scaleX
+
+  // Match the placeholder's alignment.
+  const anchor = element.getAttribute('text-anchor')?.toLowerCase() ?? (field.align === 'center' ? 'middle' : field.align === 'right' ? 'end' : 'start')
+  const anchorShift = anchor === 'middle' ? -scaledWidth / 2 : anchor === 'end' ? -scaledWidth : 0
+
+  const firstTspan = element.querySelector('tspan')
+  const baseX = element.getAttribute('x') ?? firstTspan?.getAttribute('x') ?? '0'
+  const baseY = element.getAttribute('y') ?? firstTspan?.getAttribute('y') ?? '0'
+
+  const group = doc.createElementNS(SVG_NS, 'g')
+  group.setAttribute('data-idcard-barcode', symbology)
+  group.setAttribute(
+    'transform',
+    [
+      element.getAttribute('transform'),
+      `translate(${baseX} ${baseY})`,
+      `translate(${anchorShift} 0)`,
+      `scale(${scaleX} ${scaleY})`,
+      // bwip-js draws downward from the origin; lift it onto the baseline.
+      `translate(0 ${-barcode.height})`,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
+
+  // Keep the layer id on the replacement so a re-render still finds it.
+  const id = element.getAttribute('id')
+  if (id) group.setAttribute('id', id)
+
+  for (const child of Array.from(barcodeRoot.children)) {
+    group.appendChild(doc.importNode(child, true))
+  }
+
+  element.parentNode?.replaceChild(group, element)
+}
+
+/**
+ * Floor for the automatic shrink applied to text that overflows its box. Below
+ * this the text stops being readable at card size, and overflowing is the more
+ * honest failure.
+ */
+const MIN_AUTO_SHRINK_SCALE = 0.6
+
+function roundFontSize(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 function applySvgTextField(
@@ -731,8 +1136,8 @@ function applySvgTextField(
 
   // Capture the original font-size from CSS before removing children
   // This preserves styling from <style> blocks that would be lost when tspans are removed
-  const cssFontSizes = parseCssFontSizes(doc)
-  const originalFontSize = getFontSize(element, cssFontSizes)
+  const cssStyles = parseCssTextStyles(doc)
+  const originalFontSize = getFontSize(element, cssStyles)
 
   // Capture baseline position from the first tspan before clearing children.
   // Many SVGs use transform="translate(...)" on the <text> element with tspans
@@ -750,8 +1155,19 @@ function applySvgTextField(
 
   // Determine lines: use word wrapping if a wrapWidth was detected, otherwise split on newlines
   let lines: string[]
+  let renderedFontSize = effectiveFontSize
   if (field.wrapWidth && field.wrapWidth > 0) {
-    lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, effectiveFontSize)
+    lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, renderedFontSize)
+
+    // Word wrapping cannot break a single long word, so a name like
+    // "Vandersteenhoven" would otherwise run off the edge of the card. Scale the
+    // text down to the width the artwork allows for, within reason.
+    const widest = measureWidestLine(lines, field.fontFamily, renderedFontSize, field.fontWeight)
+    if (widest && widest > field.wrapWidth) {
+      const scale = Math.max(field.wrapWidth / widest, MIN_AUTO_SHRINK_SCALE)
+      renderedFontSize = renderedFontSize * scale
+      lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, renderedFontSize)
+    }
   } else {
     lines = value.split(/\r?\n/)
   }
@@ -759,7 +1175,10 @@ function applySvgTextField(
   if (lines.length <= 1) {
     element.textContent = lines[0] ?? ''
   } else {
-    const lineHeight = effectiveFontSize * 1.2
+    // Prefer the spacing the template itself used; only fall back to a ratio
+    // when the original was a single line and has nothing to copy.
+    const lineHeight =
+      field.lineHeight && field.lineHeight > 0 ? field.lineHeight : renderedFontSize * 1.2
 
     lines.forEach((line, index) => {
       const tspan = doc.createElementNS(SVG_NS, 'tspan')
@@ -779,7 +1198,7 @@ function applySvgTextField(
     setOrRemoveAttribute(element, 'font-family', field.fontFamily)
   }
   // Always set font-size as inline attribute to preserve it after CSS classes are removed
-  element.setAttribute('font-size', String(effectiveFontSize))
+  element.setAttribute('font-size', String(roundFontSize(renderedFontSize)))
   setOrRemoveAttribute(element, 'font-weight', field.fontWeight ? String(field.fontWeight) : undefined)
   if (field.color !== undefined) {
     setOrRemoveAttribute(element, 'fill', field.color)
@@ -932,17 +1351,21 @@ export async function convertTextToOutlines(
   const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
   const root = doc.documentElement
 
+  // Markup reaching this point normally has its styling baked in already, but
+  // canvas designs and untouched layers can still rely on <style> classes.
+  const cssStyles = parseCssTextStyles(doc)
+
   const textElements = Array.from(root.querySelectorAll('text'))
   for (const textEl of textElements) {
     if (textEl.closest('defs')) continue
 
-    const fontName = getFontFamily(textEl)
+    const fontName = getFontFamily(textEl, cssStyles)
     const font = resolveOutlineFont(fontName, parsedFonts)
     if (!font) continue
 
-    const fontSize = parseFloat(textEl.getAttribute('font-size') || '16')
+    const fontSize = getFontSize(textEl, cssStyles) ?? 16
     const transform = textEl.getAttribute('transform')
-    const fill = getFillColor(textEl) || '#000000'
+    const fill = getFillColor(textEl, cssStyles) || '#000000'
     const textAnchor = textEl.getAttribute('text-anchor')?.toLowerCase()
 
     const group = doc.createElementNS(SVG_NS, 'g')
@@ -980,11 +1403,10 @@ export async function convertTextToOutlines(
         const text = tspan.textContent || ''
         if (!text.trim()) continue
 
-        const tspanFontFamily = getFontFamily(tspan)
+        const tspanFontFamily = getFontFamily(tspan, cssStyles)
         const tspanFont = tspanFontFamily ? resolveOutlineFont(tspanFontFamily, parsedFonts) || font : font
-        const tspanFontSize =
-          parseFloat(tspan.getAttribute('font-size') || '') || fontSize
-        const tspanFill = getFillColor(tspan) || fill
+        const tspanFontSize = getFontSize(tspan, cssStyles) ?? fontSize
+        const tspanFill = getFillColor(tspan, cssStyles) || fill
 
         const yAttr = tspan.getAttribute('y')
         const dyAttr = tspan.getAttribute('dy')

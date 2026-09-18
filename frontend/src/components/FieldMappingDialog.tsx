@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { Check, X } from 'lucide-react'
+import { CUSTOM_STATIC_VALUE, STANDARD_FIELDS, normalizeStandardFieldName } from '../lib/standardFields'
+import { readTextElementLines } from '../lib/svgTemplate'
 
 export interface FieldMapping {
   svgLayerId: string
@@ -28,58 +30,6 @@ interface FieldMappingDialogProps {
   onSave: (mappings: FieldMapping[]) => Promise<void>
 }
 
-const STANDARD_FIELDS = [
-  // Individual name fields
-  'firstName',
-  'firstName_AllCaps',
-  'firstName_TitleCase',
-  'lastName',
-  'lastName_AllCaps',
-  'lastName_TitleCase',
-  'middleName',
-  'middleName_AllCaps',
-  'middleName_TitleCase',
-  'middleInitial',
-  'middleInitial_AllCaps',
-
-  // Composite name fields (First-Last Order)
-  'fullName_First_Last',
-  'fullName_First_Last_AllCaps',
-  'fullName_First_LineBreak_Last',
-  'fullName_First_LineBreak_Last_AllCaps',
-  'fullName_First_MiddleInitial_Last',
-  'fullName_First_MiddleInitial_Last_AllCaps',
-  'fullName_First_Middle_Last',
-  'fullName_First_Middle_Last_AllCaps',
-
-  // Composite name fields (Last-First with Comma)
-  'fullName_Last_Comma_First',
-  'fullName_Last_Comma_First_AllCaps',
-  'fullName_Last_Comma_First_MiddleInitial',
-  'fullName_Last_Comma_First_MiddleInitial_AllCaps',
-  'fullName_Last_Comma_First_Middle',
-  'fullName_Last_Comma_First_Middle_AllCaps',
-
-  // Other fields
-  'studentId',
-  'department',
-  'position',
-  'grade',
-  'email',
-  'phoneNumber',
-  'address',
-  'emergencyContact',
-  'issueDate',
-  'expiryDate',
-  'birthDate',
-
-  // Image fields
-  'photo',
-  'signature',
-  'logo',
-]
-
-const CUSTOM_STATIC_VALUE = '__custom__'
 
 // Extract text content from SVG field
 function extractTextFromSVGField(svgContent: string, fieldId: string): string {
@@ -90,24 +40,23 @@ function extractTextFromSVGField(svgContent: string, fieldId: string): string {
   const element = doc.getElementById(fieldId)
   if (!element) return ''
 
-  // Try to get text content from tspan or text elements
-  const tspans = element.querySelectorAll('tspan')
-  if (tspans.length > 0) {
-    return Array.from(tspans).map(t => t.textContent || '').join(' ').trim()
+  // Group tspans back into visual lines. Editors split single words across
+  // tspans to apply kerning, so joining every tspan with a space turns
+  // "Parniya" into "Pa r niya".
+  const tagName = element.tagName.toLowerCase()
+  if (tagName === 'text' || tagName === 'tspan') {
+    return readTextElementLines(element).join(' ')
   }
 
-  // Check if it's a text element itself
-  if (element.tagName.toLowerCase() === 'text' || element.tagName.toLowerCase() === 'tspan') {
-    return element.textContent?.trim() || ''
-  }
-
-  // Try children
-  const textElements = element.querySelectorAll('text, tspan')
+  const textElements = Array.from(element.querySelectorAll('text'))
   if (textElements.length > 0) {
-    return Array.from(textElements).map(t => t.textContent || '').join(' ').trim()
+    return textElements
+      .map(textEl => readTextElementLines(textEl).join(' '))
+      .filter(Boolean)
+      .join(' ')
   }
 
-  return ''
+  return element.textContent?.trim() || ''
 }
 
 export function FieldMappingDialog({
@@ -145,31 +94,24 @@ export function FieldMappingDialog({
         const fieldId = field.sourceId || field.id
         const normalizedId = fieldId.toLowerCase()
 
-        // Exact match
-        if (STANDARD_FIELDS.includes(fieldId)) {
-          autoMappings[fieldId] = fieldId
+        const standardFieldName = normalizeStandardFieldName(fieldId)
+        if (standardFieldName) {
+          autoMappings[fieldId] = standardFieldName
         }
-        // Case-insensitive match
-        else {
-          const matchingField = STANDARD_FIELDS.find(sf => sf.toLowerCase() === normalizedId)
-          if (matchingField) {
-            autoMappings[fieldId] = matchingField
-          }
-          // Special mappings for common variations
-          else if (normalizedId === 'profilephoto' || normalizedId === 'profile' || normalizedId === 'userphoto') {
-            autoMappings[fieldId] = 'photo'
-          }
-          else if (normalizedId === 'studentid' || normalizedId === 'student_id' || normalizedId === 'id') {
-            autoMappings[fieldId] = 'studentId'
-          }
-          else if (normalizedId === 'fullname' || normalizedId === 'name') {
-            autoMappings[fieldId] = 'fullName_Last_Comma_First_MiddleInitial_AllCaps'
-          }
-          // If field starts with "custom", auto-map to Custom Static Text with existing label
-          else if (normalizedId.startsWith('custom')) {
-            autoMappings[fieldId] = CUSTOM_STATIC_VALUE
-            autoCustomValues[fieldId] = field.label || textContent[fieldId] || ''
-          }
+        // Special mappings for common variations
+        else if (normalizedId === 'profilephoto' || normalizedId === 'profile' || normalizedId === 'userphoto') {
+          autoMappings[fieldId] = 'photo'
+        }
+        else if (normalizedId === 'studentid' || normalizedId === 'student_id' || normalizedId === 'id') {
+          autoMappings[fieldId] = 'studentId'
+        }
+        else if (normalizedId === 'fullname' || normalizedId === 'name') {
+          autoMappings[fieldId] = 'fullName_Last_Comma_First_MiddleInitial_AllCaps'
+        }
+        // If field starts with "custom", auto-map to Custom Static Text with existing label
+        else if (normalizedId.startsWith('custom')) {
+          autoMappings[fieldId] = CUSTOM_STATIC_VALUE
+          autoCustomValues[fieldId] = field.label || textContent[fieldId] || ''
         }
       })
       setMappings(autoMappings)

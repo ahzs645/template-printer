@@ -1,3 +1,5 @@
+import type { BarcodeSymbology } from './barcode'
+import type { TrimCandidate } from './cardTrim'
 import type { TemplateSummary } from './templates'
 
 export type FieldType = 'text' | 'image' | 'barcode' | 'date'
@@ -16,6 +18,24 @@ export type TemplateMeta = {
   rawSvg: string
   objectUrl: string
   fonts: string[]
+  /** Problems worth telling the user about after import. */
+  warnings?: string[]
+  /**
+   * Rectangles in the artwork that could be the card's trim line. Detected, never
+   * applied — what counts as the card changes what gets printed.
+   */
+  trimCandidates?: TrimCandidate[]
+  /** The card area currently in force, once one has been chosen. */
+  cardArea?: {
+    formatId: string
+    keepBleed: boolean
+    bleedMm?: { top: number; right: number; bottom: number; left: number }
+    /** The card's rectangle in this template's own units. */
+    trimBox: { x: number; y: number; width: number; height: number }
+    /** Physical size of that rectangle. */
+    trimWidthMm: number
+    trimHeightMm: number
+  }
 }
 
 export type ImageValue = {
@@ -43,6 +63,16 @@ export type FieldDefinition = {
   fontWeight?: number
   sourceId?: string
   wrapWidth?: number
+  /** Line spacing taken from the template's own tspan layout, in SVG user units. */
+  lineHeight?: number
+  /** For `type: 'barcode'`, which symbology to generate. */
+  barcodeSymbology?: BarcodeSymbology
+  /**
+   * Used when the mapped value is empty — a card with no student number still
+   * needs something in the barcode, and a blank one is worse than a known
+   * placeholder.
+   */
+  defaultValue?: string
 }
 
 export type CardData = Record<string, CardDataValue>
