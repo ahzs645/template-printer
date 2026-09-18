@@ -43,6 +43,8 @@ export type FieldDefinition = {
   fontWeight?: number
   sourceId?: string
   wrapWidth?: number
+  /** Line spacing taken from the template's own tspan layout, in SVG user units. */
+  lineHeight?: number
 }
 
 export type CardData = Record<string, CardDataValue>

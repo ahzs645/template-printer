@@ -7,6 +7,7 @@
  * - fullName_Last_Comma_First_MiddleInitial_AllCaps → "WOLVES, TIMBER J."
  * - fullName_First_MiddleInitial_Last_TitleCase → "Timber J. Wolves"
  * - fullName_First_LineBreak_Last → "Timber\nWolves"
+ * - fullName_Last_Comma_LineBreak_First → "Wolves,\nTimber"
  * - firstName_AllCaps → "TIMBER"
  * - studentId → "12345"
  * - photo → ImageValue with user's photo
@@ -54,10 +55,10 @@ function applyCapitalization(text: string, capitalization?: string): string {
 
     case 'titlecase':
     case 'title':
-      return text
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ')
+      // Capitalise after any whitespace (including the newlines produced by
+      // _LineBreak_) and after hyphens, so "JEAN-LUC" and multi-line names
+      // come back as "Jean-Luc" rather than "Jean-luc".
+      return text.toLowerCase().replace(/(^|[\s-])(\S)/g, (_match, boundary, char) => boundary + char.toUpperCase())
 
     case 'lowercase':
     case 'lower':
@@ -172,6 +173,8 @@ function getSimpleField(fieldType: string, userData: UserData): string {
       return userData.lastName || ''
     case 'middleName':
       return userData.middleName || ''
+    case 'middleInitial':
+      return toMiddleInitial(userData.middleName)
     case 'studentId':
       return userData.studentId || ''
     case 'department':
@@ -200,79 +203,104 @@ function getSimpleField(fieldType: string, userData: UserData): string {
 }
 
 /**
+ * Turn a middle name into an initial ("Anne" -> "A.").
+ */
+function toMiddleInitial(middleName: string | null | undefined): string {
+  const trimmed = middleName?.trim()
+  if (!trimmed) return ''
+  return `${trimmed.charAt(0).toUpperCase()}.`
+}
+
+type NameSegment =
+  | { kind: 'word'; text: string }
+  | { kind: 'comma' }
+  | { kind: 'break' }
+
+/**
  * Format a full name according to the specified format
  *
- * Supported formats:
- * - Last_Comma_First → "Wolves, Timber"
- * - Last_Comma_First_MiddleInitial → "Wolves, Timber J."
- * - First_Last → "Timber Wolves"
- * - First_LineBreak_Last → "Timber\nWolves"
- * - First_MiddleInitial_Last → "Timber J. Wolves"
- * - First_MiddleName_Last → "Timber John Wolves"
+ * Supported format tokens:
+ * - First / Last / Middle (or MiddleName) / MiddleInitial
+ * - Comma        -> attaches to the previous word, followed by a space
+ * - LineBreak    -> starts a new line (aliases: NewLine, Break)
+ *
+ * Examples:
+ * - Last_Comma_First              -> "Wolves, Timber"
+ * - Last_Comma_First_MiddleInitial-> "Wolves, Timber J."
+ * - First_Last                    -> "Timber Wolves"
+ * - First_LineBreak_Last          -> "Timber\nWolves"
+ * - Last_Comma_LineBreak_First    -> "Wolves,\nTimber"
+ * - First_MiddleInitial_Last      -> "Timber J. Wolves"
+ * - First_Middle_Last             -> "Timber John Wolves"
+ *
+ * Name parts that are empty for a given user are dropped, so a user with no
+ * middle name renders "Timber Wolves" rather than "Timber  Wolves", and a
+ * comma left with nothing after it is removed.
  */
 function formatFullName(formatParts: string[], userData: UserData, capitalization?: string): string {
-  const firstName = userData.firstName || ''
-  const lastName = userData.lastName || ''
-  const middleName = userData.middleName || ''
-  const middleInitial = middleName ? middleName.charAt(0) + '.' : ''
-
-  let result = ''
-  let i = 0
-
-  while (i < formatParts.length) {
-    const part = formatParts[i].toLowerCase()
-
-    switch (part) {
-      case 'first':
-        result += firstName
-        break
-
-      case 'last':
-        result += lastName
-        break
-
-      case 'middlename':
-        result += middleName
-        break
-
-      case 'middleinitial':
-        result += middleInitial
-        break
-
-      case 'comma':
-        result += ','
-        break
-
-      case 'linebreak':
-      case 'newline':
-      case 'break':
-        result += '\n'
-        break
-
-      default:
-        // Unknown part, skip
-        break
-    }
-
-    // Add space after each part except:
-    // - Last part
-    // - Before a comma
-    // - After a comma (space is added by comma logic)
-    if (i < formatParts.length - 1) {
-      const nextPart = formatParts[i + 1].toLowerCase()
-      const isLineBreak = part === 'linebreak' || part === 'newline' || part === 'break'
-      const nextIsLineBreak = nextPart === 'linebreak' || nextPart === 'newline' || nextPart === 'break'
-      if (!isLineBreak && !nextIsLineBreak && part !== 'comma' && nextPart !== 'comma') {
-        result += ' '
-      } else if (part === 'comma' && !nextIsLineBreak) {
-        result += ' '
-      }
-    }
-
-    i++
+  const values: Record<string, string> = {
+    first: userData.firstName || '',
+    last: userData.lastName || '',
+    middle: userData.middleName || '',
+    middlename: userData.middleName || '',
+    middleinitial: toMiddleInitial(userData.middleName),
   }
 
-  return capitalization ? applyCapitalization(result.trim(), capitalization) : result.trim()
+  const segments: NameSegment[] = []
+  for (const rawPart of formatParts) {
+    const part = rawPart.toLowerCase()
+
+    if (part === 'comma') {
+      segments.push({ kind: 'comma' })
+      continue
+    }
+
+    if (part === 'linebreak' || part === 'newline' || part === 'break') {
+      segments.push({ kind: 'break' })
+      continue
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values, part)) {
+      segments.push({ kind: 'word', text: values[part] })
+      continue
+    }
+
+    // Unknown token, skip
+  }
+
+  const lines: string[] = []
+  let current = ''
+
+  for (const segment of segments) {
+    if (segment.kind === 'break') {
+      lines.push(current)
+      current = ''
+      continue
+    }
+
+    if (segment.kind === 'comma') {
+      // A comma only makes sense once something precedes it on this line.
+      if (current.length > 0) current += ','
+      continue
+    }
+
+    if (!segment.text) continue
+    if (current.length > 0) current += ' '
+    current += segment.text
+  }
+  lines.push(current)
+
+  const trimmed = lines.map(line => line.trim())
+  while (trimmed.length > 1 && trimmed[0] === '') trimmed.shift()
+  while (trimmed.length > 1 && trimmed[trimmed.length - 1] === '') trimmed.pop()
+  if (trimmed.length > 0) {
+    // Drop a comma that ended up with nothing after it (e.g. a user with no
+    // first name under Last_Comma_First).
+    trimmed[trimmed.length - 1] = trimmed[trimmed.length - 1].replace(/,$/, '')
+  }
+
+  const result = trimmed.join('\n')
+  return capitalization ? applyCapitalization(result, capitalization) : result
 }
 
 /**

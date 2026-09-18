@@ -7,6 +7,7 @@ Welcome to the Template Printer documentation. This application allows you to ma
 1. [SVG Layer Naming & Auto-Mapping](./svg-layer-naming.md) - Learn how to name SVG layers for automatic field mapping
 2. [SVG Template Usage](./svg-templates.md) - Guide to creating and using SVG templates
 3. [User Database Fields](./user-database.md) - Complete reference of all supported user fields
+4. [Reference Templates](./reference-templates/README.md) - Sample Illustrator exports, and what they exercise in the importer
 
 ## Quick Start
 

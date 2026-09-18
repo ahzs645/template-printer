@@ -60,6 +60,41 @@ fullName_First_Middle_Last_AllCaps
 - `fullName_First_MiddleInitial_Last_AllCaps` → "JOHN A. SMITH"
 - `fullName_First_Middle_Last_AllCaps` → "JOHN ALLEN SMITH"
 
+### Stacked Names (over two lines)
+
+Add `_LineBreak_` between two parts to force a hard line break. Use this
+whenever the artwork stacks the name, so the layout holds for every user
+regardless of how long or short their name is:
+
+```
+fullName_First_LineBreak_Last
+fullName_First_LineBreak_Last_AllCaps
+fullName_First_LineBreak_Last_TitleCase
+fullName_First_MiddleInitial_LineBreak_Last
+fullName_First_MiddleInitial_LineBreak_Last_AllCaps
+fullName_Last_LineBreak_First
+fullName_Last_LineBreak_First_AllCaps
+fullName_Last_Comma_LineBreak_First
+fullName_Last_Comma_LineBreak_First_AllCaps
+```
+
+**Examples**:
+- `fullName_First_LineBreak_Last` → "John" / "Smith"
+- `fullName_First_MiddleInitial_LineBreak_Last` → "John A." / "Smith"
+- `fullName_Last_Comma_LineBreak_First_AllCaps` → "SMITH," / "JOHN"
+
+`_NewLine_` and `_Break_` are accepted as aliases for `_LineBreak_`.
+
+**Why this matters**: a two-line text layer whose id is `fullName_First_Last`
+gets a single line of text, "John Smith". It is then word-wrapped to fit the
+width of the original artwork, which *usually* reproduces the two-line look —
+but a short name such as "Jo Ng" fits on one line and drops to a single line,
+collapsing the design. `_LineBreak_` removes the guesswork: the break is always
+where you put it, and long lines are still wrapped after that.
+
+The replacement text reuses the line spacing from the original artwork, so the
+generated lines sit exactly where the designer's placeholder lines sat.
+
 ### Composite Name Fields (Last-First with Comma)
 
 These fields combine name parts with last name first, separated by a comma:
@@ -77,6 +112,10 @@ fullName_Last_Comma_First_Middle_AllCaps
 - `fullName_Last_Comma_First_AllCaps` → "SMITH, JOHN"
 - `fullName_Last_Comma_First_MiddleInitial_AllCaps` → "SMITH, JOHN A."
 - `fullName_Last_Comma_First_Middle_AllCaps` → "SMITH, JOHN ALLEN"
+
+**Missing name parts are dropped cleanly.** A user with no middle name renders
+`fullName_First_MiddleInitial_Last` as "John Smith", not "John  Smith", and a
+comma with nothing after it is removed.
 
 ### Other Text Fields
 
@@ -120,7 +159,20 @@ If a layer ID matches a standard field when compared case-insensitively, it's ma
 
 **Example**: Layer `FIRSTNAME_ALLCAPS` → Auto-mapped to `firstName_AllCaps`
 
-### 3. Common Variations
+### 3. Any Valid Combination
+The lists above are the combinations offered in the mapping dropdown, not the
+limit of what is understood. Any layer ID built from a known field type, the
+name format tokens (`First`, `Last`, `Middle`, `MiddleName`, `MiddleInitial`,
+`Comma`, `LineBreak`/`NewLine`/`Break`) and an optional capitalization suffix is
+recognised and mapped.
+
+**Example**: Layer `fullName_Last_Comma_LineBreak_First_TitleCase` maps even
+though it isn't in the dropdown.
+
+Image fields (`photo`, `signature`, `logo`) take no format or capitalization
+tokens — `photo_AllCaps` is not a valid field name.
+
+### 4. Common Variations
 Some common variations are recognized:
 
 | Layer ID | Auto-Mapped To |
@@ -129,7 +181,7 @@ Some common variations are recognized:
 | `studentid`, `student_id`, `id` | `studentId` |
 | `fullname`, `name` | `fullName_Last_Comma_First_MiddleInitial_AllCaps` |
 
-### 4. Custom Fields
+### 5. Custom Fields
 Layers starting with "custom" are automatically mapped as custom static text:
 
 **Example**: Layer `customSchoolName` → Auto-mapped to custom field with the layer's current text as the default value
@@ -142,6 +194,31 @@ Layers starting with "custom" are automatically mapped as custom static text:
 2. **Use text elements for text fields**: Ensure text fields use `<text>` or `<tspan>` elements
 3. **Use image elements for photos**: Photo placeholders should use `<image>` elements
 4. **Group related elements**: You can group elements under a layer, but the layer ID is what matters
+5. **Name the line break when the artwork has one**: if a text layer is set over
+   two lines, use a `_LineBreak_` field name rather than relying on word wrap
+
+### Exporting from Illustrator
+
+Illustrator's **Export As → SVG** output is fully supported, including the parts
+that differ from hand-written SVG:
+
+- **Styling in a `<style>` block.** Illustrator writes font family, weight, size
+  and fill as `.cls-N { ... }` rules rather than attributes. These are resolved
+  on import and baked into the elements, so colours and fonts survive into the
+  preview and the exported PDF. Keep the `<style>` block in the export — do not
+  strip it.
+- **Words split across tspans.** Illustrator breaks a word into several tspans to
+  apply kerning. tspans are regrouped by their vertical position, so the field
+  list shows "Parniya Peykamiyan" rather than "ParniyaPeykamiyan".
+- **Line spacing.** The spacing between the tspan lines in the artwork is reused
+  for the replacement text, so generated lines land where the placeholder lines
+  were.
+- **Layer ids.** Illustrator uses the Layers panel name as the SVG `id`, and
+  replaces characters it does not allow. Stick to the exact field names above —
+  spaces and punctuation get mangled.
+
+There is a worked example in
+[`reference-templates/`](./reference-templates/README.md).
 
 ### Example SVG Structure
 
@@ -189,9 +266,23 @@ If a layer isn't auto-mapped or you want to change the mapping:
 **Problem**: Your layer isn't being automatically mapped.
 
 **Solutions**:
-- Check that the layer ID matches exactly (case-sensitive)
+- Check the layer ID against the field names above (matching is case-insensitive,
+  but the tokens themselves have to be spelled correctly — `fullName_First_Last`,
+  not `fullName_FirstLast`)
 - Ensure the layer is a `<text>` element (for text fields) or `<image>` element (for photos)
+- Illustrator rewrites layer names containing spaces or punctuation; check the
+  exported `id` attribute, not just the Layers panel
 - Use the manual mapping dialog to map it manually
+
+### Name Renders on One Line Instead of Two
+
+**Problem**: The artwork stacks the first and last name, but short names come
+out on a single line.
+
+**Solution**: The layer is probably named `fullName_First_Last`, which produces
+one line that only wraps when it is too wide to fit. Rename it to
+`fullName_First_LineBreak_Last` so the break is explicit — see
+[Stacked Names](#stacked-names-over-two-lines).
 
 ### Wrong Capitalization
 
@@ -213,16 +304,34 @@ If a layer isn't auto-mapped or you want to change the mapping:
 
 ## Advanced: Understanding the Field Parser
 
-The field parser ([autoMapping.ts](../frontend/src/lib/autoMapping.ts)) handles the automatic mapping logic:
+Two modules implement this convention:
+
+- [`standardFields.ts`](../frontend/src/lib/standardFields.ts) owns the list of
+  field names offered in the UI and resolves a layer ID to its canonical field
+  name.
+- [`fieldParser.ts`](../frontend/src/lib/fieldParser.ts) turns a field name plus
+  a user record into the string that gets drawn.
 
 ```typescript
-// Standard fields are checked first
-const STANDARD_FIELDS = [
+// The dropdown list is a curated subset...
+export const STANDARD_FIELDS = [
   'firstName', 'firstName_AllCaps', 'firstName_TitleCase',
-  'lastName', 'lastName_AllCaps', 'lastName_TitleCase',
+  'fullName_First_Last', 'fullName_First_LineBreak_Last',
   // ... etc
 ]
 
+// ...but any well-formed combination resolves, case-insensitively
+normalizeStandardFieldName('FULLNAME_FIRST_LINEBREAK_LAST')
+// -> 'fullName_First_LineBreak_Last'
+
+normalizeStandardFieldName('Layer_2')
+// -> null
+```
+
+[`autoMapping.ts`](../frontend/src/lib/autoMapping.ts) then adds the common
+variations and the `custom` prefix rule on top:
+
+```typescript
 // Special variations are recognized
 if (normalizedId === 'profilephoto') {
   mapping = { svgLayerId: fieldId, standardFieldName: 'photo' }
