@@ -80,6 +80,7 @@ const { generateAutoMappings } = await import('../src/lib/autoMapping.ts')
 const { parseField } = await import('../src/lib/fieldParser.ts')
 const { normalizeStandardFieldName, parseBarcodeLayerId } = await import('../src/lib/standardFields.ts')
 const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await import('../src/lib/barcode.ts')
+const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
 
 // --- helpers ---------------------------------------------------------------
 
@@ -376,6 +377,23 @@ check('does not flag the named barcode layer', () => {
   assert.equal(idBack.metadata.warnings, undefined)
 })
 
+check('does not ask for a font the barcode layer no longer needs', () => {
+  assert.ok(
+    !idBack.metadata.fonts.some((font) => /codabar/i.test(font)),
+    `Codabarlarge should not be required: ${idBack.metadata.fonts.join(', ')}`,
+  )
+  // The fonts the rest of the card genuinely uses are still listed.
+  assert.ok(idBack.metadata.fonts.some((font) => /HelveticaNeue/i.test(font)))
+})
+
+check('previews a barcode from its placeholder value', () => {
+  const markup = renderSvgWithData(idBack.metadata, idBack.autoFields, {})
+  const element = new DOMParser()
+    .parseFromString(markup, 'image/svg+xml')
+    .getElementById('barcode_codabar_studentId')
+  assert.equal(element.tagName.toLowerCase(), 'g', 'the placeholder should already render as bars')
+})
+
 // --- barcode encoding -------------------------------------------------------
 
 section('barcode encoding')
@@ -415,6 +433,45 @@ check('parses barcode layer ids', () => {
   })
   assert.equal(parseBarcodeLayerId('barcode_nonsense'), null)
   assert.equal(parseBarcodeLayerId('studentId'), null)
+})
+
+// --- front / back pairing ---------------------------------------------------
+
+section('card sides')
+
+check('reads a side out of a filename', () => {
+  assert.equal(readSideFromFileName('id-card-front.svg'), 'front')
+  assert.equal(readSideFromFileName('id-card-back.svg'), 'back')
+  assert.equal(readSideFromFileName('badge_verso.svg'), 'back')
+  assert.equal(readSideFromFileName('ID Card Back.svg'), 'back')
+  assert.equal(readSideFromFileName('badge-side-b.svg'), 'back')
+  assert.equal(readSideFromFileName('badge-f.svg'), 'front')
+  assert.equal(readSideFromFileName('Asset 8.svg'), null)
+  // Naming both sides in one filename says nothing about this file.
+  assert.equal(readSideFromFileName('front-and-back.svg'), null)
+})
+
+check('uses the filename when it says which side is which', () => {
+  const pair = assignCardSides([
+    { fileName: 'id-card-back.svg', fields: idBack.autoFields },
+    { fileName: 'id-card-front.svg', fields: idFront.autoFields },
+  ])
+  assert.equal(pair.front.fileName, 'id-card-front.svg')
+  assert.equal(pair.back.fileName, 'id-card-back.svg')
+})
+
+check('falls back to which side carries the person', () => {
+  // Illustrator's default names say nothing, so the photo and name decide.
+  const pair = assignCardSides([
+    { fileName: 'Asset 10.svg', fields: idBack.autoFields },
+    { fileName: 'Asset 8.svg', fields: idFront.autoFields },
+  ])
+  assert.equal(pair.front.fileName, 'Asset 8.svg', 'the side with the photo and name is the front')
+})
+
+check('names the design after what the two files share', () => {
+  assert.equal(suggestDesignName('id-card-front.svg', 'id-card-back.svg'), 'id-card')
+  assert.equal(suggestDesignName('Asset 8.svg', 'Asset 10.svg'), 'Asset')
 })
 
 // --- result -----------------------------------------------------------------

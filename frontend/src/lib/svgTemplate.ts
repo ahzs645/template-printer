@@ -537,6 +537,26 @@ function extractImagePlaceholders(svg: Document, dimensions: { width?: number; h
   return dedupeFields(fields)
 }
 
+/**
+ * Font families that only appear on layers which are replaced by generated
+ * barcodes. Those layers never render as text, so the font is not needed.
+ */
+function collectRedundantBarcodeFonts(svg: Document, cssStyles: CssTextStyles): Set<string> {
+  const barcodeOnly = new Set<string>()
+  const usedElsewhere = new Set<string>()
+
+  for (const node of Array.from(svg.querySelectorAll('text'))) {
+    if (node.closest('defs')) continue
+    const family = getFontFamily(node, cssStyles)
+    if (!family) continue
+    if (parseBarcodeLayerId(node.getAttribute('id') || '')) barcodeOnly.add(family)
+    else usedElsewhere.add(family)
+  }
+
+  for (const family of usedElsewhere) barcodeOnly.delete(family)
+  return barcodeOnly
+}
+
 export function extractFontFamilies(svg: Document): string[] {
   const fonts = new Set<string>()
 
@@ -560,6 +580,11 @@ export function extractFontFamilies(svg: Document): string[] {
       if (parsed) fonts.add(parsed)
     }
   })
+
+  // Drop families only used by layers that become generated barcodes.
+  for (const family of collectRedundantBarcodeFonts(svg, parseCssTextStyles(svg))) {
+    fonts.delete(family)
+  }
 
   return Array.from(fonts)
 }
@@ -978,7 +1003,9 @@ function applySvgBarcodeField(
   rawValue: string | undefined,
   dimensions?: { width?: number; height?: number },
 ): void {
-  const value = rawValue?.trim()
+  // The placeholder in the artwork is a sample value, so use it until real data
+  // arrives — otherwise the designer only ever sees the un-encoded digits.
+  const value = (rawValue?.trim() || field.label?.trim()) ?? ''
   const symbology = field.barcodeSymbology
   if (!value || !symbology) return
 

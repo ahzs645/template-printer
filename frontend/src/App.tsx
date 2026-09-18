@@ -82,6 +82,7 @@ import {
 import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
+import { assignCardSides, suggestDesignName, type CardSide } from './lib/cardSides'
 import { cn } from './lib/utils'
 
 type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
@@ -112,6 +113,11 @@ function App() {
   // Set when the open template arrived through a view-only share link.
   const [isSharedReadOnly, setIsSharedReadOnly] = useState(false)
   const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
+  // The card design the open template belongs to, so both sides can be shown
+  // and switched between while editing.
+  const [linkedDesignId, setLinkedDesignId] = useState<string | null>(null)
+  const [activeSide, setActiveSide] = useState<CardSide>('front')
+  const [otherSidePreview, setOtherSidePreview] = useState<{ name: string; svg: string } | null>(null)
   const shareTargetHandled = useRef(false)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -380,11 +386,89 @@ function App() {
     return isAutoMappable(field)
   }
 
+  /**
+   * Import a single SVG into the editor and save it to the library.
+   * Returns the saved template so a caller can link a pair together.
+   */
+  const importTemplateFile = async (file: File, { activate }: { activate: boolean }) => {
+    const { metadata, autoFields } = await parseTemplate(file)
+    const nextFields = autoFields.length > 0 ? autoFields : []
+
+    if (activate) {
+      resetPreviousObjectUrl(metadata.objectUrl)
+      setTemplate(metadata)
+      registerTemplateFonts(metadata.fonts)
+      setFields(nextFields)
+      setCardData(() => ({}))
+      setSelectedFieldId(autoFields[0]?.id ?? null)
+      setSelectedExportCardDesignId(null)
+      setTemplateWarnings(metadata.warnings ?? [])
+    }
+
+    const savedTemplate = await storage.createTemplate(file, metadata, 'design')
+    const autoMappings = generateAutoMappings(nextFields)
+    if (autoMappings.length > 0) {
+      await storage.saveFieldMappings(savedTemplate.id, autoMappings)
+    }
+
+    return { savedTemplate, metadata, fields: nextFields, autoMappings }
+  }
+
+  /**
+   * Import a front and a back together and link them into a card design, so a
+   * pair of exports from Illustrator becomes a usable card in one step.
+   */
+  const handleTemplatePairUpload = async (files: File[]) => {
+    const parsed = await Promise.all(
+      files.map(async (file) => {
+        const { autoFields } = await parseTemplate(file)
+        return { file, fileName: file.name, fields: autoFields }
+      }),
+    )
+
+    const { front, back } = assignCardSides([parsed[0], parsed[1]])
+
+    const frontResult = await importTemplateFile(front.file, { activate: true })
+    const backResult = await importTemplateFile(back.file, { activate: false })
+    await reloadDesignTemplates()
+
+    setSelectedTemplateId(frontResult.savedTemplate.id)
+    setActiveSide('front')
+
+    const design = await createCardDesign({
+      name: suggestDesignName(front.fileName, back.fileName),
+      description: null,
+      frontTemplateId: frontResult.savedTemplate.id,
+      backTemplateId: backResult.savedTemplate.id,
+    })
+    setLinkedDesignId(design.id)
+    setOtherSidePreview({ name: backResult.savedTemplate.name, svg: backResult.metadata.rawSvg })
+    refreshCardDesigns()
+
+    setFieldMappingsVersion((v) => v + 1)
+    setStatusMessage(
+      `Imported "${front.fileName}" as the front and "${back.fileName}" as the back, ` +
+        `linked as the card design "${design.name}".`,
+    )
+  }
+
   const handleTemplateUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const selected = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (!file) return
+    if (selected.length === 0) return
     setErrorMessage(null)
+
+    if (selected.length >= 2) {
+      try {
+        await handleTemplatePairUpload(selected.slice(0, 2))
+      } catch (error) {
+        console.error(error)
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to import the template pair')
+      }
+      return
+    }
+
+    const file = selected[0]
 
     try {
       const { metadata, autoFields } = await parseTemplate(file)
@@ -404,6 +488,9 @@ function App() {
         : 'Template imported. No placeholders detected - add fields manually to continue.'
       setStatusMessage(baseMessage)
       setTemplateWarnings(metadata.warnings ?? [])
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      setActiveSide('front')
 
       try {
         const savedTemplate = await storage.createTemplate(file, metadata, 'design')
@@ -463,6 +550,7 @@ function App() {
       setSelectedExportCardDesignId(null)
 
       setTemplateWarnings(metadata.warnings ?? [])
+      await syncLinkedDesign(templateSummary.id)
 
       const existingMappings = await storage.getFieldMappings(templateSummary.id)
       if (existingMappings.length === 0 && nextFields.length > 0) {
@@ -486,6 +574,94 @@ function App() {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load template')
     }
+  }
+
+  /**
+   * Note which card design (if any) the open template belongs to, and load the
+   * other side so both can be shown together.
+   */
+  const syncLinkedDesign = async (templateId: string | null) => {
+    if (!templateId) {
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      return
+    }
+
+    const design = cardDesigns.find(
+      (candidate) => candidate.frontTemplateId === templateId || candidate.backTemplateId === templateId,
+    )
+    if (!design) {
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      return
+    }
+
+    setLinkedDesignId(design.id)
+    const side: CardSide = design.frontTemplateId === templateId ? 'front' : 'back'
+    setActiveSide(side)
+
+    const otherId = side === 'front' ? design.backTemplateId : design.frontTemplateId
+    if (!otherId) {
+      setOtherSidePreview(null)
+      return
+    }
+
+    const otherSummary = designTemplates.find((candidate) => candidate.id === otherId)
+    if (!otherSummary) {
+      setOtherSidePreview(null)
+      return
+    }
+
+    try {
+      const svg = await loadTemplateSvgContent(otherSummary)
+      setOtherSidePreview({ name: otherSummary.name, svg })
+    } catch (error) {
+      console.error('Failed to load the other side of the card', error)
+      setOtherSidePreview(null)
+    }
+  }
+
+  const linkedDesign = linkedDesignId ? cardDesigns.find((design) => design.id === linkedDesignId) ?? null : null
+
+  /**
+   * Bring the other side of the linked card design into the editor.
+   */
+  const handleSwitchSide = async (side: CardSide) => {
+    if (!linkedDesign || side === activeSide) return
+    const targetId = side === 'front' ? linkedDesign.frontTemplateId : linkedDesign.backTemplateId
+    if (!targetId) return
+    const summary = designTemplates.find((candidate) => candidate.id === targetId)
+    if (!summary) {
+      setErrorMessage(`The ${side} template is no longer in your library.`)
+      return
+    }
+    await handleTemplateSelect(summary)
+  }
+
+  /**
+   * Open the Card Design dialog with the template currently in the editor
+   * already chosen, so linking a back to it is one step.
+   */
+  const handleLinkSides = () => {
+    if (linkedDesign) {
+      setEditingDesign(linkedDesign)
+      setDesignFormData({
+        name: linkedDesign.name,
+        description: linkedDesign.description ?? '',
+        frontTemplateId: linkedDesign.frontTemplateId ?? '',
+        backTemplateId: linkedDesign.backTemplateId ?? '',
+      })
+    } else {
+      const current = selectedTemplateId ? designTemplates.find((t) => t.id === selectedTemplateId) : null
+      setEditingDesign(null)
+      setDesignFormData({
+        name: current?.name.replace(/\.svg$/i, '') ?? '',
+        description: '',
+        frontTemplateId: selectedTemplateId ?? '',
+        backTemplateId: '',
+      })
+    }
+    setDesignDialogOpen(true)
   }
 
   const handleOpenShare = () => {
@@ -549,6 +725,8 @@ function App() {
         setFieldMappings(mappingsMap)
 
         setTemplateWarnings(metadata.warnings ?? [])
+        setLinkedDesignId(null)
+        setOtherSidePreview(null)
         setIsSharedReadOnly(target.mode === 'view')
         setActiveTab('design')
         setDesignMode('import')
@@ -1114,8 +1292,15 @@ function App() {
               ref={templateUploadInputRef}
               type="file"
               accept="image/svg+xml"
+              multiple
               onChange={handleTemplateUpload}
               style={{ display: 'none' }}
+            />
+            <RibbonButton
+              icon={<CreditCard size={18} />}
+              label={linkedDesign ? 'Edit Pair' : 'Link Front/Back'}
+              onClick={handleLinkSides}
+              disabled={!selectedTemplateId || isSharedReadOnly}
             />
             <RibbonButton
               icon={<Share2 size={18} />}
@@ -1536,20 +1721,51 @@ function App() {
               <div className="app-workspace">
                 <div className="canvas-container">
                   {template && renderedSvg ? (
-                    <div
-                      className="canvas-preview"
-                      style={{ width: previewWidth, height: previewHeight }}
-                    >
-                      <div style={{ position: 'absolute', inset: 0 }} dangerouslySetInnerHTML={{ __html: renderedSvg }} />
-                      {fields.map((field) => (
-                        <PreviewField
-                          key={`preview-${field.id}`}
-                          field={field}
-                          value={cardData[field.id] as CardDataValue}
-                          width={previewWidth}
-                          height={previewHeight}
-                        />
-                      ))}
+                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        {linkedDesign && (
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            {activeSide} · editing
+                          </span>
+                        )}
+                        <div
+                          className="canvas-preview"
+                          style={{ width: previewWidth, height: previewHeight }}
+                        >
+                          <div style={{ position: 'absolute', inset: 0 }} dangerouslySetInnerHTML={{ __html: renderedSvg }} />
+                          {fields.map((field) => (
+                            <PreviewField
+                              key={`preview-${field.id}`}
+                              field={field}
+                              value={cardData[field.id] as CardDataValue}
+                              width={previewWidth}
+                              height={previewHeight}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {linkedDesign && otherSidePreview && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            {activeSide === 'front' ? 'back' : 'front'}
+                          </span>
+                          <button
+                            type="button"
+                            title={`Edit the ${activeSide === 'front' ? 'back' : 'front'} of this card`}
+                            onClick={() => handleSwitchSide(activeSide === 'front' ? 'back' : 'front')}
+                            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', opacity: 0.6 }}
+                          >
+                            <InlineSvg
+                              className="canvas-preview"
+                              style={{ width: previewWidth, height: previewHeight }}
+                              markup={otherSidePreview.svg}
+                              name="editor-other-side"
+                            />
+                          </button>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Click to edit this side</span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="empty-state">
@@ -2031,7 +2247,8 @@ function App() {
                 setDesignDialogOpen(false)
                 setEditingDesign(null)
                 setDesignFormData({ name: '', description: '', frontTemplateId: '', backTemplateId: '' })
-                refreshCardDesigns()
+                await refreshCardDesigns()
+                if (selectedTemplateId) await syncLinkedDesign(selectedTemplateId)
               } catch (err) {
                 setDesignFormError(err instanceof Error ? err.message : 'Failed to save')
               } finally {
