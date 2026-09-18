@@ -17,6 +17,7 @@
  * Do not put anything confidential in a shared template.
  */
 
+import { sanitizeSvgMarkup } from './svgSanitizer'
 import type { FieldDefinition } from './types'
 import type { FieldMapping } from './api'
 
@@ -113,7 +114,8 @@ export async function decodeSharedTemplate(payload: string): Promise<SharedTempl
     throw new Error('This share link was created by a newer version of Template Printer.')
   }
 
-  return decoded
+  // Anyone can hand out a link, so the artwork in it is untrusted.
+  return { ...decoded, svg: sanitizeSvgMarkup(decoded.svg) }
 }
 
 /**

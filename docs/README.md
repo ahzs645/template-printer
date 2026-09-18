@@ -87,6 +87,36 @@ both sides, the field mappings, the card area and the fonts it uses. Opening one
 restores all of it, so a design moves between machines without the fonts being
 loaded again. Share links stay the lightweight option — they cannot carry fonts.
 
+**Opening a package from a link**: point the app at a hosted package with a
+`?url=` parameter and it downloads and opens it on load:
+
+```
+https://example.com/template-printer/?url=https%3A%2F%2Fexample.com%2Fdesigns%2Fstaff-card.zip
+```
+
+The value is percent-encoded, and only `http` and `https` are accepted — a
+`javascript:`, `data:` or `file:` link is refused rather than fetched. The
+package must be served with CORS enabled, since the browser fetches it from the
+app's own origin; a package over 25 MB or a host that takes longer than 30
+seconds is given up on. What happened is reported in a banner across the top of
+the app, so it is readable on a phone as well as a desktop.
+
+Someone who has opened that link before does not get a second copy: the
+downloaded bytes are hashed, and if the design is already in their library it is
+simply reopened. Delete it and the same link imports it again. The parameter is
+stripped from the address bar either way, so a refresh does not re-fetch.
+
+Anything opened this way — from a link, a package or a share link — is passed
+through an SVG sanitiser before it is rendered. If the browser cannot run the
+sanitiser, the template is refused rather than shown unchecked.
+
+**On a phone**, the panels stack under the card and start collapsed, so a design
+opened from a link is the first thing on screen; the preview is measured against
+the space available rather than drawn at a fixed width. Reviewing a design this
+way works. Editing it does not really: dragging fields, the canvas designer and
+print calibration all assume a pointer and a wide window, and are best left to a
+desktop.
+
 **Test Cards** runs the open template against the records that break ID cards —
 very short and very long names, missing middle names, accents, apostrophes,
 identifiers a barcode cannot encode — and reports what overflowed, what had to be

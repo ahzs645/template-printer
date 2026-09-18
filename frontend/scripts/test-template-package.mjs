@@ -47,6 +47,12 @@ globalThis.document = {
 // atob is used to decode the base64 a font is stored as.
 globalThis.atob = (value) => Buffer.from(value, 'base64').toString('binary')
 
+// DOMPurify needs a real DOM, and refuses to run without one rather than
+// passing untrusted markup through. jsdom gives the tests the genuine article,
+// so what they exercise is the sanitiser itself, not a stub.
+const { JSDOM } = await import('jsdom')
+globalThis.window = new JSDOM('').window
+
 const { parseTemplateString } = await import('../src/lib/svgTemplate.ts')
 const { generateAutoMappings } = await import('../src/lib/autoMapping.ts')
 const {
@@ -149,9 +155,30 @@ await check('is recognised as a package', () => {
 
 const loaded = await readTemplatePackage(file)
 
-await check('restores the artwork exactly', () => {
-  assert.equal(loaded.front.svg, front.template.rawSvg)
-  assert.equal(loaded.back.svg, back.template.rawSvg)
+await check('restores the artwork', () => {
+  // Package contents are sanitised on the way in, which rewrites the
+  // serialisation, so the content is what has to survive.
+  const countIn = (markup, pattern) => (markup.match(pattern) || []).length
+  for (const pattern of [/<text/g, /<tspan/g, /<rect/g, /<path/g, /id=/g, /\.cls-\d+[\s,{]/g]) {
+    assert.equal(countIn(loaded.front.svg, pattern), countIn(front.template.rawSvg, pattern))
+  }
+  assert.match(loaded.front.svg, /viewBox="0 0 252 162"/)
+  assert.match(loaded.back.svg, /id="barcode_codabar_studentId"/)
+})
+
+await check('strips anything executable out of a package', async () => {
+  // A package can be fetched from any url a link points at.
+  const hostile = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><script>alert(1)</script><rect width="9" height="9" onload="alert(2)"/><text id="studentId">1</text></svg>'
+  const parsed = await parseTemplateString(hostile, 'hostile.svg')
+  const built = await createTemplatePackage({
+    name: 'hostile',
+    front: { template: parsed.metadata, fields: parsed.autoFields, mappings: [] },
+    availableFonts: [],
+  })
+  const reopened = await readTemplatePackage(new File([built.blob], 'hostile.zip', { type: 'application/zip' }))
+  assert.doesNotMatch(reopened.front.svg, /<script/i)
+  assert.doesNotMatch(reopened.front.svg, /\son\w+\s*=/i)
+  assert.match(reopened.front.svg, /id="studentId"/)
 })
 
 await check('restores what each layer means', () => {

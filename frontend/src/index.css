@@ -99,6 +99,9 @@ textarea {
 .app-layout {
   display: flex;
   height: 100vh;
+  /* dvh keeps the shell inside the visible area when mobile browser chrome
+     shows and hides; 100vh alone overflows behind the URL bar. */
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-app);
 }
@@ -530,18 +533,28 @@ textarea {
   display: block;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .app-content {
     flex-direction: column;
     overflow: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
+  /* The card is what someone opening a shared link came to see, so it goes
+     above the side panels rather than after the left one. */
   .app-workspace {
-    min-height: 360px;
+    order: -1;
+    min-height: 60vh;
+    padding: 8px;
+    gap: 8px;
+    overflow: visible;
   }
 
   .dockable-panel {
     width: 100% !important;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--border-default);
   }
 
   .dockable-panel--closed {
@@ -552,10 +565,39 @@ textarea {
     flex-direction: row;
     width: 100%;
     writing-mode: horizontal-tb;
+    padding: 8px 12px;
+    justify-content: flex-start;
+    gap: 8px;
   }
 
   .dockable-panel__content {
-    max-height: 420px;
+    max-height: 60vh;
+  }
+
+  /* Ribbon groups are wider than a phone, so let them scroll sideways
+     instead of compressing every button. */
+  .ribbon {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px;
+  }
+
+  .ribbon-group {
+    flex-shrink: 0;
+  }
+
+  .icon-nav {
+    width: 44px;
+  }
+
+  /* Card previews carry a fixed pixel width; let them scale down rather than
+     run off the right edge. */
+  .canvas-container {
+    padding: 0;
+  }
+
+  .canvas-preview {
+    flex-shrink: 1;
   }
 }
 
@@ -828,4 +870,39 @@ textarea {
 .empty-state__text {
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* ===== Link Load Banner ===== */
+/* Reports the result of a ?url= design load. Sits at the top of the main
+   column, so it is readable whether or not the side panels are open. */
+.link-result-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.link-result-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-result-banner__close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.link-result-banner__close:hover {
+  opacity: 1;
 }

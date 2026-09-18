@@ -14,6 +14,7 @@
 
 import JSZip from 'jszip'
 
+import { sanitizeSvgMarkup } from './svgSanitizer'
 import type { FieldDefinition, TemplateMeta } from './types'
 import type { FieldMapping, FontData } from './api'
 
@@ -255,7 +256,8 @@ export async function readTemplatePackage(file: Blob): Promise<LoadedPackage> {
     if (!side) return undefined
     const entry = zip.file(side.file)
     if (!entry) throw new Error(`The package is missing ${side.file}.`)
-    return { ...side, svg: await entry.async('string') }
+    // A package can come from anywhere, so its artwork is untrusted.
+    return { ...side, svg: sanitizeSvgMarkup(await entry.async('string')) }
   }
 
   const front = await readSide(manifest.sides.front)

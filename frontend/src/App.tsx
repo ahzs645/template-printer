@@ -75,6 +75,15 @@ import {
   packageFileName,
   readTemplatePackage,
 } from './lib/templatePackage'
+import {
+  clearPackageUrlFromLocation,
+  describePackageSource,
+  fetchPackage,
+  forgetOpenedPackage,
+  readPackageUrl,
+  recallOpenedPackage,
+  rememberOpenedPackage,
+} from './lib/packageUrl'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
@@ -104,10 +113,22 @@ import { labelFromId } from './lib/fields'
 import { assignCardSides, suggestDesignName, type CardSide } from './lib/cardSides'
 import { cn } from './lib/utils'
 
+/**
+ * A link is opened once per page load, not once per mount.
+ *
+ * StrictMode mounts the app twice, and these both write to the library, so a
+ * per-instance guard would let the second mount import everything again.
+ */
+let linkPackageHandled = false
+let shareLinkHandled = false
+
 type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
 type DesignMode = 'import' | 'designer' | 'designs'
 
 const PREVIEW_BASE_WIDTH = 420
+const PREVIEW_MIN_WIDTH = 220
+// Breathing room between the card and the edges of its container.
+const PREVIEW_GUTTER = 16
 
 function App() {
   const storage = useStorage()
@@ -148,7 +169,10 @@ function App() {
   const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
   const [punchGuide, setPunchGuide] = useState<PunchPosition>('none')
   const [punchShapeGuide, setPunchShapeGuide] = useState<PunchShape>('slot')
-  const shareTargetHandled = useRef(false)
+  const [linkLoading, setLinkLoading] = useState<string | null>(null)
+  // The result of a ?url= load, reported outside the side panels so it is
+  // readable when those are collapsed (which is the default on a phone).
+  const [linkResult, setLinkResult] = useState<{ ok: boolean; text: string } | null>(null)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
@@ -394,8 +418,29 @@ function App() {
     [fields, selectedFieldId],
   )
 
+  // Width of the canvas area, watched so the preview fits whatever space the
+  // current layout gives it (a phone gives it far less than a desktop).
+  const [canvasNode, setCanvasNode] = useState<HTMLDivElement | null>(null)
+  const [canvasWidth, setCanvasWidth] = useState(PREVIEW_BASE_WIDTH + PREVIEW_GUTTER)
+
+  useEffect(() => {
+    if (!canvasNode || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0
+      if (width > 0) setCanvasWidth(width)
+    })
+    observer.observe(canvasNode)
+    return () => observer.disconnect()
+  }, [canvasNode])
+
   const previewRatio = template ? template.height / template.width : 54 / 86
-  const previewWidth = PREVIEW_BASE_WIDTH
+  // The field overlays are positioned from previewWidth, so the preview has to
+  // be measured rather than clamped in CSS: on a phone 420px would run off the
+  // right edge, and a CSS-only clamp would leave the overlays behind.
+  const previewWidth = Math.max(
+    PREVIEW_MIN_WIDTH,
+    Math.min(PREVIEW_BASE_WIDTH, canvasWidth - PREVIEW_GUTTER),
+  )
   const previewHeight = previewWidth * previewRatio
 
   const renderedSvg = useMemo(() => {
@@ -921,6 +966,7 @@ function App() {
     setSelectedTemplateId(frontTemplate.id)
     setActiveSide('front')
 
+    let designId: string | null = null
     if (backTemplate) {
       const design = await createCardDesign({
         name: loaded.manifest.name,
@@ -928,6 +974,7 @@ function App() {
         frontTemplateId: frontTemplate.id,
         backTemplateId: backTemplate.id,
       })
+      designId = design.id
       setLinkedDesignId(design.id)
       setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })
       refreshCardDesigns()
@@ -942,6 +989,77 @@ function App() {
       `Opened "${loaded.manifest.name}" with ${loaded.fonts.length} font${loaded.fonts.length === 1 ? '' : 's'}` +
         `${loaded.back ? ' and both sides' : ''}.`,
     )
+
+    return {
+      name: loaded.manifest.name,
+      frontTemplateId: frontTemplate.id,
+      backTemplateId: backTemplate?.id ?? null,
+      designId,
+    }
+  }
+
+  /**
+   * Open the design a ?url= link points at.
+   *
+   * Someone following the link may never have used the app, or may have been
+   * here before and already have it — so a package already opened in this
+   * browser is reopened rather than imported a second time.
+   */
+  const handlePackageUrl = async (url: string) => {
+    const source = describePackageSource(url)
+    setLinkLoading(source)
+    setErrorMessage(null)
+    // Show the design the link is opening, rather than whatever tab the app
+    // happens to start on.
+    setActiveTab('design')
+    setDesignMode('import')
+
+    try {
+      const fetched = await fetchPackage(url)
+      const seen = recallOpenedPackage(fetched.hash)
+
+      if (seen) {
+        // Ask storage rather than the template list in state: this runs on
+        // mount, before that list has loaded.
+        const existing = await storage.getTemplate(seen.frontTemplateId).catch(() => null)
+        if (existing) {
+          await reloadDesignTemplates()
+          await handleTemplateSelect(existing)
+          const message = `Reopened "${seen.name}" — you already have this design.`
+          setStatusMessage(message)
+          setLinkResult({ ok: true, text: message })
+          return
+        }
+        // It was opened before but has since been deleted, so import it again.
+        forgetOpenedPackage(fetched.hash)
+      }
+
+      const file = new File([fetched.blob], 'card-design.zip', { type: 'application/zip' })
+      const result = await handleOpenPackage(file)
+
+      if (result && fetched.hash) {
+        rememberOpenedPackage({
+          hash: fetched.hash,
+          frontTemplateId: result.frontTemplateId,
+          backTemplateId: result.backTemplateId,
+          designId: result.designId,
+          name: result.name,
+          openedAt: new Date().toISOString(),
+        })
+      }
+      const message = `Opened "${result?.name ?? 'the design'}" from ${source}.`
+      setStatusMessage(message)
+      setLinkResult({ ok: true, text: message })
+    } catch (error) {
+      console.error(error)
+      const message = error instanceof Error ? error.message : 'Could not open the design from that link.'
+      setErrorMessage(message)
+      setLinkResult({ ok: false, text: message })
+    } finally {
+      setLinkLoading(null)
+      // Drop the parameter either way, so a refresh does not fetch it again.
+      clearPackageUrlFromLocation()
+    }
   }
 
   const handleOpenShare = () => {
@@ -971,12 +1089,22 @@ function App() {
     setStatusMessage('Shared template unlocked for editing. Use Open to save it into your library.')
   }
 
+  // Open the design a ?url= link points at. Runs once per page load.
+  useEffect(() => {
+    if (linkPackageHandled) return
+    const url = readPackageUrl(window.location.search)
+    if (!url) return
+    linkPackageHandled = true
+    void handlePackageUrl(url)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Import a template carried in the location hash. Runs once per page load.
   useEffect(() => {
-    if (shareTargetHandled.current) return
+    if (shareLinkHandled) return
     const target = readShareTarget(window.location.hash)
     if (!target) return
-    shareTargetHandled.current = true
+    shareLinkHandled = true
 
     let cancelled = false
 
@@ -1862,6 +1990,30 @@ function App() {
 
       {/* Main Content Area */}
       <div className="app-main">
+        {/* How a ?url= load went. It sits above the tabs rather than in a side
+            panel, which starts collapsed on a phone and would go unread. */}
+        {linkResult && (
+          <div
+            className="link-result-banner"
+            role={linkResult.ok ? 'status' : 'alert'}
+            style={{
+              background: linkResult.ok ? '#ecfdf5' : '#fef2f2',
+              borderBottom: `1px solid ${linkResult.ok ? '#a7f3d0' : '#fecaca'}`,
+              color: linkResult.ok ? '#065f46' : '#991b1b',
+            }}
+          >
+            <span className="link-result-banner__text">{linkResult.text}</span>
+            <button
+              type="button"
+              className="link-result-banner__close"
+              onClick={() => setLinkResult(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Design Mode Tabs */}
         {activeTab === 'design' && renderDesignModeTabs()}
 
@@ -2092,7 +2244,7 @@ function App() {
 
               {/* Main Canvas */}
               <div className="app-workspace">
-                <div className="canvas-container">
+                <div className="canvas-container" ref={setCanvasNode}>
                   {template && renderedSvg ? (
                     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -2267,10 +2419,15 @@ function App() {
                       flexWrap: 'wrap',
                       justifyContent: 'center',
                       alignItems: 'center',
-                      padding: 24
+                      padding: 24,
+                      // Track the container instead of the cards' natural
+                      // width, so a narrow screen scales them down.
+                      width: '100%',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box',
                     }}>
                       {/* Front Side */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minWidth: 0, maxWidth: '100%' }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                           Front
                         </div>
@@ -2278,14 +2435,14 @@ function App() {
                           const preview = designPreview.front
                           if (preview.loading) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</p>
                               </div>
                             )
                           }
                           if (preview.error) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: 24 }}>{preview.error}</p>
                               </div>
                             )
@@ -2294,14 +2451,14 @@ function App() {
                             return (
                               <InlineSvg
                                 className="canvas-preview"
-                                style={{ width: 450 }}
+                                style={{ width: 450, maxWidth: '100%' }}
                                 markup={preview.svg}
                                 name="design-front"
                               />
                             )
                           }
                           return (
-                            <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                            <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                               <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No template</p>
                             </div>
                           )
@@ -2309,7 +2466,7 @@ function App() {
                       </div>
 
                       {/* Back Side */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minWidth: 0, maxWidth: '100%' }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                           Back
                         </div>
@@ -2317,14 +2474,14 @@ function App() {
                           const preview = designPreview.back
                           if (preview.loading) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</p>
                               </div>
                             )
                           }
                           if (preview.error) {
                             return (
-                              <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                              <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: 24 }}>{preview.error}</p>
                               </div>
                             )
@@ -2333,14 +2490,14 @@ function App() {
                             return (
                               <InlineSvg
                                 className="canvas-preview"
-                                style={{ width: 450 }}
+                                style={{ width: 450, maxWidth: '100%' }}
                                 markup={preview.svg}
                                 name="design-back"
                               />
                             )
                           }
                           return (
-                            <div style={{ width: 450, height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                            <div style={{ width: 450, maxWidth: '100%', height: 283, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
                               <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No template</p>
                             </div>
                           )
@@ -2559,6 +2716,38 @@ function App() {
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
       />
+
+      {/* Loading a design from a ?url= link. Shown over everything, because on a
+          phone the sidebar this would otherwise report into is off screen. */}
+      {linkLoading && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'rgba(9, 9, 11, 0.55)',
+            padding: '1.5rem',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '0.75rem',
+              padding: '1.25rem 1.5rem',
+              maxWidth: 360,
+              textAlign: 'center',
+              boxShadow: '0 20px 45px rgba(0,0,0,0.3)',
+            }}
+          >
+            <p style={{ margin: 0, fontWeight: 600, color: '#18181b' }}>Opening card design…</p>
+            <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
+              Downloading from {linkLoading}, with its fonts.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Card Area Dialog */}
       <CardAreaDialog
