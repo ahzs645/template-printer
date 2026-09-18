@@ -99,3 +99,27 @@ The name layer is `fullName_First_Last` on a single line, and the artwork gives
 it a fixed strip beside the photo. Unlike the staff card it has no second line
 to wrap into, so a long name runs to the edge. Set **Width** in Field Settings
 if you need it bounded.
+
+
+## Card area and bleed
+
+Both ID card files are drawn in **points**: the canvas is 252 × 162 pt = 3.5 ×
+2.25 in, and the black stroked rectangle at 243 × 153 pt is exactly 3.375 ×
+2.125 in — the ID-1/CR80 trim. The 4.5 pt margin around it is 1/16 in of bleed.
+
+Nothing infers this. On import the app says a trim line was found and offers
+**Card Area**, where you say which rectangle is the card and at what size:
+
+- **Keep the bleed** leaves every coordinate alone and only corrects the printed
+  size, so the canvas becomes 88.9 × 57.15 mm and the trim line lands at exactly
+  85.725 × 53.975 mm with the margin still there to cut through. This is the one
+  to use for printing.
+- **Crop to the trim line** moves the viewBox onto the card and discards the
+  bleed, for when you want the finished card on its own.
+
+Until a card area is set, the whole canvas is the card and its physical size is
+guessed by reading the file's units as CSS pixels — which for these files gives
+66.7 × 42.9 mm, about a third too small.
+
+The staff card (`card-front.svg`) is drawn at its finished size with no trim
+line, so no suggestion appears for it.

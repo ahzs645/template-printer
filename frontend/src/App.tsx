@@ -23,6 +23,7 @@ import {
   Circle,
   ClipboardCheck,
   IdCard as Badge2,
+  Ruler,
 } from 'lucide-react'
 
 import './App.css'
@@ -66,6 +67,8 @@ import { CardBlankDialog } from './components/CardBlankDialog'
 import { BarcodeScanDialog } from './components/BarcodeScanDialog'
 import { TestCardsDialog } from './components/TestCardsDialog'
 import { LanyardDialog } from './components/LanyardDialog'
+import { CardAreaDialog } from './components/CardAreaDialog'
+import type { AppliedCardArea } from './lib/cardTrim'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
@@ -133,6 +136,7 @@ function App() {
   const [scanDialogOpen, setScanDialogOpen] = useState(false)
   const [testCardsOpen, setTestCardsOpen] = useState(false)
   const [lanyardOpen, setLanyardOpen] = useState(false)
+  const [cardAreaOpen, setCardAreaOpen] = useState(false)
   // Non-destructive card guides drawn over the preview.
   const [showMagStripeGuide, setShowMagStripeGuide] = useState(false)
   const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
@@ -733,6 +737,35 @@ function App() {
     handleFieldChange(selectedField.id, 'barcodeSymbology', scan.symbology)
     handleFieldChange(selectedField.id, 'defaultValue', scan.text)
     setStatusMessage(`Read a ${scan.formatName.replace(/_/g, ' ')} barcode and applied it to "${selectedField.label}".`)
+  }
+
+  /**
+   * Adopt a chosen card area: re-read the template at its corrected size so the
+   * preview, the guides and the export all agree on how big the card is.
+   */
+  const handleApplyCardArea = async (applied: AppliedCardArea, formatId: string, keepBleed: boolean) => {
+    if (!template) return
+    setErrorMessage(null)
+    try {
+      const { metadata, autoFields } = await parseTemplateString(applied.svg, template.name)
+      resetPreviousObjectUrl(metadata.objectUrl)
+      setTemplate({
+        ...metadata,
+        cardArea: { formatId, keepBleed, bleedMm: applied.bleedMm },
+      })
+      registerTemplateFonts(metadata.fonts)
+      // Cropping moves every coordinate, so the fields have to be re-read.
+      const nextFields = keepBleed && fields.length > 0 ? fields : autoFields
+      setFields(nextFields)
+      setSelectedFieldId((current) => (nextFields.some((f) => f.id === current) ? current : nextFields[0]?.id ?? null))
+      setStatusMessage(
+        `Card area set: printing at ${applied.widthMm} × ${applied.heightMm} mm.` +
+          (applied.bleedMm ? ` Bleed kept at ${applied.bleedMm.top} mm.` : ' Bleed cropped away.'),
+      )
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Could not apply the card area.')
+    }
   }
 
   const handleOpenShare = () => {
@@ -1467,6 +1500,13 @@ function App() {
               active={showSafeAreaGuide}
               disabled={!template}
             />
+            <RibbonButton
+              icon={<Ruler size={18} />}
+              label="Card Area"
+              onClick={() => setCardAreaOpen(true)}
+              active={Boolean(template?.cardArea)}
+              disabled={!template}
+            />
           </RibbonGroup>
 
           <RibbonGroup title="Export">
@@ -1823,6 +1863,32 @@ function App() {
                     </Button>
                   </div>
                 )}
+
+                {template?.trimCandidates?.length && !template.cardArea ? (
+                  <div
+                    className="status-message"
+                    style={{
+                      margin: '8px 0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      background: 'var(--bg-surface-alt, #f4f4f5)',
+                      color: 'var(--text-muted, #52525b)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <Ruler size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span>
+                        This artwork has a trim line inside the canvas. Until you say which rectangle
+                        is the card, the whole canvas is used and the printed size is guessed from the
+                        file's units.
+                      </span>
+                    </span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCardAreaOpen(true)}>
+                      Set card area…
+                    </Button>
+                  </div>
+                ) : null}
 
                 {templateWarnings.map((warning) => (
                   <div
@@ -2312,6 +2378,14 @@ function App() {
         fields={fields}
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
+      />
+
+      {/* Card Area Dialog */}
+      <CardAreaDialog
+        open={cardAreaOpen}
+        onOpenChange={setCardAreaOpen}
+        template={template}
+        onApply={handleApplyCardArea}
       />
 
       {/* Lanyard Dialog */}

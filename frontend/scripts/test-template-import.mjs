@@ -82,6 +82,7 @@ const { normalizeStandardFieldName, parseBarcodeLayerId } = await import('../src
 const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await import('../src/lib/barcode.ts')
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
 const { TEST_CASES, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
+const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } = await import('../src/lib/cardTrim.ts')
 const {
   ID1_HEIGHT_MM,
   ID1_WIDTH_MM,
@@ -95,17 +96,45 @@ const {
 
 let failures = 0
 let passes = 0
+/** Async checks are collected here and settled before the summary. */
+const pending = []
 
+function pass(name) {
+  passes += 1
+  console.log(`  ok   ${name}`)
+}
+
+function fail(name, error) {
+  failures += 1
+  console.error(`  FAIL ${name}`)
+  console.error(`       ${error.message}`)
+}
+
+/**
+ * An async body returns a promise, which a plain try/catch would let float away
+ * — the check would report a pass however it ended. Promises are held here and
+ * awaited before anything is reported.
+ */
 function check(name, body) {
+  let result
   try {
-    body()
-    passes += 1
-    console.log(`  ok   ${name}`)
+    result = body()
   } catch (error) {
-    failures += 1
-    console.error(`  FAIL ${name}`)
-    console.error(`       ${error.message}`)
+    fail(name, error)
+    return
   }
+
+  if (result && typeof result.then === 'function') {
+    pending.push(
+      result.then(
+        () => pass(name),
+        (error) => fail(name, error),
+      ),
+    )
+    return
+  }
+
+  pass(name)
 }
 
 function section(title) {
@@ -325,6 +354,19 @@ const idFrontMappings = generateAutoMappings(idFront.autoFields)
 check('auto-maps the name, id and photo', () => {
   const mapped = idFrontMappings.map((mapping) => mapping.standardFieldName).sort()
   assert.deepEqual(mapped, ['fullName_First_Last', 'photo', 'studentId'])
+})
+
+check('finds a signature or logo placeholder, however it is drawn', async () => {
+  const svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 162">',
+    '  <g id="photo"><rect x="10" y="10" width="40" height="50"/></g>',
+    '  <rect id="signature" x="60" y="10" width="60" height="20"/>',
+    '  <image id="logo" x="140" y="10" width="30" height="30"/>',
+    '</svg>',
+  ].join('\n')
+  const parsed = await parseTemplateString(svg, 'images.svg')
+  const ids = parsed.autoFields.filter((field) => field.type === 'image').map((field) => field.sourceId).sort()
+  assert.deepEqual(ids, ['logo', 'photo', 'signature'])
 })
 
 check('does not report the photo twice', () => {
@@ -601,7 +643,95 @@ check('counts issues across the run', () => {
   assert.ok(totals.errors >= 2, `expected at least two errors, got ${totals.errors}`)
 })
 
+// --- card area --------------------------------------------------------------
+
+section('card area')
+
+const ID1 = CARD_FORMATS[0]
+const idFrontCanvas = idFront.metadata.viewBox ?? {
+  x: 0,
+  y: 0,
+  width: idFront.metadata.width,
+  height: idFront.metadata.height,
+}
+
+check('finds the trim line in artwork drawn with bleed', () => {
+  const candidates = idFront.metadata.trimCandidates ?? []
+  assert.equal(candidates.length, 1, `expected one suggestion, got ${candidates.length}`)
+  const [trim] = candidates
+  assert.deepEqual(trim.box, { x: 4.5, y: 4.5, width: 243, height: 153 })
+  assert.ok(trim.stroked, 'the trim line is drawn as a stroke')
+  assert.ok(trim.evenInset, 'bleed is even on all four sides')
+  assert.equal(trim.bestFormat.id, 'id-1')
+  assert.ok(trim.aspectErrorPercent < 0.01, `aspect error ${trim.aspectErrorPercent}`)
+})
+
+check('suggests nothing when there is no trim line', () => {
+  // The staff card is drawn at its finished size, with no bleed.
+  assert.equal(front.metadata.trimCandidates, undefined)
+})
+
+check('never suggests a rectangle that is not card-shaped', () => {
+  const canvas = { x: 0, y: 0, width: 400, height: 400 }
+  const square = {
+    id: 'x',
+    box: { x: 10, y: 10, width: 380, height: 380 },
+    inset: { top: 10, right: 10, bottom: 10, left: 10 },
+    evenInset: true,
+    stroked: true,
+    bestFormat: ID1,
+    aspectErrorPercent: 37,
+  }
+  assert.equal(isWorthSuggesting(square, canvas), false)
+})
+
+check('correcting the size keeps the artwork untouched', () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {
+    box: trim.box,
+    format: ID1,
+    keepBleed: true,
+  })
+
+  // 252 x 162 points is 3.5 x 2.25 in; the trim inside it is exactly a CR80.
+  assert.equal(applied.widthMm, 88.9)
+  assert.equal(applied.heightMm, 57.15)
+  // 1/16 inch of bleed on every side.
+  assert.deepEqual(applied.bleedMm, { top: 1.5875, right: 1.5875, bottom: 1.5875, left: 1.5875 })
+  assert.match(applied.svg, /viewBox="0 0 252 162"/, 'coordinates must not move')
+})
+
+check('cropping to the trim line gives the card size exactly', () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {
+    box: trim.box,
+    format: ID1,
+    keepBleed: false,
+  })
+  assert.equal(applied.widthMm, ID1.widthMm)
+  assert.equal(applied.heightMm, ID1.heightMm)
+  assert.match(applied.svg, /viewBox="4.5 4.5 243 153"/)
+  assert.equal(applied.bleedMm, undefined)
+})
+
+check('the corrected template imports at its real size', async () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {
+    box: trim.box,
+    format: ID1,
+    keepBleed: true,
+  })
+  const reparsed = await parseTemplateString(applied.svg, 'id-card-front.svg')
+  assert.equal(reparsed.metadata.unit, 'mm')
+  assert.equal(reparsed.metadata.width, 88.9)
+  // Reading the file's units as CSS pixels gave 66.68 mm, a third too small.
+  const guessed = idFront.metadata.width / 3.779527559055
+  assert.ok(Math.abs(guessed - 66.68) < 0.05, `guessed size was ${guessed}`)
+})
+
 // --- result -----------------------------------------------------------------
+
+await Promise.all(pending)
 
 console.log(`\n${passes} passed, ${failures} failed`)
 process.exit(failures === 0 ? 0 : 1)

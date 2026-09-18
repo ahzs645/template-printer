@@ -1,6 +1,8 @@
 import opentype from 'opentype.js'
 
 import { generateBarcodeSvg, isBarcodeFontFamily } from './barcode'
+import { detectTrimCandidates, isWorthSuggesting } from './cardTrim'
+import { isImageFieldName } from './standardFields'
 import { parseBarcodeLayerId } from './standardFields'
 import type {
   CardData,
@@ -499,25 +501,38 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
   return dedupeFields(fields)
 }
 
+/**
+ * Find the placeholders that hold an image.
+ *
+ * A designer might draw one as a group, as a plain rectangle, or as an empty
+ * <image>, so all three count. The id has to name an image field (photo,
+ * signature, logo) or read like one.
+ */
 function extractImagePlaceholders(svg: Document, dimensions: { width?: number; height?: number }): FieldDefinition[] {
-  const groups = Array.from(svg.querySelectorAll('g[id]'))
+  const candidates = Array.from(svg.querySelectorAll('g[id], rect[id], image[id]'))
   const fields: FieldDefinition[] = []
+  const claimed: Element[] = []
   let index = 1
 
-  for (const group of groups) {
-    const id = group.getAttribute('id')
+  for (const node of candidates) {
+    const id = node.getAttribute('id')
     if (!id) continue
+    if (node.closest('defs')) continue
     if (PLACEHOLDER_PATTERN.test(id)) continue
-    if (!/photo|image/i.test(id)) continue
+    if (!/photo|image/i.test(id) && !isImageFieldName(id)) continue
+    // A group and a rectangle inside it are the same placeholder, not two.
+    if (claimed.some((element) => element !== node && element.contains(node))) continue
 
-    const rect = group.querySelector('rect')
-    const x = readNumeric(rect?.getAttribute('x'))
-    const y = readNumeric(rect?.getAttribute('y'))
-    const width = readNumeric(rect?.getAttribute('width'))
-    const height = readNumeric(rect?.getAttribute('height'))
+    // A group carries its geometry on the first rectangle inside it.
+    const box = node.tagName.toLowerCase() === 'g' ? node.querySelector('rect') : node
+    const width = readNumeric(box?.getAttribute('width'))
+    const height = readNumeric(box?.getAttribute('height'))
     if (width === undefined || height === undefined) continue
 
-    const sourceId = ensureNodeId(group, 'image-field', index)
+    const x = readNumeric(box?.getAttribute('x'))
+    const y = readNumeric(box?.getAttribute('y'))
+    const sourceId = ensureNodeId(node, 'image-field', index)
+    claimed.push(node)
 
     fields.push({
       id: slugify(id) || `image_${index}`,
@@ -738,6 +753,11 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
 
   const fonts = extractFontFamilies(doc)
   const warnings = collectTemplateWarnings(doc, fonts)
+
+  const canvasBox = viewBox ?? { x: 0, y: 0, width, height }
+  const trimCandidates = detectTrimCandidates(doc, canvasBox).filter((candidate) =>
+    isWorthSuggesting(candidate, canvasBox),
+  )
   const placeholderFields = extractPlaceholders(doc, { width, height })
   const textFields = placeholderFields.length > 0 ? [] : extractTextFields(doc, { width, height })
   const imageFields = placeholderFields.length > 0 ? [] : extractImagePlaceholders(doc, { width, height })
@@ -754,6 +774,7 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
     viewBox,
     fonts,
     warnings: warnings.length > 0 ? warnings : undefined,
+    trimCandidates: trimCandidates.length > 0 ? trimCandidates : undefined,
   }
 
   const autoFields = placeholderFields.length > 0 ? placeholderFields : [...textFields, ...imageFields]

@@ -1,4 +1,5 @@
 import type { BarcodeSymbology } from './barcode'
+import type { TrimCandidate } from './cardTrim'
 import type { TemplateSummary } from './templates'
 
 export type FieldType = 'text' | 'image' | 'barcode' | 'date'
@@ -19,6 +20,13 @@ export type TemplateMeta = {
   fonts: string[]
   /** Problems worth telling the user about after import. */
   warnings?: string[]
+  /**
+   * Rectangles in the artwork that could be the card's trim line. Detected, never
+   * applied — what counts as the card changes what gets printed.
+   */
+  trimCandidates?: TrimCandidate[]
+  /** The card area currently in force, once one has been chosen. */
+  cardArea?: { formatId: string; keepBleed: boolean; bleedMm?: { top: number; right: number; bottom: number; left: number } }
 }
 
 export type ImageValue = {

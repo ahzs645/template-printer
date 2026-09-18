@@ -70,6 +70,11 @@ docker-compose up
 - **Punch**: a lanyard slot is typically 12 × 3 mm and a round hole ⌀5 mm, set
   3 mm in from the edge. Never punch through a magnetic stripe — punch an end or
   the bottom instead.
+- **Bleed and trim**: artwork for card printing is usually drawn larger than the
+  card, with a trim line marking the cut. **Card Area** is where you say which
+  rectangle is the card and at what physical size; it is offered when a trim line
+  is detected and never applied on its own. Getting this wrong is the most common
+  reason cards print at the wrong size.
 
 **New Blank** generates any of this as a starting template. **Mag Stripe**,
 **Punch** and **Safe Area** draw the same geometry over an existing design as

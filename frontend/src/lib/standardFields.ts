@@ -192,6 +192,12 @@ export function normalizeStandardFieldName(layerId: string): string | null {
   return segments.join('_')
 }
 
+/** True when the layer id names one of the image fields. */
+export function isImageFieldName(layerId: string): boolean {
+  const resolved = normalizeStandardFieldName(layerId)
+  return resolved !== null && IMAGE_FIELD_INDEX.has(resolved.toLowerCase())
+}
+
 /** True when the layer id resolves to a standard field name. */
 export function isStandardFieldName(layerId: string): boolean {
   return normalizeStandardFieldName(layerId) !== null
