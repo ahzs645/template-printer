@@ -50,6 +50,12 @@ export type FieldDefinition = {
   lineHeight?: number
   /** For `type: 'barcode'`, which symbology to generate. */
   barcodeSymbology?: BarcodeSymbology
+  /**
+   * Used when the mapped value is empty — a card with no student number still
+   * needs something in the barcode, and a blank one is worse than a known
+   * placeholder.
+   */
+  defaultValue?: string
 }
 
 export type CardData = Record<string, CardDataValue>

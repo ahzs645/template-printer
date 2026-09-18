@@ -928,8 +928,7 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
     }
 
     if (field.type === 'barcode') {
-      const value = cardData[field.id]
-      applySvgBarcodeField(doc, target, field, typeof value === 'string' ? value : undefined, {
+      applySvgBarcodeField(doc, target, field, resolveFieldText(field, cardData[field.id]), {
         width: template.viewBox?.width ?? template.width,
         height: template.viewBox?.height ?? template.height,
       })
@@ -937,12 +936,20 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
     }
 
     if (field.type !== 'text') continue
-    const value = cardData[field.id]
-    const textValue = typeof value === 'string' ? value : undefined
-    applySvgTextField(doc, target, field, textValue)
+    applySvgTextField(doc, target, field, resolveFieldText(field, cardData[field.id]))
   }
 
   return new XMLSerializer().serializeToString(svgRoot)
+}
+
+/**
+ * The text a field should draw: the card's own value, or the field's default
+ * when that value is missing.
+ */
+function resolveFieldText(field: FieldDefinition, value: CardDataValue | undefined): string | undefined {
+  if (typeof value === 'string' && value.trim().length > 0) return value
+  const fallback = field.defaultValue?.trim()
+  return fallback ? fallback : undefined
 }
 
 /**

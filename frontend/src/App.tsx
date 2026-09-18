@@ -20,6 +20,7 @@ import {
   Share2,
   Eye,
   AlertTriangle,
+  Circle,
 } from 'lucide-react'
 
 import './App.css'
@@ -59,6 +60,9 @@ import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
 import { ShareTemplateDialog } from './components/ShareTemplateDialog'
 import { InlineSvg } from './components/InlineSvg'
+import { CardBlankDialog } from './components/CardBlankDialog'
+import { CardGuideOverlay } from './components/CardGuideOverlay'
+import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
 import {
   buildSharedTemplatePayload,
   clearShareTarget,
@@ -118,6 +122,12 @@ function App() {
   const [linkedDesignId, setLinkedDesignId] = useState<string | null>(null)
   const [activeSide, setActiveSide] = useState<CardSide>('front')
   const [otherSidePreview, setOtherSidePreview] = useState<{ name: string; svg: string } | null>(null)
+  const [blankDialogOpen, setBlankDialogOpen] = useState(false)
+  // Non-destructive card guides drawn over the preview.
+  const [showMagStripeGuide, setShowMagStripeGuide] = useState(false)
+  const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
+  const [punchGuide, setPunchGuide] = useState<PunchPosition>('none')
+  const [punchShapeGuide, setPunchShapeGuide] = useState<PunchShape>('slot')
   const shareTargetHandled = useRef(false)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -624,6 +634,17 @@ function App() {
   const linkedDesign = linkedDesignId ? cardDesigns.find((design) => design.id === linkedDesignId) ?? null : null
 
   /**
+   * The card's physical size, for guides that are specified in millimetres.
+   * Templates measured in pixels fall back to ID-1.
+   */
+  const cardSizeMm = useMemo(() => {
+    if (template?.unit === 'mm' && template.width && template.height) {
+      return { width: template.width, height: template.height }
+    }
+    return { width: ID1_WIDTH_MM, height: ID1_HEIGHT_MM }
+  }, [template])
+
+  /**
    * Bring the other side of the linked card design into the editor.
    */
   const handleSwitchSide = async (side: CardSide) => {
@@ -662,6 +683,29 @@ function App() {
       })
     }
     setDesignDialogOpen(true)
+  }
+
+  /**
+   * Load a generated blank into the editor and save it to the library, so it
+   * behaves exactly like an imported template.
+   */
+  const handleOpenBlank = async (fileName: string, svg: string) => {
+    setErrorMessage(null)
+    try {
+      const file = new File([svg], fileName, { type: 'image/svg+xml' })
+      const { savedTemplate, fields: blankFields } = await importTemplateFile(file, { activate: true })
+      await reloadDesignTemplates()
+      setSelectedTemplateId(savedTemplate.id)
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+      setFieldMappingsVersion((v) => v + 1)
+      setStatusMessage(
+        `Created "${fileName}" with ${blankFields.length} placeholder${blankFields.length === 1 ? '' : 's'}.`,
+      )
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to create the blank template')
+    }
   }
 
   const handleOpenShare = () => {
@@ -1297,6 +1341,11 @@ function App() {
               style={{ display: 'none' }}
             />
             <RibbonButton
+              icon={<Plus size={18} />}
+              label="New Blank"
+              onClick={() => setBlankDialogOpen(true)}
+            />
+            <RibbonButton
               icon={<CreditCard size={18} />}
               label={linkedDesign ? 'Edit Pair' : 'Link Front/Back'}
               onClick={handleLinkSides}
@@ -1335,6 +1384,41 @@ function App() {
               label="Map Fields"
               onClick={handleOpenFieldMapping}
               disabled={!selectedTemplateId || !template?.rawSvg || isSharedReadOnly}
+            />
+          </RibbonGroup>
+
+          <RibbonGroup title="Guides">
+            <RibbonButton
+              icon={<CreditCard size={18} />}
+              label="Mag Stripe"
+              onClick={() => setShowMagStripeGuide((value) => !value)}
+              active={showMagStripeGuide}
+              disabled={!template}
+            />
+            <RibbonButton
+              icon={<ScanLine size={18} />}
+              label={punchGuide === 'none' ? 'Punch' : PUNCH_POSITION_LABELS[punchGuide]}
+              onClick={() =>
+                setPunchGuide((current) => {
+                  const order = PUNCH_POSITIONS
+                  return order[(order.indexOf(current) + 1) % order.length]
+                })
+              }
+              active={punchGuide !== 'none'}
+              disabled={!template}
+            />
+            <RibbonButton
+              icon={<Circle size={18} />}
+              label={punchShapeGuide === 'slot' ? 'Slot' : 'Round'}
+              onClick={() => setPunchShapeGuide((shape) => (shape === 'slot' ? 'round' : 'slot'))}
+              disabled={!template || punchGuide === 'none'}
+            />
+            <RibbonButton
+              icon={<Settings2 size={18} />}
+              label="Safe Area"
+              onClick={() => setShowSafeAreaGuide((value) => !value)}
+              active={showSafeAreaGuide}
+              disabled={!template}
             />
           </RibbonGroup>
 
@@ -1742,6 +1826,16 @@ function App() {
                               height={previewHeight}
                             />
                           ))}
+                          <CardGuideOverlay
+                            widthMm={cardSizeMm.width}
+                            heightMm={cardSizeMm.height}
+                            previewWidth={previewWidth}
+                            previewHeight={previewHeight}
+                            magneticStripe={showMagStripeGuide}
+                            punch={punchGuide}
+                            punchShape={punchShapeGuide}
+                            safeArea={showSafeAreaGuide}
+                          />
                         </div>
                       </div>
 
@@ -2172,6 +2266,9 @@ function App() {
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
       />
+
+      {/* New Blank Template Dialog */}
+      <CardBlankDialog open={blankDialogOpen} onOpenChange={setBlankDialogOpen} onOpenInEditor={handleOpenBlank} />
 
       {/* Share Template Dialog */}
       <ShareTemplateDialog

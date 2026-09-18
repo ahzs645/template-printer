@@ -2,6 +2,12 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import type { FieldDefinition, FieldType } from '../lib/types'
+import {
+  BARCODE_SYMBOLOGIES,
+  BARCODE_SYMBOLOGY_LABELS,
+  validateBarcodeText,
+  type BarcodeSymbology,
+} from '../lib/barcode'
 
 export type FieldEditorPanelProps = {
   field: FieldDefinition
@@ -11,6 +17,14 @@ export type FieldEditorPanelProps = {
 }
 
 export function FieldEditorPanel({ field, onChange, fontOptions, missingFonts }: FieldEditorPanelProps) {
+  // Say straight away when a default value cannot be encoded, rather than
+  // letting it fail silently at export.
+  let barcodeProblem: string | null = null
+  if (field.type === 'barcode' && field.defaultValue?.trim()) {
+    const result = validateBarcodeText(field.barcodeSymbology ?? 'code128', field.defaultValue)
+    if (!result.valid) barcodeProblem = result.error ?? null
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -47,6 +61,45 @@ export function FieldEditorPanel({ field, onChange, fontOptions, missingFonts }:
             </SelectContent>
           </Select>
         </div>
+
+        {field.type === 'barcode' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <Label htmlFor="field-barcode-type">Barcode type</Label>
+            <Select
+              value={field.barcodeSymbology ?? 'code128'}
+              onValueChange={(value) => onChange(field.id, 'barcodeSymbology', value as BarcodeSymbology)}
+            >
+              <SelectTrigger id="field-barcode-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BARCODE_SYMBOLOGIES.map((symbology) => (
+                  <SelectItem key={symbology} value={symbology}>
+                    {BARCODE_SYMBOLOGY_LABELS[symbology]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {(field.type === 'text' || field.type === 'barcode' || field.type === 'date') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <Label htmlFor="field-default">Default value</Label>
+            <Input
+              id="field-default"
+              type="text"
+              value={field.defaultValue ?? ''}
+              placeholder={field.type === 'barcode' ? 'Used when the record has no value' : 'Optional'}
+              onChange={(event) =>
+                onChange(field.id, 'defaultValue', event.target.value ? event.target.value : undefined)
+              }
+            />
+            {barcodeProblem && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: 0 }}>{barcodeProblem}</p>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <Label htmlFor="field-x">X (% of width)</Label>

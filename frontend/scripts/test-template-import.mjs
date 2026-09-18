@@ -81,6 +81,14 @@ const { parseField } = await import('../src/lib/fieldParser.ts')
 const { normalizeStandardFieldName, parseBarcodeLayerId } = await import('../src/lib/standardFields.ts')
 const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await import('../src/lib/barcode.ts')
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
+const {
+  ID1_HEIGHT_MM,
+  ID1_WIDTH_MM,
+  MAGNETIC_TRACKS_MM,
+  createCardBlankSvg,
+  getPunchRect,
+  punchConflictsWithStripe,
+} = await import('../src/lib/cardBlanks.ts')
 
 // --- helpers ---------------------------------------------------------------
 
@@ -472,6 +480,60 @@ check('falls back to which side carries the person', () => {
 check('names the design after what the two files share', () => {
   assert.equal(suggestDesignName('id-card-front.svg', 'id-card-back.svg'), 'id-card')
   assert.equal(suggestDesignName('Asset 8.svg', 'Asset 10.svg'), 'Asset')
+})
+
+// --- card blanks ------------------------------------------------------------
+
+section('card blanks')
+
+check('generates an ID-1 card in millimetres', async () => {
+  const svg = createCardBlankSvg({ side: 'front' })
+  assert.match(svg, new RegExp(`width="${ID1_WIDTH_MM}mm"`))
+  assert.match(svg, new RegExp(`height="${ID1_HEIGHT_MM}mm"`))
+  // A blank must import as a working template, not just look like one.
+  const parsed = await parseTemplateString(svg, 'card-front.svg')
+  assert.equal(parsed.metadata.unit, 'mm')
+  const ids = parsed.autoFields.map((field) => field.sourceId).sort()
+  assert.deepEqual(ids, ['fullName_First_LineBreak_Last', 'photo', 'position_AllCaps', 'studentId'])
+})
+
+check('a barcode blank imports as a barcode field', async () => {
+  const svg = createCardBlankSvg({ side: 'back', barcode: 'codabar', barcodeField: 'studentId' })
+  const parsed = await parseTemplateString(svg, 'card-back.svg')
+  const barcode = parsed.autoFields.find((field) => field.type === 'barcode')
+  assert.ok(barcode, 'the blank should carry a barcode field')
+  assert.equal(barcode.barcodeSymbology, 'codabar')
+})
+
+check('the stripe covers all three ISO tracks', () => {
+  const svg = createCardBlankSvg({ side: 'back', magneticStripe: true })
+  const stripe = /<g id="magneticStripe">\s*<rect x="0" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(svg)
+  assert.ok(stripe, 'the stripe should be drawn')
+  const top = Number(stripe[1])
+  const bottom = top + Number(stripe[2])
+  assert.ok(top <= MAGNETIC_TRACKS_MM[0].top, `stripe starts at ${top}, above track 1 at ${MAGNETIC_TRACKS_MM[0].top}`)
+  assert.ok(bottom >= MAGNETIC_TRACKS_MM[2].bottom, `stripe ends at ${bottom}, below track 3 at ${MAGNETIC_TRACKS_MM[2].bottom}`)
+})
+
+check('the stripe is only ever put on a back', () => {
+  assert.ok(!createCardBlankSvg({ side: 'front', magneticStripe: true }).includes('magneticStripe'))
+})
+
+check('places the punch on the edge it names', () => {
+  const left = getPunchRect({ punch: 'left-center', widthMm: ID1_WIDTH_MM, heightMm: ID1_HEIGHT_MM })
+  assert.ok(left.x < ID1_WIDTH_MM / 4, 'a left punch belongs on the left')
+  assert.ok(left.height > left.width, 'a slot on an end runs vertically')
+
+  const top = getPunchRect({ punch: 'top-center', widthMm: ID1_WIDTH_MM, heightMm: ID1_HEIGHT_MM })
+  assert.ok(top.width > top.height, 'a slot on the top runs horizontally')
+  assert.equal(getPunchRect({ punch: 'none', widthMm: ID1_WIDTH_MM, heightMm: ID1_HEIGHT_MM }), null)
+})
+
+check('catches a punch that would cut the magnetic stripe', () => {
+  assert.equal(punchConflictsWithStripe({ punch: 'top-center' }), true)
+  assert.equal(punchConflictsWithStripe({ punch: 'left-center' }), false)
+  assert.equal(punchConflictsWithStripe({ punch: 'bottom-center' }), false)
+  assert.equal(punchConflictsWithStripe({ punch: 'none' }), false)
 })
 
 // --- result -----------------------------------------------------------------
