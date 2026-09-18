@@ -21,6 +21,7 @@ import {
   Eye,
   AlertTriangle,
   Circle,
+  ClipboardCheck,
 } from 'lucide-react'
 
 import './App.css'
@@ -62,6 +63,7 @@ import { ShareTemplateDialog } from './components/ShareTemplateDialog'
 import { InlineSvg } from './components/InlineSvg'
 import { CardBlankDialog } from './components/CardBlankDialog'
 import { BarcodeScanDialog } from './components/BarcodeScanDialog'
+import { TestCardsDialog } from './components/TestCardsDialog'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
@@ -114,6 +116,7 @@ function App() {
   const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
+  const [fieldCustomValues, setFieldCustomValues] = useState<Record<string, string>>({})
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [sharePayload, setSharePayload] = useState<SharedTemplatePayload | null>(null)
   // Set when the open template arrived through a view-only share link.
@@ -126,6 +129,7 @@ function App() {
   const [otherSidePreview, setOtherSidePreview] = useState<{ name: string; svg: string } | null>(null)
   const [blankDialogOpen, setBlankDialogOpen] = useState(false)
   const [scanDialogOpen, setScanDialogOpen] = useState(false)
+  const [testCardsOpen, setTestCardsOpen] = useState(false)
   // Non-destructive card guides drawn over the preview.
   const [showMagStripeGuide, setShowMagStripeGuide] = useState(false)
   const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
@@ -216,16 +220,21 @@ function App() {
       storage.getFieldMappings(selectedTemplateId)
         .then(mappings => {
           const mappingsMap: Record<string, string> = {}
+          const customMap: Record<string, string> = {}
           mappings.forEach(m => {
             mappingsMap[m.svgLayerId] = m.standardFieldName
+            if (m.customValue !== undefined) customMap[m.svgLayerId] = m.customValue
           })
           setFieldMappings(mappingsMap)
+          setFieldCustomValues(customMap)
         })
         .catch(() => {
           setFieldMappings({})
+          setFieldCustomValues({})
         })
     } else {
       setFieldMappings({})
+      setFieldCustomValues({})
     }
   }, [selectedTemplateId, fields, fieldMappingsVersion, storage])
 
@@ -1407,6 +1416,15 @@ function App() {
             />
           </RibbonGroup>
 
+          <RibbonGroup title="Check">
+            <RibbonButton
+              icon={<ClipboardCheck size={18} />}
+              label="Test Cards"
+              onClick={() => setTestCardsOpen(true)}
+              disabled={!template}
+            />
+          </RibbonGroup>
+
           <RibbonGroup title="Guides">
             <RibbonButton
               icon={<CreditCard size={18} />}
@@ -2285,6 +2303,16 @@ function App() {
         fields={fields}
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
+      />
+
+      {/* Test Cards Dialog */}
+      <TestCardsDialog
+        open={testCardsOpen}
+        onOpenChange={setTestCardsOpen}
+        template={template}
+        fields={fields}
+        fieldMappings={fieldMappings}
+        customValues={fieldCustomValues}
       />
 
       {/* Barcode Scan Dialog */}

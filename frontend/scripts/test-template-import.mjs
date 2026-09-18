@@ -81,6 +81,7 @@ const { parseField } = await import('../src/lib/fieldParser.ts')
 const { normalizeStandardFieldName, parseBarcodeLayerId } = await import('../src/lib/standardFields.ts')
 const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await import('../src/lib/barcode.ts')
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
+const { TEST_CASES, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
 const {
   ID1_HEIGHT_MM,
   ID1_WIDTH_MM,
@@ -534,6 +535,70 @@ check('catches a punch that would cut the magnetic stripe', () => {
   assert.equal(punchConflictsWithStripe({ punch: 'left-center' }), false)
   assert.equal(punchConflictsWithStripe({ punch: 'bottom-center' }), false)
   assert.equal(punchConflictsWithStripe({ punch: 'none' }), false)
+})
+
+// --- test cards -------------------------------------------------------------
+
+section('test cards')
+
+function mappingMap(mappings) {
+  return Object.fromEntries(mappings.map((mapping) => [mapping.svgLayerId, mapping.standardFieldName]))
+}
+
+const staffResults = runTestCards(front.metadata, front.autoFields, mappingMap(frontMappings))
+const backResults = runTestCards(idBack.metadata, idBack.autoFields, mappingMap(idBackMappings))
+
+check('runs every case', () => {
+  assert.equal(staffResults.length, TEST_CASES.length)
+  assert.ok(staffResults.every((result) => result.svg.length > 0))
+})
+
+check('passes a name that fits', () => {
+  const typical = staffResults.find((result) => result.testCase.id === 'typical')
+  assert.deepEqual(typical.issues, [], JSON.stringify(typical.issues))
+})
+
+check('reports text shrunk to fit', () => {
+  const long = staffResults.find((result) => result.testCase.id === 'long-name')
+  assert.ok(
+    long.issues.some((issue) => issue.severity === 'warning' && /shrunk/i.test(issue.message)),
+    JSON.stringify(long.issues),
+  )
+})
+
+check('reports a word too wide even after shrinking', () => {
+  const unbreakable = staffResults.find((result) => result.testCase.id === 'long-single-word')
+  assert.ok(
+    unbreakable.issues.some((issue) => issue.severity === 'error' && /wider than the space/i.test(issue.message)),
+    JSON.stringify(unbreakable.issues),
+  )
+})
+
+check('reports a barcode value the symbology cannot encode', () => {
+  const letters = backResults.find((result) => result.testCase.id === 'non-numeric-id')
+  assert.ok(
+    letters.issues.some((issue) => issue.severity === 'error' && /Codabar accepts/i.test(issue.message)),
+    JSON.stringify(letters.issues),
+  )
+})
+
+check('reports a mapped field the record leaves empty', () => {
+  const empty = backResults.find((result) => result.testCase.id === 'missing-optional')
+  assert.ok(
+    empty.issues.some((issue) => /no value/i.test(issue.message)),
+    JSON.stringify(empty.issues),
+  )
+})
+
+check('stays quiet about static artwork', () => {
+  // The back card's university name and address are unmapped by design.
+  const typical = backResults.find((result) => result.testCase.id === 'typical')
+  assert.deepEqual(typical.issues, [], JSON.stringify(typical.issues))
+})
+
+check('counts issues across the run', () => {
+  const totals = countIssues(backResults)
+  assert.ok(totals.errors >= 2, `expected at least two errors, got ${totals.errors}`)
 })
 
 // --- result -----------------------------------------------------------------
