@@ -8,6 +8,7 @@ import type { CardDesign } from '../lib/types'
 import type { TemplateSummary } from '../lib/templates'
 import { loadTemplateSvgContent } from '../lib/templates'
 import { parseField } from '../lib/fieldParser'
+import { InlineSvg } from './InlineSvg'
 import { parseTemplateString, renderSvgWithData } from '../lib/svgTemplate'
 import { useStorage } from '../lib/storage'
 import type { CardData, FieldDefinition, TemplateMeta } from '../lib/types'
@@ -524,10 +525,11 @@ export function UsersTab({
     }
     if (pane.svg) {
       return (
-        <div
+        <InlineSvg
           className="canvas-preview"
           style={{ maxWidth, width: '100%' }}
-          dangerouslySetInnerHTML={{ __html: pane.svg }}
+          markup={pane.svg}
+          name={`user-card-${side}`}
         />
       )
     }

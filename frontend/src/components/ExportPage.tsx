@@ -13,6 +13,8 @@ import { useExportPreview } from '../hooks/useExportPreview'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
 import type { SlotAssignment } from '../lib/exporter'
+import { scopeSvgElement } from '../lib/svgTemplate'
+import { InlineSvg } from './InlineSvg'
 
 export type ExportFormat = 'pdf' | 'png' | 'svg'
 export type ExportMode = 'quick' | 'database'
@@ -93,46 +95,6 @@ function shouldRotateCard(cardWidth: number, cardHeight: number, slotWidth: numb
   return rotatedScale > normalScale * 1.05
 }
 
-function prefixSvgIds(root: Element, prefix: string) {
-  const idMap = new Map<string, string>()
-
-  root.querySelectorAll('[id]').forEach((el) => {
-    const oldId = el.getAttribute('id')
-    if (!oldId) return
-    const newId = `${prefix}${oldId}`
-    idMap.set(oldId, newId)
-    el.setAttribute('id', newId)
-  })
-
-  if (idMap.size === 0) return
-
-  const updateAttrValue = (value: string | null) => {
-    if (!value) return value
-    return value.replace(/url\(#([^)]+)\)/g, (_, id: string) => {
-      const mapped = idMap.get(id)
-      return `url(#${mapped ?? id})`
-    })
-  }
-
-  root.querySelectorAll('*').forEach((el) => {
-    Array.from(el.attributes).forEach((attr) => {
-      const name = attr.name
-      let value = attr.value
-      if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
-        const id = value.slice(1)
-        const mapped = idMap.get(id)
-        if (mapped) {
-          el.setAttribute(name, `#${mapped}`)
-        }
-        return
-      }
-      if (value.includes('url(#')) {
-        value = updateAttrValue(value) as string
-        el.setAttribute(name, value)
-      }
-    })
-  })
-}
 
 export function ExportPage({
   template,
@@ -388,7 +350,7 @@ export function ExportPage({
 
         const cardClone = cardSvg.cloneNode(true) as Element
         const prefix = `slot${index + 1}-`
-        prefixSvgIds(cardClone, prefix)
+        scopeSvgElement(cardClone, prefix)
 
         Array.from(cardClone.children).forEach((child) => {
           const clonedChild = child.cloneNode(true)
@@ -530,7 +492,7 @@ export function ExportPage({
         }
 
         const cardClone = cardSvg.cloneNode(true) as Element
-        prefixSvgIds(cardClone, `json-slot${index + 1}-`)
+        scopeSvgElement(cardClone, `json-slot${index + 1}-`)
 
         Array.from(cardClone.children).forEach((child) => {
           const clonedChild = child.cloneNode(true)
@@ -1042,18 +1004,16 @@ export function ExportPage({
             </div>
           ) : layoutCompositePreview ? (
             <div className="canvas-preview-frame">
-              <div
+              <InlineSvg
                 className="export-preview-svg"
                 style={{ width: '100%', height: '100%' }}
-                dangerouslySetInnerHTML={{ __html: layoutCompositePreview }}
+                markup={layoutCompositePreview}
+                name="export-composite"
               />
             </div>
           ) : previewSvg ? (
             <div className="canvas-preview-frame">
-              <div
-                className="canvas-preview"
-                dangerouslySetInnerHTML={{ __html: previewSvg }}
-              />
+              <InlineSvg className="canvas-preview" markup={previewSvg} name="export-card" />
             </div>
           ) : (
             <div className="empty-state">
@@ -1202,10 +1162,11 @@ export function ExportPage({
               )}
             </DialogHeader>
             <div style={{ marginTop: 8, padding: 12, background: 'var(--bg-surface-alt)', borderRadius: 'var(--radius)' }}>
-              <div
+              <InlineSvg
                 className="export-preview-svg"
                 style={{ width: '100%' }}
-                dangerouslySetInnerHTML={{ __html: layoutPreviewSvg }}
+                markup={layoutPreviewSvg}
+                name="export-layout"
               />
             </div>
           </DialogContent>

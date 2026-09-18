@@ -726,6 +726,124 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
   return { metadata, autoFields }
 }
 
+/**
+ * Rewrite the ids and CSS class names inside an SVG so several of them can
+ * share one HTML document without colliding.
+ *
+ * Illustrator names every class `cls-1`, `cls-2`, ... and every layer `Layer_1`,
+ * so a card front and a card back inlined side by side end up fighting over the
+ * same names: an inline <style> block is document-global, and the last one
+ * loaded wins. On the reference artwork this makes the back card's
+ * `.cls-1 { fill: none }` erase the name on the front card.
+ *
+ * Handles ids, `url(#...)` and `href="#..."` references (in attributes and
+ * inside <style> text), and class names declared in the SVG's own stylesheet.
+ */
+export function scopeSvgElement(root: Element, prefix: string): void {
+  if (!prefix) return
+
+  const elements: Element[] = [root, ...Array.from(root.querySelectorAll('*'))]
+
+  // 1. Collect and rename ids.
+  const idMap = new Map<string, string>()
+  for (const element of elements) {
+    const id = element.getAttribute('id')
+    if (!id) continue
+    const scopedId = `${prefix}${id}`
+    idMap.set(id, scopedId)
+    element.setAttribute('id', scopedId)
+  }
+
+  // 2. Collect the class names this SVG's own stylesheet declares. Classes that
+  //    only appear in a class attribute carry no styling, so leave them alone.
+  const styleElements = elements.filter((element) => element.tagName.toLowerCase() === 'style')
+  const classMap = new Map<string, string>()
+  for (const styleEl of styleElements) {
+    const css = styleEl.textContent || ''
+    for (const match of css.matchAll(CSS_CLASS_SELECTOR_PATTERN)) {
+      classMap.set(match[1], `${prefix}${match[1]}`)
+    }
+  }
+
+  // 3. Rewrite the stylesheet itself.
+  for (const styleEl of styleElements) {
+    let css = styleEl.textContent || ''
+    css = css.replace(CSS_CLASS_SELECTOR_PATTERN, (match, name: string) => {
+      const scoped = classMap.get(name)
+      return scoped ? `.${scoped}` : match
+    })
+    css = css.replace(URL_REFERENCE_PATTERN, (match, id: string) => {
+      const scoped = idMap.get(id)
+      return scoped ? `url(#${scoped})` : match
+    })
+    styleEl.textContent = css
+  }
+
+  // 4. Rewrite class attributes and any attribute referencing an id.
+  for (const element of elements) {
+    const classAttr = element.getAttribute('class')
+    if (classAttr) {
+      const scoped = classAttr
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((name) => classMap.get(name) ?? name)
+        .join(' ')
+      element.setAttribute('class', scoped)
+    }
+
+    if (idMap.size === 0) continue
+
+    for (const attr of Array.from(element.attributes)) {
+      const { name, value } = attr
+      if ((name === 'href' || name === 'xlink:href') && value.startsWith('#')) {
+        const scoped = idMap.get(value.slice(1))
+        if (scoped) element.setAttribute(name, `#${scoped}`)
+        continue
+      }
+      if (value.includes('url(#')) {
+        element.setAttribute(
+          name,
+          value.replace(URL_REFERENCE_PATTERN, (match, id: string) => {
+            const scoped = idMap.get(id)
+            return scoped ? `url(#${scoped})` : match
+          }),
+        )
+      }
+    }
+  }
+}
+
+// A CSS class selector: a dot followed by an identifier. The leading
+// [_a-zA-Z-] requirement keeps it from matching decimals such as `.26px`.
+const CSS_CLASS_SELECTOR_PATTERN = /\.(-?[_a-zA-Z][\w-]*)/g
+const URL_REFERENCE_PATTERN = /url\(\s*#([^)\s]+)\s*\)/g
+
+/**
+ * String form of {@link scopeSvgElement}, for markup that is about to be
+ * injected into a page alongside other SVGs.
+ */
+export function scopeSvgMarkup(svgMarkup: string, prefix: string): string {
+  if (!svgMarkup || !prefix) return svgMarkup
+  try {
+    const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml')
+    const root = doc.documentElement
+    if (!root || root.querySelector('parsererror')) return svgMarkup
+    scopeSvgElement(root, prefix)
+    return new XMLSerializer().serializeToString(root)
+  } catch (error) {
+    console.error('Failed to scope SVG markup', error)
+    return svgMarkup
+  }
+}
+
+/**
+ * Turn an arbitrary string into something usable as an id and class prefix.
+ */
+export function toSvgScopePrefix(value: string): string {
+  const cleaned = value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  return cleaned ? `${cleaned}-` : ''
+}
+
 export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(template.rawSvg, 'image/svg+xml')
@@ -798,6 +916,17 @@ function bakeCssTextStylesForElement(element: Element, cssStyles: CssTextStyles)
   }
 }
 
+/**
+ * Floor for the automatic shrink applied to text that overflows its box. Below
+ * this the text stops being readable at card size, and overflowing is the more
+ * honest failure.
+ */
+const MIN_AUTO_SHRINK_SCALE = 0.6
+
+function roundFontSize(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
 function applySvgTextField(
   doc: Document,
   element: Element,
@@ -833,8 +962,19 @@ function applySvgTextField(
 
   // Determine lines: use word wrapping if a wrapWidth was detected, otherwise split on newlines
   let lines: string[]
+  let renderedFontSize = effectiveFontSize
   if (field.wrapWidth && field.wrapWidth > 0) {
-    lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, effectiveFontSize)
+    lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, renderedFontSize)
+
+    // Word wrapping cannot break a single long word, so a name like
+    // "Vandersteenhoven" would otherwise run off the edge of the card. Scale the
+    // text down to the width the artwork allows for, within reason.
+    const widest = measureWidestLine(lines, field.fontFamily, renderedFontSize, field.fontWeight)
+    if (widest && widest > field.wrapWidth) {
+      const scale = Math.max(field.wrapWidth / widest, MIN_AUTO_SHRINK_SCALE)
+      renderedFontSize = renderedFontSize * scale
+      lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, renderedFontSize)
+    }
   } else {
     lines = value.split(/\r?\n/)
   }
@@ -845,7 +985,7 @@ function applySvgTextField(
     // Prefer the spacing the template itself used; only fall back to a ratio
     // when the original was a single line and has nothing to copy.
     const lineHeight =
-      field.lineHeight && field.lineHeight > 0 ? field.lineHeight : effectiveFontSize * 1.2
+      field.lineHeight && field.lineHeight > 0 ? field.lineHeight : renderedFontSize * 1.2
 
     lines.forEach((line, index) => {
       const tspan = doc.createElementNS(SVG_NS, 'tspan')
@@ -865,7 +1005,7 @@ function applySvgTextField(
     setOrRemoveAttribute(element, 'font-family', field.fontFamily)
   }
   // Always set font-size as inline attribute to preserve it after CSS classes are removed
-  element.setAttribute('font-size', String(effectiveFontSize))
+  element.setAttribute('font-size', String(roundFontSize(renderedFontSize)))
   setOrRemoveAttribute(element, 'font-weight', field.fontWeight ? String(field.fontWeight) : undefined)
   if (field.color !== undefined) {
     setOrRemoveAttribute(element, 'fill', field.color)

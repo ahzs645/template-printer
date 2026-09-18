@@ -30,13 +30,18 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22.18+ runs TypeScript sources directly, which the test scripts rely on.
+          node-version: 22
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+        working-directory: frontend
 
       - name: Build
         run: pnpm build:gh-pages

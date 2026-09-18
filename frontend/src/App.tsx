@@ -17,6 +17,8 @@ import {
   Pencil,
   CreditCard,
   PenTool,
+  Share2,
+  Eye,
 } from 'lucide-react'
 
 import './App.css'
@@ -54,6 +56,15 @@ import { useCardDesigns } from './hooks/useCardDesigns'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
+import { ShareTemplateDialog } from './components/ShareTemplateDialog'
+import { InlineSvg } from './components/InlineSvg'
+import {
+  buildSharedTemplatePayload,
+  clearShareTarget,
+  decodeSharedTemplate,
+  readShareTarget,
+  type SharedTemplatePayload,
+} from './lib/shareLink'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments, setOutlineFontBuffers, clearOutlineFontBuffers } from './lib/exporter'
 import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
@@ -95,6 +106,11 @@ function App() {
   const [layerNamingDialogOpen, setLayerNamingDialogOpen] = useState(false)
   const [fieldMappingsVersion, setFieldMappingsVersion] = useState(0)
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [sharePayload, setSharePayload] = useState<SharedTemplatePayload | null>(null)
+  // Set when the open template arrived through a view-only share link.
+  const [isSharedReadOnly, setIsSharedReadOnly] = useState(false)
+  const shareTargetHandled = useRef(false)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const templateUploadInputRef = useRef<HTMLInputElement | null>(null)
@@ -466,6 +482,93 @@ function App() {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load template')
     }
   }
+
+  const handleOpenShare = () => {
+    if (!template?.rawSvg) return
+    const mappings: FieldMapping[] = Object.entries(fieldMappings).map(([svgLayerId, standardFieldName]) => ({
+      svgLayerId,
+      standardFieldName,
+    }))
+    setSharePayload(
+      buildSharedTemplatePayload({
+        name: template.name,
+        svg: template.rawSvg,
+        fields,
+        mappings,
+        cardData,
+      }),
+    )
+    setShareDialogOpen(true)
+  }
+
+  /**
+   * Take a template that arrived read-only and make it the user's own, so it
+   * can be edited and saved to their library.
+   */
+  const handleCopySharedTemplate = () => {
+    setIsSharedReadOnly(false)
+    setStatusMessage('Shared template unlocked for editing. Use Open to save it into your library.')
+  }
+
+  // Import a template carried in the location hash. Runs once per page load.
+  useEffect(() => {
+    if (shareTargetHandled.current) return
+    const target = readShareTarget(window.location.hash)
+    if (!target) return
+    shareTargetHandled.current = true
+
+    let cancelled = false
+
+    const importShared = async () => {
+      try {
+        const shared = await decodeSharedTemplate(target.payload)
+        const { metadata, autoFields } = await parseTemplateString(shared.svg, shared.name || 'shared-template.svg')
+        if (cancelled) return
+
+        resetPreviousObjectUrl(metadata.objectUrl)
+        setTemplate(metadata)
+        registerTemplateFonts(metadata.fonts)
+
+        const nextFields = shared.fields?.length ? shared.fields : autoFields
+        setFields(nextFields)
+        setCardData(() => ({ ...(shared.sampleData ?? {}) }))
+        setSelectedFieldId(nextFields[0]?.id ?? null)
+        setSelectedTemplateId(null)
+        setSelectedExportCardDesignId(null)
+
+        const mappings = shared.mappings?.length ? shared.mappings : generateAutoMappings(nextFields)
+        const mappingsMap: Record<string, string> = {}
+        mappings.forEach((mapping) => {
+          mappingsMap[mapping.svgLayerId] = mapping.standardFieldName
+        })
+        setFieldMappings(mappingsMap)
+
+        setIsSharedReadOnly(target.mode === 'view')
+        setActiveTab('design')
+        setDesignMode('import')
+        setStatusMessage(
+          target.mode === 'view'
+            ? `Opened shared template "${metadata.name}" in view-only mode.`
+            : `Opened shared template "${metadata.name}". Use Open to save it to your library.`,
+        )
+      } catch (error) {
+        console.error(error)
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : 'Could not open the shared template.')
+        }
+      } finally {
+        // Drop the fragment either way, so a refresh doesn't replay a bad link.
+        clearShareTarget()
+      }
+    }
+
+    void importShared()
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleFieldSelect = (fieldId: string) => {
     setSelectedFieldId(fieldId)
@@ -1008,6 +1111,12 @@ function App() {
               onChange={handleTemplateUpload}
               style={{ display: 'none' }}
             />
+            <RibbonButton
+              icon={<Share2 size={18} />}
+              label="Share"
+              onClick={handleOpenShare}
+              disabled={!template?.rawSvg}
+            />
           </RibbonGroup>
 
           <RibbonGroup title="Field">
@@ -1015,25 +1124,26 @@ function App() {
               icon={<Plus size={18} />}
               label="Add"
               onClick={handleAddField}
+              disabled={isSharedReadOnly}
             />
             <RibbonButton
               icon={<Copy size={18} />}
               label="Duplicate"
               onClick={() => selectedField && handleDuplicateField(selectedField.id)}
-              disabled={!selectedField}
+              disabled={!selectedField || isSharedReadOnly}
             />
             <RibbonButton
               icon={<Trash2 size={18} />}
               label="Delete"
               onClick={() => selectedField && handleDeleteField(selectedField.id)}
-              disabled={!selectedField}
+              disabled={!selectedField || isSharedReadOnly}
             />
             <RibbonDivider />
             <RibbonButton
               icon={<Settings size={18} />}
               label="Map Fields"
               onClick={handleOpenFieldMapping}
-              disabled={!selectedTemplateId || !template?.rawSvg}
+              disabled={!selectedTemplateId || !template?.rawSvg || isSharedReadOnly}
             />
           </RibbonGroup>
 
@@ -1369,6 +1479,29 @@ function App() {
                   )}
                 </PanelSection>
 
+                {/* Shared read-only notice */}
+                {isSharedReadOnly && (
+                  <div
+                    className="status-message"
+                    style={{
+                      margin: '8px 0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      background: 'var(--muted, #f4f4f5)',
+                      color: 'var(--muted-foreground, #52525b)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Eye size={14} />
+                      Shared template, opened read-only.
+                    </span>
+                    <Button type="button" size="sm" variant="outline" onClick={handleCopySharedTemplate}>
+                      Make a copy to edit
+                    </Button>
+                  </div>
+                )}
+
                 {/* Status Messages */}
                 {statusMessage && (
                   <div className="status-message status-message--success" style={{ margin: '8px 0' }}>
@@ -1539,10 +1672,11 @@ function App() {
                           }
                           if (preview.svg) {
                             return (
-                              <div
+                              <InlineSvg
                                 className="canvas-preview"
                                 style={{ width: 450 }}
-                                dangerouslySetInnerHTML={{ __html: preview.svg }}
+                                markup={preview.svg}
+                                name="design-front"
                               />
                             )
                           }
@@ -1577,10 +1711,11 @@ function App() {
                           }
                           if (preview.svg) {
                             return (
-                              <div
+                              <InlineSvg
                                 className="canvas-preview"
                                 style={{ width: 450 }}
-                                dangerouslySetInnerHTML={{ __html: preview.svg }}
+                                markup={preview.svg}
+                                name="design-back"
                               />
                             )
                           }
@@ -1803,6 +1938,13 @@ function App() {
         fields={fields}
         templateId={selectedTemplateId}
         onSave={handleSaveFieldMappings}
+      />
+
+      {/* Share Template Dialog */}
+      <ShareTemplateDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        payload={sharePayload}
       />
 
       {/* Layer Naming Helper Dialog */}

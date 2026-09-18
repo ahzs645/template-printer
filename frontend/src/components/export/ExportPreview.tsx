@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'
 import type { TemplateSummary } from '../../lib/templates'
+import { InlineSvg } from '../InlineSvg'
 
 type ExportPreviewProps = {
   template: TemplateSummary | null
@@ -57,19 +58,17 @@ export function ExportPreview({
       {compositeSvg && printLayoutName ? (
         <Card className="border-zinc-200 dark:border-zinc-800 self-start w-full max-w-[640px]">
           <CardContent className="flex items-center justify-center p-4">
-            <div
-              className="export-preview-svg w-full"
-              dangerouslySetInnerHTML={{ __html: compositeSvg }}
-            />
+            <InlineSvg className="export-preview-svg w-full" markup={compositeSvg} name="export-composite" />
           </CardContent>
         </Card>
       ) : (
         <Card className="border-zinc-200 dark:border-zinc-800 self-start w-full max-w-[520px]">
           <CardContent className="flex items-center justify-center p-4">
             {previewSvg && (
-              <div
+              <InlineSvg
                 className="export-preview-svg w-full max-w-[700px]"
-                dangerouslySetInnerHTML={{ __html: previewSvg }}
+                markup={previewSvg}
+                name="export-card"
               />
             )}
           </CardContent>
@@ -87,10 +86,7 @@ export function ExportPreview({
               )}
             </DialogHeader>
             <div className="mt-2 rounded-md bg-zinc-100 p-3">
-              <div
-                className="export-preview-svg w-full"
-                dangerouslySetInnerHTML={{ __html: layoutSvg }}
-              />
+              <InlineSvg className="export-preview-svg w-full" markup={layoutSvg} name="export-layout" />
             </div>
           </DialogContent>
         </Dialog>
