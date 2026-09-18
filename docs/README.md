@@ -59,3 +59,24 @@ docker-compose up
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui
 - **Database**: SQLite with Better-SQLite3
 - **PDF Export**: pdf-lib for PDF generation
+
+## Card production reference
+
+- **Size**: ISO/IEC 7810 ID-1 — 85.6 × 53.98 mm, 3.18 mm corner radius.
+- **Magnetic stripe**: ISO/IEC 7811-2 puts the three tracks at 5.54–8.00,
+  8.46–10.92 and 11.38–13.84 mm from the top edge of the back. The default
+  stripe here is 12.7 mm (half-inch) tape 4 mm from that edge, which covers all
+  three. Card printers vary; check against yours before a production run.
+- **Punch**: a lanyard slot is typically 12 × 3 mm and a round hole ⌀5 mm, set
+  3 mm in from the edge. Never punch through a magnetic stripe — punch an end or
+  the bottom instead.
+
+**New Blank** generates any of this as a starting template. **Mag Stripe**,
+**Punch** and **Safe Area** draw the same geometry over an existing design as
+overlays, without changing the file. **Lanyard** hangs the card from its punch so
+you can see how it sits when worn.
+
+**Test Cards** runs the open template against the records that break ID cards —
+very short and very long names, missing middle names, accents, apostrophes,
+identifiers a barcode cannot encode — and reports what overflowed, what had to be
+shrunk, and what failed to encode.

@@ -167,6 +167,18 @@ set where the barcode sits and how tall it is; the value in it is placeholder
 text and is discarded. To control the width — wider bars scan more reliably —
 set Width in **Field Settings** after import.
 
+**The data goes in the record, not the template.** Every card needs a different
+barcode, so the layer names a field and the value comes from the user record at
+export time. Generating a barcode image and placing it in the artwork would bake
+one person's number into the template. Set **Default value** in Field Settings
+for what to encode when a record has nothing — a blank barcode is worse than a
+known placeholder.
+
+**Reading an existing barcode**: **Read Barcode** in the ribbon decodes a photo
+or scan of a card you already issue and reports the symbology and the value. With
+a field selected it applies both, which is the quickest way to match an existing
+system.
+
 **Codabar start and stop characters** are added automatically (`A`…`B`) when the
 value doesn't have them. Type your own (`A`, `B`, `C` or `D` at each end) to
 override. This matters: Codabar is undecodable without them, which is the usual
