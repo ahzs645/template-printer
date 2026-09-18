@@ -145,6 +145,48 @@ logo        - Organization logo
 
 **Note**: Image fields should be `<image>` elements in your SVG, not text elements.
 
+### Barcodes
+
+Name a text layer `barcode_<symbology>` and it is replaced with a generated
+barcode. Add a field name to say what gets encoded:
+
+```
+barcode_codabar_studentId     - Codabar of the user's student/library number
+barcode_code128_studentId     - same value, Code 128
+barcode_code39_studentId
+barcode_ean13
+barcode_qrcode_email
+barcode_codabar               - source field chosen in Map Fields
+```
+
+Supported symbologies: `codabar` (rationalized/ANSI), `code128`, `code39`,
+`ean13`, `qrcode`.
+
+**Put a `<text>` element where the barcode goes.** Its position and font size
+set where the barcode sits and how tall it is; the value in it is placeholder
+text and is discarded. To control the width — wider bars scan more reliably —
+set Width in **Field Settings** after import.
+
+**Codabar start and stop characters** are added automatically (`A`…`B`) when the
+value doesn't have them. Type your own (`A`, `B`, `C` or `D` at each end) to
+override. This matters: Codabar is undecodable without them, which is the usual
+reason a barcode that looks right doesn't scan.
+
+#### Don't draw barcodes with a barcode font
+
+A layer set in a barcode font (Codabar, Code 39, …) is flagged on import.
+Generated barcodes are used instead because a font-drawn one:
+
+- **prints as plain digits if the font is missing** — the browser falls back
+  silently, and you find out after the cards are cut;
+- **cannot enforce the symbology's rules**, so a value with no start/stop
+  characters produces bars that no scanner accepts;
+- **has no quiet zone** — the space glyph in most barcode fonts has zero
+  advance, so you cannot type one;
+- **gives no control over the narrow-bar width**, which is what a scanner
+  actually measures;
+- has to be embedded or outlined in every export.
+
 ## Auto-Mapping Rules
 
 The auto-mapping system follows these rules in order:
@@ -196,6 +238,8 @@ Layers starting with "custom" are automatically mapped as custom static text:
 4. **Group related elements**: You can group elements under a layer, but the layer ID is what matters
 5. **Name the line break when the artwork has one**: if a text layer is set over
    two lines, use a `_LineBreak_` field name rather than relying on word wrap
+6. **Use a `barcode_` layer rather than a barcode font**: see
+   [Barcodes](#barcodes)
 
 ### Exporting from Illustrator
 

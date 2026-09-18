@@ -78,7 +78,8 @@ globalThis.document = {
 const { parseTemplateString, renderSvgWithData, scopeSvgMarkup } = await import('../src/lib/svgTemplate.ts')
 const { generateAutoMappings } = await import('../src/lib/autoMapping.ts')
 const { parseField } = await import('../src/lib/fieldParser.ts')
-const { normalizeStandardFieldName } = await import('../src/lib/standardFields.ts')
+const { normalizeStandardFieldName, parseBarcodeLayerId } = await import('../src/lib/standardFields.ts')
+const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await import('../src/lib/barcode.ts')
 
 // --- helpers ---------------------------------------------------------------
 
@@ -303,6 +304,118 @@ for (const [layerId, expected] of resolutionCases) {
     assert.equal(normalizeStandardFieldName(layerId), expected)
   })
 }
+
+// --- the ID card pair -------------------------------------------------------
+
+section('id-card-front.svg')
+
+const idFront = await parseTemplateString(readReference('id-card-front.svg'), 'id-card-front.svg')
+const idFrontMappings = generateAutoMappings(idFront.autoFields)
+
+check('auto-maps the name, id and photo', () => {
+  const mapped = idFrontMappings.map((mapping) => mapping.standardFieldName).sort()
+  assert.deepEqual(mapped, ['fullName_First_Last', 'photo', 'studentId'])
+})
+
+check('does not report the photo twice', () => {
+  const images = idFront.autoFields.filter((field) => field.type === 'image')
+  assert.equal(images.length, 1, `expected one image field, got ${images.map((f) => f.sourceId).join(', ')}`)
+})
+
+section('id-card-back.svg')
+
+const idBack = await parseTemplateString(readReference('id-card-back.svg'), 'id-card-back.svg')
+const idBackMappings = generateAutoMappings(idBack.autoFields)
+
+check('recognises the barcode layer', () => {
+  const barcode = idBack.autoFields.find((field) => field.sourceId === 'barcode_codabar_studentId')
+  assert.ok(barcode, 'the barcode layer should be detected')
+  assert.equal(barcode.type, 'barcode')
+  assert.equal(barcode.barcodeSymbology, 'codabar')
+})
+
+check('maps the barcode to the field named in its layer id', () => {
+  const mapping = idBackMappings.find((entry) => entry.svgLayerId === 'barcode_codabar_studentId')
+  assert.ok(mapping, 'the barcode layer should auto-map')
+  assert.equal(mapping.standardFieldName, 'studentId')
+})
+
+check('replaces the barcode layer with generated bars', () => {
+  const byLayer = new Map(idBackMappings.map((mapping) => [mapping.svgLayerId, mapping]))
+  const cardData = {}
+  for (const field of idBack.autoFields) {
+    const mapping = byLayer.get(field.sourceId || field.id)
+    if (mapping) cardData[field.id] = parseField(mapping.standardFieldName, { studentId: '2002014682274023' })
+  }
+  const markup = renderSvgWithData(idBack.metadata, idBack.autoFields, cardData)
+
+  const element = new DOMParser()
+    .parseFromString(markup, 'image/svg+xml')
+    .getElementById('barcode_codabar_studentId')
+  assert.ok(element, 'the barcode layer should still be present')
+  assert.equal(element.tagName.toLowerCase(), 'g', 'the <text> placeholder should become a group')
+  assert.equal(element.getAttribute('data-idcard-barcode'), 'codabar')
+  assert.ok(element.querySelector('path'), 'the group should contain drawn bars')
+  assert.equal(element.querySelector('text'), null, 'the value must not survive as text in the barcode')
+})
+
+section('barcode fonts')
+
+check('flags a template that draws barcodes with a font', async () => {
+  // The artwork as supplied, before the barcode layer was named.
+  const fontDrawn = readReference('id-card-back.svg').replace(
+    'id="barcode_codabar_studentId" ',
+    '',
+  )
+  const parsed = await parseTemplateString(fontDrawn, 'font-barcode.svg')
+  assert.ok(parsed.metadata.warnings?.length, 'a font-drawn barcode should produce a warning')
+  assert.match(parsed.metadata.warnings[0], /Codabarlarge/)
+})
+
+check('does not flag the named barcode layer', () => {
+  assert.equal(idBack.metadata.warnings, undefined)
+})
+
+// --- barcode encoding -------------------------------------------------------
+
+section('barcode encoding')
+
+check('supplies Codabar start and stop characters', () => {
+  // The value on the supplied artwork has neither, which is why it does not scan.
+  assert.equal(normalizeBarcodeText('codabar', '2002014682274023'), 'A2002014682274023B')
+  // An explicit pair is left alone.
+  assert.equal(normalizeBarcodeText('codabar', 'C123D'), 'C123D')
+})
+
+check('rejects characters Codabar cannot encode', () => {
+  assert.equal(validateBarcodeText('codabar', 'ABC123').valid, false)
+  assert.equal(validateBarcodeText('codabar', '1234').valid, true)
+})
+
+check('generates vector bars, not text', () => {
+  const barcode = generateBarcodeSvg({ symbology: 'codabar', text: '2002014682274023' })
+  assert.ok(barcode.width > 0 && barcode.height > 0)
+  assert.ok(barcode.svg.includes('<path'), 'expected path geometry')
+  assert.ok(!barcode.svg.includes('<text'), 'expected no text')
+})
+
+check('honours the layer colour', () => {
+  const barcode = generateBarcodeSvg({ symbology: 'codabar', text: '1234', color: '#010101' })
+  assert.ok(barcode.svg.includes('010101'), 'the bar colour should carry through')
+})
+
+check('parses barcode layer ids', () => {
+  assert.deepEqual(parseBarcodeLayerId('barcode_codabar_studentId'), {
+    symbology: 'codabar',
+    standardFieldName: 'studentId',
+  })
+  assert.deepEqual(parseBarcodeLayerId('barcode_code128'), {
+    symbology: 'code128',
+    standardFieldName: null,
+  })
+  assert.equal(parseBarcodeLayerId('barcode_nonsense'), null)
+  assert.equal(parseBarcodeLayerId('studentId'), null)
+})
 
 // --- result -----------------------------------------------------------------
 

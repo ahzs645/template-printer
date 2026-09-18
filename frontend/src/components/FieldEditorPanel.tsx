@@ -74,7 +74,7 @@ export function FieldEditorPanel({ field, onChange, fontOptions, missingFonts }:
           />
         </div>
 
-        {(field.type === 'image' || field.width !== undefined) && (
+        {(field.type === 'image' || field.type === 'barcode' || field.width !== undefined) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <Label htmlFor="field-width">Width (% of width)</Label>
             <Input
@@ -89,7 +89,7 @@ export function FieldEditorPanel({ field, onChange, fontOptions, missingFonts }:
           </div>
         )}
 
-        {(field.type === 'image' || field.height !== undefined) && (
+        {(field.type === 'image' || field.type === 'barcode' || field.height !== undefined) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <Label htmlFor="field-height">Height (% of height)</Label>
             <Input

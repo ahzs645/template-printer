@@ -1,3 +1,4 @@
+import type { BarcodeSymbology } from './barcode'
 import type { TemplateSummary } from './templates'
 
 export type FieldType = 'text' | 'image' | 'barcode' | 'date'
@@ -16,6 +17,8 @@ export type TemplateMeta = {
   rawSvg: string
   objectUrl: string
   fonts: string[]
+  /** Problems worth telling the user about after import. */
+  warnings?: string[]
 }
 
 export type ImageValue = {
@@ -45,6 +48,8 @@ export type FieldDefinition = {
   wrapWidth?: number
   /** Line spacing taken from the template's own tspan layout, in SVG user units. */
   lineHeight?: number
+  /** For `type: 'barcode'`, which symbology to generate. */
+  barcodeSymbology?: BarcodeSymbology
 }
 
 export type CardData = Record<string, CardDataValue>

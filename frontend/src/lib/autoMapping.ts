@@ -1,6 +1,6 @@
 import type { FieldDefinition } from './types'
 import type { FieldMapping } from '../components/FieldMappingDialog'
-import { CUSTOM_STATIC_VALUE, normalizeStandardFieldName } from './standardFields'
+import { CUSTOM_STATIC_VALUE, normalizeStandardFieldName, parseBarcodeLayerId } from './standardFields'
 
 /**
  * Resolve an SVG layer id to a standard field name, including the common
@@ -9,6 +9,10 @@ import { CUSTOM_STATIC_VALUE, normalizeStandardFieldName } from './standardField
 function resolveStandardFieldName(layerId: string): string | null {
   const standard = normalizeStandardFieldName(layerId)
   if (standard) return standard
+
+  // barcode_<symbology>_<fieldName> encodes that field's value.
+  const barcode = parseBarcodeLayerId(layerId)
+  if (barcode?.standardFieldName) return barcode.standardFieldName
 
   const normalizedId = layerId.toLowerCase()
 

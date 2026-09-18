@@ -19,6 +19,7 @@ import {
   PenTool,
   Share2,
   Eye,
+  AlertTriangle,
 } from 'lucide-react'
 
 import './App.css'
@@ -110,6 +111,7 @@ function App() {
   const [sharePayload, setSharePayload] = useState<SharedTemplatePayload | null>(null)
   // Set when the open template arrived through a view-only share link.
   const [isSharedReadOnly, setIsSharedReadOnly] = useState(false)
+  const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
   const shareTargetHandled = useRef(false)
   const previousObjectUrl = useRef<string | null>(null)
   const fontInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -401,6 +403,7 @@ function App() {
         ? `Imported ${autoFields.length} editable placeholder${autoFields.length === 1 ? '' : 's'}.`
         : 'Template imported. No placeholders detected - add fields manually to continue.'
       setStatusMessage(baseMessage)
+      setTemplateWarnings(metadata.warnings ?? [])
 
       try {
         const savedTemplate = await storage.createTemplate(file, metadata, 'design')
@@ -458,6 +461,8 @@ function App() {
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
       setSelectedExportCardDesignId(null)
+
+      setTemplateWarnings(metadata.warnings ?? [])
 
       const existingMappings = await storage.getFieldMappings(templateSummary.id)
       if (existingMappings.length === 0 && nextFields.length > 0) {
@@ -543,6 +548,7 @@ function App() {
         })
         setFieldMappings(mappingsMap)
 
+        setTemplateWarnings(metadata.warnings ?? [])
         setIsSharedReadOnly(target.mode === 'view')
         setActiveTab('design')
         setDesignMode('import')
@@ -1501,6 +1507,17 @@ function App() {
                     </Button>
                   </div>
                 )}
+
+                {templateWarnings.map((warning) => (
+                  <div
+                    key={warning}
+                    className="status-message status-message--warning"
+                    style={{ margin: '8px 0', display: 'flex', gap: 6, alignItems: 'flex-start' }}
+                  >
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>{warning}</span>
+                  </div>
+                ))}
 
                 {/* Status Messages */}
                 {statusMessage && (

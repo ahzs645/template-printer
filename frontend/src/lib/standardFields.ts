@@ -7,6 +7,8 @@
  * See docs/svg-layer-naming.md for the designer-facing documentation.
  */
 
+import { normalizeSymbology, type BarcodeSymbology } from './barcode'
+
 /** Value used to mark a layer as free-form static text rather than user data. */
 export const CUSTOM_STATIC_VALUE = '__custom__'
 
@@ -193,4 +195,35 @@ export function normalizeStandardFieldName(layerId: string): string | null {
 /** True when the layer id resolves to a standard field name. */
 export function isStandardFieldName(layerId: string): boolean {
   return normalizeStandardFieldName(layerId) !== null
+}
+
+/**
+ * A layer that should be replaced with a generated barcode.
+ *
+ * Named `barcode_<symbology>` or `barcode_<symbology>_<fieldName>`:
+ *
+ *   barcode_codabar             -> pick the source field in Map Fields
+ *   barcode_codabar_studentId   -> encodes the user's student id
+ *   barcode_code128_studentId   -> same value, Code 128
+ */
+export type BarcodeLayer = {
+  symbology: BarcodeSymbology
+  /** The standard field whose value is encoded, when the layer id names one. */
+  standardFieldName: string | null
+}
+
+export function parseBarcodeLayerId(layerId: string): BarcodeLayer | null {
+  const parts = layerId.trim().split('_').filter(Boolean)
+  if (parts.length < 2) return null
+  if (parts[0].toLowerCase() !== 'barcode') return null
+
+  const symbology = normalizeSymbology(parts[1])
+  if (!symbology) return null
+
+  const remainder = parts.slice(2)
+  if (remainder.length === 0) return { symbology, standardFieldName: null }
+
+  const standardFieldName = normalizeStandardFieldName(remainder.join('_'))
+  // An unrecognised tail is still a barcode layer; it just has no source field.
+  return { symbology, standardFieldName }
 }

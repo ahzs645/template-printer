@@ -1,4 +1,7 @@
 import opentype from 'opentype.js'
+
+import { generateBarcodeSvg, isBarcodeFontFamily } from './barcode'
+import { parseBarcodeLayerId } from './standardFields'
 import type {
   CardData,
   CardDataValue,
@@ -465,6 +468,8 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
     const idBase = idBaseFromSource || slugify(content)
     const id = `${idBase || 'text'}_${index}`
 
+    const barcodeLayer = parseBarcodeLayerId(sourceId)
+
     fields.push({
       id,
       // Editors split a single word across tspans to apply kerning, so the raw
@@ -481,8 +486,11 @@ function extractTextFields(svg: Document, dimensions: { width?: number; height?:
       fontFamily,
       fontWeight,
       sourceId,
-      wrapWidth,
+      wrapWidth: barcodeLayer ? undefined : wrapWidth,
       lineHeight,
+      ...(barcodeLayer
+        ? { type: 'barcode' as const, barcodeSymbology: barcodeLayer.symbology }
+        : {}),
     })
 
     index += 1
@@ -704,6 +712,7 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
       : undefined
 
   const fonts = extractFontFamilies(doc)
+  const warnings = collectTemplateWarnings(doc, fonts)
   const placeholderFields = extractPlaceholders(doc, { width, height })
   const textFields = placeholderFields.length > 0 ? [] : extractTextFields(doc, { width, height })
   const imageFields = placeholderFields.length > 0 ? [] : extractImagePlaceholders(doc, { width, height })
@@ -719,6 +728,7 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
     objectUrl,
     viewBox,
     fonts,
+    warnings: warnings.length > 0 ? warnings : undefined,
   }
 
   const autoFields = placeholderFields.length > 0 ? placeholderFields : [...textFields, ...imageFields]
@@ -844,6 +854,34 @@ export function toSvgScopePrefix(value: string): string {
   return cleaned ? `${cleaned}-` : ''
 }
 
+/**
+ * Problems worth raising as soon as a template is imported.
+ */
+function collectTemplateWarnings(doc: Document, fonts: string[]): string[] {
+  const warnings: string[] = []
+
+  const barcodeFonts = fonts.filter(isBarcodeFontFamily)
+  if (barcodeFonts.length > 0) {
+    const cssStyles = parseCssTextStyles(doc)
+    const drawnWithFont = Array.from(doc.querySelectorAll('text')).filter((node) => {
+      if (node.closest('defs')) return false
+      const family = getFontFamily(node, cssStyles)
+      return isBarcodeFontFamily(family) && !parseBarcodeLayerId(node.getAttribute('id') || '')
+    })
+
+    if (drawnWithFont.length > 0) {
+      warnings.push(
+        `This template draws ${drawnWithFont.length} barcode${drawnWithFont.length === 1 ? '' : 's'} ` +
+          `with the "${barcodeFonts.join('", "')}" font. Rename the layer to barcode_<symbology> ` +
+          '(e.g. barcode_codabar_studentId) to generate a real barcode instead — a font-drawn barcode ' +
+          'prints as plain text if the font is missing, and carries no start/stop characters or quiet zone.',
+      )
+    }
+  }
+
+  return warnings
+}
+
 export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(template.rawSvg, 'image/svg+xml')
@@ -861,6 +899,15 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
     if (field.type === 'image') {
       const value = cardData[field.id]
       applySvgImageField(doc, target, asImageValue(value))
+      continue
+    }
+
+    if (field.type === 'barcode') {
+      const value = cardData[field.id]
+      applySvgBarcodeField(doc, target, field, typeof value === 'string' ? value : undefined, {
+        width: template.viewBox?.width ?? template.width,
+        height: template.viewBox?.height ?? template.height,
+      })
       continue
     }
 
@@ -914,6 +961,97 @@ function bakeCssTextStylesForElement(element: Element, cssStyles: CssTextStyles)
       element.setAttribute(attribute, String(value))
     }
   }
+}
+
+/**
+ * Replace a barcode layer with generated bars.
+ *
+ * The placeholder in the artwork is a <text> element, so its font size is what
+ * the designer sized the barcode to. The generated barcode is scaled to that
+ * height and sits on the same baseline, which is where a barcode font would
+ * have drawn it.
+ */
+function applySvgBarcodeField(
+  doc: Document,
+  element: Element,
+  field: FieldDefinition,
+  rawValue: string | undefined,
+  dimensions?: { width?: number; height?: number },
+): void {
+  const value = rawValue?.trim()
+  const symbology = field.barcodeSymbology
+  if (!value || !symbology) return
+
+  const cssStyles = parseCssTextStyles(doc)
+  const targetHeight = field.fontSize ?? getFontSize(element, cssStyles) ?? 16
+  // Width and height are optional overrides expressed as a percentage of the
+  // card, for when the natural aspect of the symbology is not what the artwork
+  // needs. A wider barcode has wider bars, which scans more reliably.
+  const targetWidth =
+    field.width !== undefined && dimensions?.width
+      ? (field.width / 100) * dimensions.width
+      : undefined
+  const explicitHeight =
+    field.height !== undefined && dimensions?.height
+      ? (field.height / 100) * dimensions.height
+      : undefined
+
+  let barcode
+  try {
+    barcode = generateBarcodeSvg({
+      symbology,
+      text: value,
+      color: field.color,
+    })
+  } catch (error) {
+    // A barcode that cannot be encoded must not silently become something that
+    // looks like one, so leave the placeholder in place and say why.
+    console.error(`Could not generate the ${symbology} barcode for "${value}"`, error)
+    return
+  }
+
+  const barcodeDoc = new DOMParser().parseFromString(barcode.svg, 'image/svg+xml')
+  const barcodeRoot = barcodeDoc.documentElement
+  if (!barcodeRoot || barcodeRoot.querySelector('parsererror')) return
+
+  const heightScale = (explicitHeight ?? targetHeight) / barcode.height
+  const scaleX = targetWidth !== undefined ? targetWidth / barcode.width : heightScale
+  const scaleY = heightScale
+  const scaledWidth = barcode.width * scaleX
+
+  // Match the placeholder's alignment.
+  const anchor = element.getAttribute('text-anchor')?.toLowerCase() ?? (field.align === 'center' ? 'middle' : field.align === 'right' ? 'end' : 'start')
+  const anchorShift = anchor === 'middle' ? -scaledWidth / 2 : anchor === 'end' ? -scaledWidth : 0
+
+  const firstTspan = element.querySelector('tspan')
+  const baseX = element.getAttribute('x') ?? firstTspan?.getAttribute('x') ?? '0'
+  const baseY = element.getAttribute('y') ?? firstTspan?.getAttribute('y') ?? '0'
+
+  const group = doc.createElementNS(SVG_NS, 'g')
+  group.setAttribute('data-idcard-barcode', symbology)
+  group.setAttribute(
+    'transform',
+    [
+      element.getAttribute('transform'),
+      `translate(${baseX} ${baseY})`,
+      `translate(${anchorShift} 0)`,
+      `scale(${scaleX} ${scaleY})`,
+      // bwip-js draws downward from the origin; lift it onto the baseline.
+      `translate(0 ${-barcode.height})`,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
+
+  // Keep the layer id on the replacement so a re-render still finds it.
+  const id = element.getAttribute('id')
+  if (id) group.setAttribute('id', id)
+
+  for (const child of Array.from(barcodeRoot.children)) {
+    group.appendChild(doc.importNode(child, true))
+  }
+
+  element.parentNode?.replaceChild(group, element)
 }
 
 /**

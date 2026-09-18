@@ -5,8 +5,10 @@ import pipeline:
 
 | File | Role | Field layers |
 |------|------|--------------|
-| `card-front.svg` | Card front | `fullName_First_Last`, `position` |
-| `card-back.svg` | Card back | none (artwork only) |
+| `card-front.svg` | Staff card front | `fullName_First_LineBreak_Last`, `position_AllCaps` |
+| `card-back.svg` | Staff card back | none (artwork only) |
+| `id-card-front.svg` | Student ID front | `fullName_First_Last`, `studentId`, `photo` |
+| `id-card-back.svg` | Student ID back | `studentId`, `barcode_codabar_studentId`, `customLibraryNumberLabel` |
 
 They are kept here as a realistic sample of what comes out of Illustrator's
 "Export As → SVG", which is quite different from hand-written SVG. Use them when
@@ -68,3 +70,32 @@ worth calling out:
 
 Neither rename changes the artwork — only the layer id in Illustrator's Layers
 panel.
+
+
+## The student ID pair (`id-card-front.svg` / `id-card-back.svg`)
+
+A front and back that belong together, and the barcode case.
+
+### What was changed from the supplied artwork
+
+- **The back had no named layers at all**, so nothing auto-mapped. The library
+  number is now split into a `customLibraryNumberLabel` layer (the static
+  "Library Number: " text) and a `studentId` layer (the value).
+- **The barcode was drawn with the `Codabarlarge` font**, as a text layer
+  reading `2002014682274023`. That is not a scannable Codabar: the symbology
+  requires a start and a stop character (`A`–`D`), and the value has neither —
+  bwip-js rejects it outright with
+  `Codabar start and stop characters must be one of A B C or D`. The layer is
+  now named `barcode_codabar_studentId` and is generated as vector bars, with
+  the start/stop characters supplied automatically. No font to embed, a real
+  quiet zone, and it cannot silently degrade into printed digits.
+- **The photo was detected twice**, once as the `photo` layer and once as the
+  `Layeredphoto` group wrapping it. The wrapper is now `data-layer` instead of
+  `id`, so only the real placeholder shows up as a field.
+
+### What is worth knowing about the front
+
+The name layer is `fullName_First_Last` on a single line, and the artwork gives
+it a fixed strip beside the photo. Unlike the staff card it has no second line
+to wrap into, so a long name runs to the edge. Set **Width** in Field Settings
+if you need it bounded.
