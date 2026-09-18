@@ -82,6 +82,11 @@ docker-compose up
 overlays, without changing the file. **Lanyard** hangs the card from its punch so
 you can see how it sits when worn.
 
+**Packages**: a card design can be saved as a `.zip` holding the artwork for
+both sides, the field mappings, the card area and the fonts it uses. Opening one
+restores all of it, so a design moves between machines without the fonts being
+loaded again. Share links stay the lightweight option — they cannot carry fonts.
+
 **Test Cards** runs the open template against the records that break ID cards —
 very short and very long names, missing middle names, accents, apostrophes,
 identifiers a barcode cannot encode — and reports what overflowed, what had to be

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, Copy, Eye, Pencil } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Eye, Package, Pencil } from 'lucide-react'
 
 import {
   Dialog,
@@ -23,6 +23,8 @@ export type ShareTemplateDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   payload: SharedTemplatePayload | null
+  /** Build and download a package, which carries the fonts a link cannot. */
+  onDownloadPackage?: () => Promise<void> | void
 }
 
 function formatSize(characters: number): string {
@@ -30,7 +32,13 @@ function formatSize(characters: number): string {
   return `${(characters / 1024).toFixed(1)} KB`
 }
 
-export function ShareTemplateDialog({ open, onOpenChange, payload }: ShareTemplateDialogProps) {
+export function ShareTemplateDialog({
+  open,
+  onOpenChange,
+  payload,
+  onDownloadPackage,
+}: ShareTemplateDialogProps) {
+  const [packaging, setPackaging] = useState(false)
   const [links, setLinks] = useState<ShareLinkSet | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
@@ -180,8 +188,8 @@ export function ShareTemplateDialog({ open, onOpenChange, payload }: ShareTempla
                   : ''}
               </p>
               <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0 }}>
-                Fonts and photos are not included — the recipient supplies those from their own
-                library.
+                Fonts and photos are not included — a link has no room for them. Download a package
+                instead to send the design with its fonts.
               </p>
               <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0 }}>
                 View-only is a convenience, not a lock: anyone with either link can read the
@@ -195,6 +203,26 @@ export function ShareTemplateDialog({ open, onOpenChange, payload }: ShareTempla
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
+          {onDownloadPackage && (
+            <Button
+              type="button"
+              disabled={packaging}
+              onClick={async () => {
+                setPackaging(true)
+                try {
+                  await onDownloadPackage()
+                } catch (cause) {
+                  console.error(cause)
+                  setError(cause instanceof Error ? cause.message : 'Could not build the package.')
+                } finally {
+                  setPackaging(false)
+                }
+              }}
+            >
+              <Package size={16} style={{ marginRight: 6 }} />
+              {packaging ? 'Packaging…' : 'Download package (.zip)'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

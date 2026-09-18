@@ -174,6 +174,12 @@ one person's number into the template. Set **Default value** in Field Settings
 for what to encode when a record has nothing — a blank barcode is worse than a
 known placeholder.
 
+**Sharing a design**: a share link carries the artwork and the field mappings
+but not the fonts — there is no room for them in a URL. **Download package
+(.zip)** in the same dialog carries the design, both sides, what every layer
+means, the card area and the font files, so opening it elsewhere does not mean
+finding the fonts again. Open a package with the same **Open** button as an SVG.
+
 **Reading an existing barcode**: **Read Barcode** in the ribbon decodes a photo
 or scan of a card you already issue and reports the symbology and the value. With
 a field selected it applies both, which is the quickest way to match an existing

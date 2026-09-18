@@ -69,6 +69,12 @@ import { TestCardsDialog } from './components/TestCardsDialog'
 import { LanyardDialog } from './components/LanyardDialog'
 import { CardAreaDialog } from './components/CardAreaDialog'
 import { trimRectInMm, type AppliedCardArea } from './lib/cardTrim'
+import {
+  createTemplatePackage,
+  isTemplatePackage,
+  packageFileName,
+  readTemplatePackage,
+} from './lib/templatePackage'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
@@ -487,6 +493,17 @@ function App() {
     if (selected.length === 0) return
     setErrorMessage(null)
 
+    const packaged = selected.find(isTemplatePackage)
+    if (packaged) {
+      try {
+        await handleOpenPackage(packaged)
+      } catch (error) {
+        console.error(error)
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to open the package')
+      }
+      return
+    }
+
     if (selected.length >= 2) {
       try {
         await handleTemplatePairUpload(selected.slice(0, 2))
@@ -799,6 +816,132 @@ function App() {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Could not apply the card area.')
     }
+  }
+
+  /**
+   * Build a package: the design, what its layers mean, and the fonts it asks
+   * for, so it opens somewhere else without the fonts being loaded again.
+   */
+  const handleDownloadPackage = async () => {
+    if (!template?.rawSvg) return
+
+    const mappingsFor = (mappings: Record<string, string>, customs: Record<string, string>): FieldMapping[] =>
+      Object.entries(mappings).map(([svgLayerId, standardFieldName]) => ({
+        svgLayerId,
+        standardFieldName,
+        ...(customs[svgLayerId] !== undefined ? { customValue: customs[svgLayerId] } : {}),
+      }))
+
+    const availableFonts = await storage.listFonts()
+
+    // A linked pair is packaged whole, so the other side comes along with it.
+    let back: { template: TemplateMeta; fields: FieldDefinition[]; mappings: FieldMapping[] } | null = null
+    const otherId = linkedDesign
+      ? activeSide === 'front'
+        ? linkedDesign.backTemplateId
+        : linkedDesign.frontTemplateId
+      : null
+    if (otherId) {
+      const summary = designTemplates.find((candidate) => candidate.id === otherId)
+      if (summary) {
+        try {
+          const svgText = await loadTemplateSvgContent(summary)
+          const parsed = await parseTemplateString(svgText, summary.name)
+          const otherMappings = await storage.getFieldMappings(summary.id)
+          back = { template: parsed.metadata, fields: parsed.autoFields, mappings: otherMappings }
+        } catch (error) {
+          console.error('Could not add the other side to the package', error)
+        }
+      }
+    }
+
+    const sampleData: Record<string, string> = {}
+    for (const [key, value] of Object.entries(cardData)) {
+      if (typeof value === 'string' && value.trim()) sampleData[key] = value
+    }
+
+    const front = { template, fields, mappings: mappingsFor(fieldMappings, fieldCustomValues) }
+    const { blob, manifest } = await createTemplatePackage({
+      name: linkedDesign?.name ?? template.name,
+      front: activeSide === 'back' && back ? back : front,
+      back: activeSide === 'back' && back ? front : back,
+      availableFonts,
+      sampleData,
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = packageFileName(manifest.name)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+
+    const missing = manifest.missingFonts?.length
+      ? ` ${manifest.missingFonts.length} font${manifest.missingFonts.length === 1 ? '' : 's'} could not be included: ${manifest.missingFonts.join(', ')}.`
+      : ''
+    setStatusMessage(
+      `Packaged "${manifest.name}" with ${manifest.fonts.length} font${manifest.fonts.length === 1 ? '' : 's'}.${missing}`,
+    )
+  }
+
+  /**
+   * Open a package: both sides, their mappings, and the fonts, registered under
+   * the names the artwork asks for.
+   */
+  const handleOpenPackage = async (file: File) => {
+    const loaded = await readTemplatePackage(file)
+
+    for (const font of loaded.fonts) {
+      try {
+        await loadFontFile(font.name, font.file)
+      } catch (error) {
+        console.error(`Could not load the packaged font "${font.name}"`, error)
+      }
+    }
+
+    const importSide = async (side: typeof loaded.front, activate: boolean) => {
+      const svgFile = new File([side.svg], side.name || 'template.svg', { type: 'image/svg+xml' })
+      const { savedTemplate, metadata } = await importTemplateFile(svgFile, { activate })
+      if (side.mappings.length > 0) {
+        await storage.saveFieldMappings(savedTemplate.id, side.mappings)
+      }
+      if (activate) {
+        // Fields and the card area were settled when the package was made.
+        if (side.fields.length > 0) setFields(side.fields)
+        if (side.cardArea) setTemplate({ ...metadata, cardArea: side.cardArea })
+      }
+      return savedTemplate
+    }
+
+    const frontTemplate = await importSide(loaded.front, true)
+    const backTemplate = loaded.back ? await importSide(loaded.back, false) : null
+    await reloadDesignTemplates()
+    setSelectedTemplateId(frontTemplate.id)
+    setActiveSide('front')
+
+    if (backTemplate) {
+      const design = await createCardDesign({
+        name: loaded.manifest.name,
+        description: null,
+        frontTemplateId: frontTemplate.id,
+        backTemplateId: backTemplate.id,
+      })
+      setLinkedDesignId(design.id)
+      setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })
+      refreshCardDesigns()
+    } else {
+      setLinkedDesignId(null)
+      setOtherSidePreview(null)
+    }
+
+    setCardData(() => ({ ...(loaded.manifest.sampleData ?? {}) }))
+    setFieldMappingsVersion((v) => v + 1)
+    setStatusMessage(
+      `Opened "${loaded.manifest.name}" with ${loaded.fonts.length} font${loaded.fonts.length === 1 ? '' : 's'}` +
+        `${loaded.back ? ' and both sides' : ''}.`,
+    )
   }
 
   const handleOpenShare = () => {
@@ -1428,7 +1571,7 @@ function App() {
             <input
               ref={templateUploadInputRef}
               type="file"
-              accept="image/svg+xml"
+              accept="image/svg+xml,.zip"
               multiple
               onChange={handleTemplateUpload}
               style={{ display: 'none' }}
@@ -2470,6 +2613,7 @@ function App() {
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
         payload={sharePayload}
+        onDownloadPackage={handleDownloadPackage}
       />
 
       {/* Layer Naming Helper Dialog */}
