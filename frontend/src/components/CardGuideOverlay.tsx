@@ -11,9 +11,15 @@ import {
 } from '../lib/cardBlanks'
 
 export type CardGuideOverlayProps = {
-  /** Card size in millimetres. */
-  widthMm: number
-  heightMm: number
+  /** Size of the whole artwork in millimetres — what the preview shows. */
+  artworkWidthMm: number
+  artworkHeightMm: number
+  /** The card itself, which is smaller than the artwork when there is bleed. */
+  cardWidthMm: number
+  cardHeightMm: number
+  /** Where the card starts inside the artwork. */
+  cardOriginXMm?: number
+  cardOriginYMm?: number
   /** Rendered size of the preview in pixels. */
   previewWidth: number
   previewHeight: number
@@ -35,8 +41,12 @@ export type CardGuideOverlayProps = {
  * draw them and guess the measurements.
  */
 export function CardGuideOverlay({
-  widthMm,
-  heightMm,
+  artworkWidthMm,
+  artworkHeightMm,
+  cardWidthMm,
+  cardHeightMm,
+  cardOriginXMm = 0,
+  cardOriginYMm = 0,
   previewWidth,
   previewHeight,
   magneticStripe = false,
@@ -47,19 +57,24 @@ export function CardGuideOverlay({
   punchShape = 'slot',
   safeArea = false,
 }: CardGuideOverlayProps) {
-  if (!widthMm || !heightMm || !previewWidth || !previewHeight) return null
+  if (!artworkWidthMm || !artworkHeightMm || !cardWidthMm || !cardHeightMm) return null
+  if (!previewWidth || !previewHeight) return null
 
-  const scaleX = previewWidth / widthMm
-  const scaleY = previewHeight / heightMm
+  // The preview shows the artwork; the guides are measured from the card's
+  // edge, so every position is shifted by however much bleed precedes it.
+  const scaleX = previewWidth / artworkWidthMm
+  const scaleY = previewHeight / artworkHeightMm
 
   const box = (x: number, y: number, w: number, h: number): CSSProperties => ({
     position: 'absolute',
-    left: x * scaleX,
-    top: y * scaleY,
+    left: (cardOriginXMm + x) * scaleX,
+    top: (cardOriginYMm + y) * scaleY,
     width: w * scaleX,
     height: h * scaleY,
   })
 
+  const widthMm = cardWidthMm
+  const heightMm = cardHeightMm
   const punchRect = getPunchRect({ punch, punchShape, widthMm, heightMm })
   const punchHitsStripe =
     magneticStripe &&

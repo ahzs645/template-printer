@@ -68,7 +68,7 @@ import { BarcodeScanDialog } from './components/BarcodeScanDialog'
 import { TestCardsDialog } from './components/TestCardsDialog'
 import { LanyardDialog } from './components/LanyardDialog'
 import { CardAreaDialog } from './components/CardAreaDialog'
-import type { AppliedCardArea } from './lib/cardTrim'
+import { trimRectInMm, type AppliedCardArea } from './lib/cardTrim'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
 import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
@@ -654,14 +654,39 @@ function App() {
 
   /**
    * The card's physical size, for guides that are specified in millimetres.
-   * Templates measured in pixels fall back to ID-1.
+   *
+   * Once a card area is set this is the trim line, not the artwork around it —
+   * a magnetic stripe sits a fixed distance from the card's edge, not from the
+   * edge of the bleed. Templates measured in pixels fall back to ID-1.
    */
   const cardSizeMm = useMemo(() => {
+    if (template?.cardArea) {
+      return { width: template.cardArea.trimWidthMm, height: template.cardArea.trimHeightMm }
+    }
     if (template?.unit === 'mm' && template.width && template.height) {
       return { width: template.width, height: template.height }
     }
     return { width: ID1_WIDTH_MM, height: ID1_HEIGHT_MM }
   }, [template])
+
+  /**
+   * Where the card sits inside the artwork, in millimetres. The preview shows
+   * the whole artwork, so guides drawn over it have to be offset by the bleed.
+   */
+  const cardOriginMm = useMemo(() => {
+    if (!template?.cardArea) return { x: 0, y: 0 }
+    const artwork = template.viewBox ?? { x: 0, y: 0, width: template.width, height: template.height }
+    const rect = trimRectInMm(template.cardArea.trimBox, artwork, template.width, template.height)
+    return { x: rect.x, y: rect.y }
+  }, [template])
+
+  /** The artwork's full physical size, bleed included. */
+  const artworkSizeMm = useMemo(() => {
+    if (template?.unit === 'mm' && template.width && template.height) {
+      return { width: template.width, height: template.height }
+    }
+    return cardSizeMm
+  }, [template, cardSizeMm])
 
   /**
    * Bring the other side of the linked card design into the editor.
@@ -751,7 +776,14 @@ function App() {
       resetPreviousObjectUrl(metadata.objectUrl)
       setTemplate({
         ...metadata,
-        cardArea: { formatId, keepBleed, bleedMm: applied.bleedMm },
+        cardArea: {
+          formatId,
+          keepBleed,
+          bleedMm: applied.bleedMm,
+          trimBox: applied.trimBox,
+          trimWidthMm: applied.trimWidthMm,
+          trimHeightMm: applied.trimHeightMm,
+        },
       })
       registerTemplateFonts(metadata.fonts)
       // Cropping moves every coordinate, so the fields have to be re-read.
@@ -1940,8 +1972,12 @@ function App() {
                             />
                           ))}
                           <CardGuideOverlay
-                            widthMm={cardSizeMm.width}
-                            heightMm={cardSizeMm.height}
+                            artworkWidthMm={artworkSizeMm.width}
+                            artworkHeightMm={artworkSizeMm.height}
+                            cardWidthMm={cardSizeMm.width}
+                            cardHeightMm={cardSizeMm.height}
+                            cardOriginXMm={cardOriginMm.x}
+                            cardOriginYMm={cardOriginMm.y}
                             previewWidth={previewWidth}
                             previewHeight={previewHeight}
                             magneticStripe={showMagStripeGuide}
@@ -2396,6 +2432,10 @@ function App() {
         backSvg={activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null}
         widthMm={cardSizeMm.width}
         heightMm={cardSizeMm.height}
+        artworkWidthMm={artworkSizeMm.width}
+        artworkHeightMm={artworkSizeMm.height}
+        cardOriginXMm={cardOriginMm.x}
+        cardOriginYMm={cardOriginMm.y}
         hasMagneticStripe={showMagStripeGuide}
         punch={punchGuide}
         punchShape={punchShapeGuide}

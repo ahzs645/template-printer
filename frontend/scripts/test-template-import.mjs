@@ -83,6 +83,7 @@ const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await 
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
 const { TEST_CASES, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
 const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } = await import('../src/lib/cardTrim.ts')
+const { calculateCardPositions } = await import('../src/lib/exporter.ts')
 const {
   ID1_HEIGHT_MM,
   ID1_WIDTH_MM,
@@ -727,6 +728,85 @@ check('the corrected template imports at its real size', async () => {
   // Reading the file's units as CSS pixels gave 66.68 mm, a third too small.
   const guessed = idFront.metadata.width / 3.779527559055
   assert.ok(Math.abs(guessed - 66.68) < 0.05, `guessed size was ${guessed}`)
+})
+
+// --- print placement --------------------------------------------------------
+
+section('print placement')
+
+const POINTS_PER_INCH = 72
+const MM_PER_INCH = 25.4
+const PX_PER_MM = 3.779527559055
+
+const printLayouts = JSON.parse(
+  fs.readFileSync(path.resolve(HERE, '../../backend/data/print-layouts.json'), 'utf8'),
+)
+const canonTray = printLayouts.find((layout) => layout.id === 'layout-canon-j')
+
+/** The exporter's own size conversion, mirrored so the test can predict it. */
+function templateSizeInPoints(template) {
+  const widthMm = template.unit === 'mm' ? template.width : template.width / PX_PER_MM
+  const heightMm = template.unit === 'mm' ? template.height : template.height / PX_PER_MM
+  return [(widthMm / MM_PER_INCH) * POINTS_PER_INCH, (heightMm / MM_PER_INCH) * POINTS_PER_INCH]
+}
+
+/** Where the trim line ends up, in inches, once the card is placed in a slot. */
+function placedTrimInches(template, slot) {
+  const [artworkW, artworkH] = templateSizeInPoints(template)
+  const fractionX = template.cardArea ? template.cardArea.trimBox.width / template.viewBox.width : 243 / 252
+  const fractionY = template.cardArea ? template.cardArea.trimBox.height / template.viewBox.height : 153 / 162
+  const scale = template.cardArea
+    ? Math.min(slot.trimWidth / (artworkW * fractionX), slot.trimHeight / (artworkH * fractionY))
+    : Math.min(slot.width / artworkW, slot.height / artworkH)
+  return [
+    (artworkW * fractionX * scale) / POINTS_PER_INCH,
+    (artworkH * fractionY * scale) / POINTS_PER_INCH,
+  ]
+}
+
+check('a tray slot reserves the card rectangle and the bleed separately', () => {
+  const [slot] = calculateCardPositions(canonTray, 2)
+  assert.ok(Math.abs(slot.trimWidth / POINTS_PER_INCH - 3.375) < 1e-9, 'the card is 3.375 in')
+  assert.ok(Math.abs(slot.trimHeight / POINTS_PER_INCH - 2.125) < 1e-9, 'the card is 2.125 in')
+  // The slot is the card plus the layout's bleed allowance.
+  assert.ok(Math.abs(slot.width / POINTS_PER_INCH - 3.45) < 1e-9)
+  assert.ok(Math.abs(slot.height / POINTS_PER_INCH - 2.2) < 1e-9)
+})
+
+check('artwork with bleed prints undersized until a card area is set', () => {
+  const [slot] = calculateCardPositions(canonTray, 2)
+  const [width, height] = placedTrimInches(idFront.metadata, slot)
+  // Fitting the whole artwork to the slot puts the trim line 2.2% short.
+  assert.ok(width < 3.375 * 0.99, `trim printed at ${width.toFixed(4)} in, expected well under 3.375`)
+  assert.ok(Math.abs(width / 3.375 - height / 2.125) < 0.001, 'both axes are off by the same amount')
+})
+
+check('a card area lands the trim line exactly on the tray slot', async () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {
+    box: trim.box,
+    format: ID1,
+    keepBleed: true,
+  })
+  const reparsed = await parseTemplateString(applied.svg, 'id-card-front.svg')
+  reparsed.metadata.cardArea = {
+    formatId: 'id-1',
+    keepBleed: true,
+    bleedMm: applied.bleedMm,
+    trimBox: applied.trimBox,
+    trimWidthMm: applied.trimWidthMm,
+    trimHeightMm: applied.trimHeightMm,
+  }
+
+  const [slot] = calculateCardPositions(canonTray, 2)
+  const [width, height] = placedTrimInches(reparsed.metadata, slot)
+  assert.ok(Math.abs(width - 3.375) < 0.0005, `trim printed at ${width.toFixed(4)} in`)
+  assert.ok(Math.abs(height - 2.125) < 0.0005, `trim printed at ${height.toFixed(4)} in`)
+})
+
+check('every tray layout in the seed agrees on the card size', () => {
+  const sizes = new Set(printLayouts.map((layout) => `${layout.cardWidth}x${layout.cardHeight}`))
+  assert.deepEqual([...sizes], ['3.3750x2.1250'], 'all layouts target a CR80 card')
 })
 
 // --- result -----------------------------------------------------------------

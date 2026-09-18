@@ -32,6 +32,11 @@ export type LanyardDialogProps = {
   backSvg?: string | null
   widthMm?: number
   heightMm?: number
+  /** Whole artwork size, when it is larger than the card because of bleed. */
+  artworkWidthMm?: number
+  artworkHeightMm?: number
+  cardOriginXMm?: number
+  cardOriginYMm?: number
   /** Whether the back carries a magnetic stripe, so a bad punch can be called out. */
   hasMagneticStripe?: boolean
   punch: PunchPosition
@@ -54,6 +59,10 @@ export function LanyardDialog({
   backSvg,
   widthMm = ID1_WIDTH_MM,
   heightMm = ID1_HEIGHT_MM,
+  artworkWidthMm,
+  artworkHeightMm,
+  cardOriginXMm = 0,
+  cardOriginYMm = 0,
   hasMagneticStripe = false,
   punch,
   punchShape,
@@ -89,6 +98,10 @@ export function LanyardDialog({
           backSvg,
           widthMm,
           heightMm,
+          artworkWidthMm: artworkWidthMm ?? widthMm,
+          artworkHeightMm: artworkHeightMm ?? heightMm,
+          cardOriginXMm,
+          cardOriginYMm,
           punch,
           punchShape,
           strapColor,
@@ -119,7 +132,7 @@ export function LanyardDialog({
     }
     // Rebuilding on every control change would be wasteful; update() handles those.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, frontSvg, backSvg, widthMm, heightMm])
+  }, [open, frontSvg, backSvg, widthMm, heightMm, artworkWidthMm, artworkHeightMm, cardOriginXMm, cardOriginYMm])
 
   useEffect(() => {
     handleRef.current?.update({ punch, punchShape })

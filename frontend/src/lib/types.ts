@@ -26,7 +26,16 @@ export type TemplateMeta = {
    */
   trimCandidates?: TrimCandidate[]
   /** The card area currently in force, once one has been chosen. */
-  cardArea?: { formatId: string; keepBleed: boolean; bleedMm?: { top: number; right: number; bottom: number; left: number } }
+  cardArea?: {
+    formatId: string
+    keepBleed: boolean
+    bleedMm?: { top: number; right: number; bottom: number; left: number }
+    /** The card's rectangle in this template's own units. */
+    trimBox: { x: number; y: number; width: number; height: number }
+    /** Physical size of that rectangle. */
+    trimWidthMm: number
+    trimHeightMm: number
+  }
 }
 
 export type ImageValue = {

@@ -123,3 +123,24 @@ guessed by reading the file's units as CSS pixels — which for these files give
 
 The staff card (`card-front.svg`) is drawn at its finished size with no trim
 line, so no suggestion appears for it.
+
+
+### What the card area changes
+
+Setting it is not cosmetic — three things measure from the card's edge, and all
+three were measuring from the bleed edge instead:
+
+- **Print layouts.** The Canon PVC card tray layouts reserve a 3.375 × 2.125 in
+  card with 0.075 in of bleed around it. The exporter used to fit the whole
+  artwork into that slot by aspect ratio, which put the trim line at 3.300 ×
+  2.078 in — **2.2% undersized**, so the cut would fall inside the design. With
+  a card area set the trim lands on the tray's rectangle exactly.
+- **Guides.** The magnetic stripe sits 4 mm from the card's top edge, not 4 mm
+  from the edge of the bleed. Same for the punch and the safe area.
+- **Lanyard.** The card is cut out of the artwork at the trim line, so the
+  corner radius and the punch are in the right place and the bleed is not shown.
+
+Note that these files carry 1/16 in (1.5875 mm) of bleed per side while the
+Canon trays reserve 0.0375 in per side, so the artwork overhangs the slot
+slightly. That is what bleed is for — it gets cut through — but if your tray
+butts cards up against each other, neighbouring bleed will overlap.

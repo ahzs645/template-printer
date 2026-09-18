@@ -208,13 +208,25 @@ export type CardArea = {
   keepBleed: boolean
 }
 
+export type Bleed = { top: number; right: number; bottom: number; left: number }
+
 export type AppliedCardArea = {
   svg: string
   /** Physical size of the resulting artwork, in millimetres. */
   widthMm: number
   heightMm: number
   /** Bleed outside the trim line, in millimetres, when it was kept. */
-  bleedMm?: { top: number; right: number; bottom: number; left: number }
+  bleedMm?: Bleed
+  /**
+   * The card itself within the resulting artwork, in that artwork's own units.
+   * Everything measured from the card's edge — the magnetic stripe, the punch,
+   * where a print layout expects the trim to land — works off this, not off the
+   * artwork's bounds.
+   */
+  trimBox: Box
+  /** Physical size of that rectangle. */
+  trimWidthMm: number
+  trimHeightMm: number
 }
 
 function round(value: number): number {
@@ -264,11 +276,41 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
   root.setAttribute('height', `${round(heightMm)}mm`)
   root.setAttributeNS(null, 'data-card-format', area.format.id)
 
+  // Cropping moves the origin onto the trim line, so the card then starts at 0,0.
+  const trimBox: Box = area.keepBleed
+    ? { ...area.box }
+    : { x: 0, y: 0, width: area.box.width, height: area.box.height }
+
   return {
     svg: new XMLSerializer().serializeToString(root),
     widthMm: round(widthMm),
     heightMm: round(heightMm),
     bleedMm,
+    trimBox,
+    trimWidthMm: area.format.widthMm,
+    trimHeightMm: area.format.heightMm,
+  }
+}
+
+/**
+ * The card's rectangle expressed in millimetres within the artwork.
+ *
+ * The preview shows the whole artwork, bleed included, so anything drawn over it
+ * has to be offset by however much bleed sits above and to the left.
+ */
+export function trimRectInMm(
+  trimBox: Box,
+  artwork: Box,
+  artworkWidthMm: number,
+  artworkHeightMm: number,
+): { x: number; y: number; width: number; height: number } {
+  const scaleX = artwork.width > 0 ? artworkWidthMm / artwork.width : 0
+  const scaleY = artwork.height > 0 ? artworkHeightMm / artwork.height : 0
+  return {
+    x: (trimBox.x - artwork.x) * scaleX,
+    y: (trimBox.y - artwork.y) * scaleY,
+    width: trimBox.width * scaleX,
+    height: trimBox.height * scaleY,
   }
 }
 

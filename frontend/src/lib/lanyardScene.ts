@@ -22,8 +22,15 @@ export type LanyardOptions = {
   frontSvg: string
   /** Rendered back artwork; the front is reused when absent. */
   backSvg?: string | null
+  /** Size of the whole artwork in millimetres, bleed included. */
+  artworkWidthMm: number
+  artworkHeightMm: number
+  /** The card itself. Anything smaller than the artwork is bleed and is cut off. */
   widthMm: number
   heightMm: number
+  /** Where the card starts inside the artwork, in millimetres. */
+  cardOriginXMm: number
+  cardOriginYMm: number
   punch: PunchPosition
   punchShape: PunchShape
   strapColor: string
@@ -82,20 +89,36 @@ function rasterise(svg: string, widthPx: number, heightPx: number): Promise<HTML
  * Round the corners and cut the punch out of the alpha channel, so the card
  * silhouette is real geometry rather than a rectangle with a drawn-on hole.
  */
+/**
+ * Carve the finished card out of the artwork.
+ *
+ * The texture covers the whole artwork, which may include bleed. The card is
+ * the rectangle inside it: everything beyond the trim line is cut away, the ISO
+ * corner radius is applied at that line rather than at the edge of the canvas,
+ * and the punch is cut where it is on the card.
+ */
 function cutCardShape(
   canvas: HTMLCanvasElement,
-  options: Pick<LanyardOptions, 'widthMm' | 'heightMm' | 'punch' | 'punchShape'>,
+  options: Pick<
+    LanyardOptions,
+    'widthMm' | 'heightMm' | 'artworkWidthMm' | 'artworkHeightMm' | 'cardOriginXMm' | 'cardOriginYMm' | 'punch' | 'punchShape'
+  >,
 ): void {
   const context = canvas.getContext('2d')
   if (!context) return
 
-  const scale = canvas.width / options.widthMm
-  const radius = CORNER_RADIUS_MM * scale
+  const scaleX = canvas.width / options.artworkWidthMm
+  const scaleY = canvas.height / options.artworkHeightMm
+  const originX = options.cardOriginXMm * scaleX
+  const originY = options.cardOriginYMm * scaleY
+  const cardW = options.widthMm * scaleX
+  const cardH = options.heightMm * scaleY
+  const radius = CORNER_RADIUS_MM * Math.min(scaleX, scaleY)
 
-  // Everything outside the rounded rectangle becomes transparent.
+  // Everything outside the card becomes transparent, bleed included.
   context.globalCompositeOperation = 'destination-in'
   context.beginPath()
-  context.roundRect(0, 0, canvas.width, canvas.height, radius)
+  context.roundRect(originX, originY, cardW, cardH, radius)
   context.fill()
 
   const punchRect = getPunchRect({
@@ -108,10 +131,10 @@ function cutCardShape(
   if (punchRect) {
     context.globalCompositeOperation = 'destination-out'
     context.beginPath()
-    const x = punchRect.x * scale
-    const y = punchRect.y * scale
-    const w = punchRect.width * scale
-    const h = punchRect.height * scale
+    const x = originX + punchRect.x * scaleX
+    const y = originY + punchRect.y * scaleY
+    const w = punchRect.width * scaleX
+    const h = punchRect.height * scaleY
     if (options.punchShape === 'round') {
       context.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
     } else {
@@ -146,6 +169,15 @@ function makeStrapCanvas(color: string, text: string): HTMLCanvasElement {
  * card-local units (origin at the card's centre, +y up).
  */
 function getHangGeometry(options: LanyardOptions, cardW: number, cardH: number) {
+  const scaleX = cardW / options.widthMm
+  const scaleY = cardH / options.heightMm
+  // The plane is centred on the artwork, so the card's own centre is offset by
+  // however much bleed sits on one side but not the other.
+  const cardCentreX =
+    (options.cardOriginXMm + options.widthMm / 2 - options.artworkWidthMm / 2) * scaleX
+  const cardCentreY =
+    (options.artworkHeightMm / 2 - (options.cardOriginYMm + options.heightMm / 2)) * scaleY
+
   const punchRect = getPunchRect({
     punch: options.punch,
     punchShape: options.punchShape,
@@ -154,20 +186,19 @@ function getHangGeometry(options: LanyardOptions, cardW: number, cardH: number) 
   })
 
   if (!punchRect) {
-    // No punch: hang from the middle of the top edge, as a clip would.
-    return { offsetX: 0, offsetY: cardH / 2, distance: cardH / 2 }
+    // No punch: hang from the middle of the card's top edge, as a clip would.
+    const offsetY = cardCentreY + cardH / 2
+    return { offsetX: cardCentreX, offsetY, distance: Math.hypot(cardCentreX, offsetY) || cardH / 2 }
   }
 
-  const scaleX = cardW / options.widthMm
-  const scaleY = cardH / options.heightMm
-  const centreX = (punchRect.x + punchRect.width / 2) * scaleX - cardW / 2
+  const offsetX = cardCentreX + (punchRect.x + punchRect.width / 2) * scaleX - cardW / 2
   // SVG y runs down, the scene's runs up.
-  const centreY = cardH / 2 - (punchRect.y + punchRect.height / 2) * scaleY
+  const offsetY = cardCentreY + cardH / 2 - (punchRect.y + punchRect.height / 2) * scaleY
 
   return {
-    offsetX: centreX,
-    offsetY: centreY,
-    distance: Math.hypot(centreX, centreY) || cardH / 2,
+    offsetX,
+    offsetY,
+    distance: Math.hypot(offsetX, offsetY) || cardH / 2,
   }
 }
 
@@ -183,9 +214,12 @@ export async function createLanyardScene(
 
   let options = { ...initial }
 
+  // The plane carries the whole artwork; the card is the part of it left opaque.
   const aspect = options.widthMm / options.heightMm
   let cardW = aspect >= 1 ? CARD_LONG_SIDE : CARD_LONG_SIDE * aspect
   let cardH = aspect >= 1 ? CARD_LONG_SIDE / aspect : CARD_LONG_SIDE
+  let planeW = cardW * (options.artworkWidthMm / options.widthMm)
+  let planeH = cardH * (options.artworkHeightMm / options.heightMm)
 
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
   renderer.setClearColor(0x000000, 0)
@@ -206,7 +240,7 @@ export async function createLanyardScene(
   }
 
   const cardGroup = new THREE.Group()
-  let plane = new THREE.PlaneGeometry(cardW, cardH)
+  let plane = new THREE.PlaneGeometry(planeW, planeH)
   const frontMesh = new THREE.Mesh(plane, cardMaterial.front)
   frontMesh.position.z = 0.008
   const backMesh = new THREE.Mesh(plane, cardMaterial.back)
@@ -354,8 +388,9 @@ export async function createLanyardScene(
 
   async function refreshCardTextures() {
     const longEdge = TEXTURE_LONG_EDGE
-    const widthPx = options.widthMm >= options.heightMm ? longEdge : Math.round(longEdge * aspect)
-    const heightPx = options.widthMm >= options.heightMm ? Math.round(longEdge / aspect) : longEdge
+    const artworkAspect = options.artworkWidthMm / options.artworkHeightMm
+    const widthPx = artworkAspect >= 1 ? longEdge : Math.round(longEdge * artworkAspect)
+    const heightPx = artworkAspect >= 1 ? Math.round(longEdge / artworkAspect) : longEdge
 
     const apply = async (svg: string, material: THREE_NS.MeshStandardMaterial) => {
       try {
@@ -489,15 +524,21 @@ export async function createLanyardScene(
       const geometryChanged =
         next.widthMm !== undefined ||
         next.heightMm !== undefined ||
+        next.artworkWidthMm !== undefined ||
+        next.artworkHeightMm !== undefined ||
+        next.cardOriginXMm !== undefined ||
+        next.cardOriginYMm !== undefined ||
         next.punch !== undefined ||
         next.punchShape !== undefined
 
-      if (next.widthMm !== undefined || next.heightMm !== undefined) {
+      if (next.widthMm !== undefined || next.heightMm !== undefined || next.artworkWidthMm !== undefined || next.artworkHeightMm !== undefined) {
         const nextAspect = options.widthMm / options.heightMm
         cardW = nextAspect >= 1 ? CARD_LONG_SIDE : CARD_LONG_SIDE * nextAspect
         cardH = nextAspect >= 1 ? CARD_LONG_SIDE / nextAspect : CARD_LONG_SIDE
+        planeW = cardW * (options.artworkWidthMm / options.widthMm)
+        planeH = cardH * (options.artworkHeightMm / options.heightMm)
         plane.dispose()
-        plane = new THREE.PlaneGeometry(cardW, cardH)
+        plane = new THREE.PlaneGeometry(planeW, planeH)
         frontMesh.geometry = plane
         backMesh.geometry = plane
       }

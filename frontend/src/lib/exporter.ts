@@ -171,7 +171,7 @@ export async function exportWithPrintLayout(
   const cardImage = await pdfDoc.embedPng(cardPngBytes)
 
   layout.placeholders.forEach((slot) => {
-    const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+    const scale = getSlotScale(template, cardWidthPoints, cardHeightPoints, slot)
     const drawWidth = cardWidthPoints * scale
     const drawHeight = cardHeightPoints * scale
     const offsetX = slot.x + (slot.width - drawWidth) / 2
@@ -344,7 +344,7 @@ export async function exportBatchCardsWithPrintLayout(
       if (cardIndex >= cardImages.length) break
       const cardImage = cardImages[cardIndex++]
 
-      const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+      const scale = getSlotScale(template, cardWidthPoints, cardHeightPoints, slot)
       const drawWidth = cardWidthPoints * scale
       const drawHeight = cardHeightPoints * scale
       const offsetX = slot.x + (slot.width - drawWidth) / 2
@@ -379,10 +379,14 @@ export async function exportBatchCardsWithPrintLayout(
 
 type CardPosition = {
   page: number
+  /** The slot, which is the card plus the layout's bleed allowance. */
   x: number
   y: number
   width: number
   height: number
+  /** The card rectangle the layout expects the trim line to land on, in points. */
+  trimWidth: number
+  trimHeight: number
   cardIndex: number
 }
 
@@ -417,6 +421,8 @@ export function calculateCardPositions(layout: PrintLayout, cardCount: number): 
       y: trimY - bleedHeight / 2,
       width: placedWidth,
       height: placedHeight,
+      trimWidth: cardWidth,
+      trimHeight: cardHeight,
       cardIndex: i,
     })
   }
@@ -467,7 +473,7 @@ export async function exportWithJsonLayout(
 
   // Place the same card in each slot, scaling proportionally
   for (const pos of positions) {
-    const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+    const scale = getSlotScale(template, cardWidthPt, cardHeightPt, pos)
     const drawWidth = cardWidthPt * scale
     const drawHeight = cardHeightPt * scale
     // PDF coordinates are from bottom-left, so flip Y, then center within slot
@@ -579,7 +585,7 @@ export async function exportBatchCardsWithJsonLayout(
       const cardImage = cardImages[pos.cardIndex]
 
       // Scale proportionally and center within the slot
-      const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+      const scale = getSlotScale(template, cardWidthPt, cardHeightPt, pos)
       const drawWidth = cardWidthPt * scale
       const drawHeight = cardHeightPt * scale
       const pdfY = pageHeight - pos.y - pos.height
@@ -666,7 +672,13 @@ export async function exportWithSlotAssignments(
   const slotHeight = firstPos?.height ?? parseFloat(layout.cardHeight) * POINTS_PER_INCH
 
   // Pre-render each slot's card based on its assignment
-  const cardImages: Array<{ image: Awaited<ReturnType<typeof pdfDoc.embedPng>>; cardWidthPt: number; cardHeightPt: number } | null> = []
+  const cardImages: Array<{
+    image: Awaited<ReturnType<typeof pdfDoc.embedPng>>
+    cardWidthPt: number
+    cardHeightPt: number
+    /** The template this card came from, since slots can use different ones. */
+    template: TemplateMeta
+  } | null> = []
   for (const assignment of slotAssignments) {
     if (assignment.source === 'empty') {
       cardImages.push(null)
@@ -735,7 +747,7 @@ export async function exportWithSlotAssignments(
 
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
-    cardImages.push({ image: cardImage, cardWidthPt: cw, cardHeightPt: ch })
+    cardImages.push({ image: cardImage, cardWidthPt: cw, cardHeightPt: ch, template })
   }
 
   // Group positions by page
@@ -757,7 +769,7 @@ export async function exportWithSlotAssignments(
       if (!entry) continue  // Skip null images
 
       // Scale proportionally and center within the slot
-      const scale = Math.min(pos.width / entry.cardWidthPt, pos.height / entry.cardHeightPt)
+      const scale = getSlotScale(entry.template, entry.cardWidthPt, entry.cardHeightPt, pos)
       const drawWidth = entry.cardWidthPt * scale
       const drawHeight = entry.cardHeightPt * scale
       const pdfY = pageHeight - pos.y - pos.height
@@ -791,6 +803,8 @@ type VectorCardEntry = {
   svgMarkup: string
   cardWidthPt: number
   cardHeightPt: number
+  /** The template this card came from, since slots can use different ones. */
+  template: TemplateMeta
 }
 
 async function exportSingleCardVector(
@@ -826,7 +840,7 @@ async function exportWithPrintLayoutVector(
   }
 
   for (const slot of layout.placeholders) {
-    const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+    const scale = getSlotScale(template, cardWidthPoints, cardHeightPoints, slot)
     const drawWidth = cardWidthPoints * scale
     const drawHeight = cardHeightPoints * scale
     const offsetX = slot.x + (slot.width - drawWidth) / 2
@@ -920,7 +934,7 @@ async function exportBatchCardsWithPrintLayoutVector(
     for (const slot of layout.placeholders) {
       if (cardIndex >= cardMarkups.length) break
       const cardMarkup = cardMarkups[cardIndex++]
-      const scale = Math.min(slot.width / cardWidthPoints, slot.height / cardHeightPoints)
+      const scale = getSlotScale(template, cardWidthPoints, cardHeightPoints, slot)
       const drawWidth = cardWidthPoints * scale
       const drawHeight = cardHeightPoints * scale
       const offsetX = slot.x + (slot.width - drawWidth) / 2
@@ -956,7 +970,7 @@ async function exportWithJsonLayoutVector(
   }
 
   for (const pos of positions) {
-    const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+    const scale = getSlotScale(template, cardWidthPt, cardHeightPt, pos)
     const drawWidth = cardWidthPt * scale
     const drawHeight = cardHeightPt * scale
     const offsetX = pos.x + (pos.width - drawWidth) / 2
@@ -1027,7 +1041,7 @@ async function exportBatchCardsWithJsonLayoutVector(
     for (const pos of pagePositions) {
       if (pos.cardIndex >= cardMarkups.length) break
       const cardMarkup = cardMarkups[pos.cardIndex]
-      const scale = Math.min(pos.width / cardWidthPt, pos.height / cardHeightPt)
+      const scale = getSlotScale(template, cardWidthPt, cardHeightPt, pos)
       const drawWidth = cardWidthPt * scale
       const drawHeight = cardHeightPt * scale
       const offsetX = pos.x + (pos.width - drawWidth) / 2
@@ -1128,7 +1142,7 @@ async function exportWithSlotAssignmentsVector(
       ;[cardWidthPt, cardHeightPt] = [cardHeightPt, cardWidthPt]
     }
 
-    cardEntries.push({ svgMarkup, cardWidthPt, cardHeightPt })
+    cardEntries.push({ svgMarkup, cardWidthPt, cardHeightPt, template })
   }
 
   const pageGroups = new Map<number, CardPosition[]>()
@@ -1151,7 +1165,7 @@ async function exportWithSlotAssignmentsVector(
       const entry = cardEntries[pos.cardIndex]
       if (!entry) continue
 
-      const scale = Math.min(pos.width / entry.cardWidthPt, pos.height / entry.cardHeightPt)
+      const scale = getSlotScale(entry.template, entry.cardWidthPt, entry.cardHeightPt, pos)
       const drawWidth = entry.cardWidthPt * scale
       const drawHeight = entry.cardHeightPt * scale
       const offsetX = pos.x + (pos.width - drawWidth) / 2
@@ -1447,6 +1461,52 @@ function breakIntoLines(context: CanvasRenderingContext2D, text: string, maxWidt
   }
 
   return lines.length ? lines : ['']
+}
+
+/**
+ * The card's share of the artwork, when a card area has been set.
+ *
+ * Artwork drawn for card printing usually extends past the card as bleed, so
+ * the artwork's bounds and the card's are not the same rectangle.
+ */
+function getTemplateTrimFractions(template: TemplateMeta): { x: number; y: number } | null {
+  const area = template.cardArea
+  const viewBox = template.viewBox
+  if (!area || !viewBox || !viewBox.width || !viewBox.height) return null
+  return {
+    x: area.trimBox.width / viewBox.width,
+    y: area.trimBox.height / viewBox.height,
+  }
+}
+
+/**
+ * How much to scale artwork to sit correctly in a slot.
+ *
+ * With no card area the whole artwork is fitted to the slot, which is the best
+ * that can be done when nothing says where the card's edge is. With one, the
+ * scale is chosen so the trim line lands on the rectangle the layout reserves
+ * for the card, and the bleed overhangs into the space the slot allows for it.
+ */
+function getSlotScale(
+  template: TemplateMeta,
+  artworkWidthPoints: number,
+  artworkHeightPoints: number,
+  slot: { width: number; height: number; trimWidth?: number; trimHeight?: number },
+): number {
+  const fractions = getTemplateTrimFractions(template)
+  if (fractions && slot.trimWidth && slot.trimHeight) {
+    // A rotated card has had its points swapped; the fractions swap with them.
+    const natural = getTemplateSizeInPoints(template)
+    const rotated =
+      Math.abs(artworkWidthPoints - natural.heightPoints) < 0.01 &&
+      Math.abs(artworkHeightPoints - natural.widthPoints) < 0.01
+    const trimWidthPoints = artworkWidthPoints * (rotated ? fractions.y : fractions.x)
+    const trimHeightPoints = artworkHeightPoints * (rotated ? fractions.x : fractions.y)
+    if (trimWidthPoints > 0 && trimHeightPoints > 0) {
+      return Math.min(slot.trimWidth / trimWidthPoints, slot.trimHeight / trimHeightPoints)
+    }
+  }
+  return getSlotScale(template, artworkWidthPoints, artworkHeightPoints, slot)
 }
 
 function getTemplateSizeInMm(template: TemplateMeta): { widthMm: number; heightMm: number } {
