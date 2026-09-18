@@ -74,7 +74,8 @@ docker-compose up
   card, with a trim line marking the cut. **Card Area** is where you say which
   rectangle is the card and at what physical size; it is offered when a trim line
   is detected and never applied on its own. Getting this wrong is the most common
-  reason cards print at the wrong size.
+  reason cards print at the wrong size. The trim line itself can be removed once
+  it has set the scale, so it does not print as a border on the finished card.
 
 **New Blank** generates any of this as a starting template. **Mag Stripe**,
 **Punch** and **Safe Area** draw the same geometry over an existing design as

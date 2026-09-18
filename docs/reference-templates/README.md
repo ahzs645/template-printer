@@ -117,6 +117,12 @@ Nothing infers this. On import the app says a trim line was found and offers
 - **Crop to the trim line** moves the viewBox onto the card and discards the
   bleed, for when you want the finished card on its own.
 
+**Remove the trim line** takes the rectangle back out once it has been used to
+work out the scale. It is drawn `fill: none; stroke: #010101`, so left in place
+it prints as a black border around the finished card — it is a printer's mark,
+not artwork. Only an unfilled, stroked rectangle is removed; a filled one at the
+same place is a panel or a background and is left alone.
+
 Until a card area is set, the whole canvas is the card and its physical size is
 guessed by reading the file's units as CSS pixels — which for these files gives
 66.7 × 42.9 mm, about a third too small.

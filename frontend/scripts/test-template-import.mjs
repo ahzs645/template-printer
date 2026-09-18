@@ -702,6 +702,57 @@ check('correcting the size keeps the artwork untouched', () => {
   assert.match(applied.svg, /viewBox="0 0 252 162"/, 'coordinates must not move')
 })
 
+check('recognises the trim line as a printer\'s mark, not artwork', () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  // fill:none with a stroke — an outline, so it is safe to drop.
+  assert.equal(trim.outlineOnly, true)
+})
+
+check('takes the trim line out once it has set the scale', () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  const before = (idFront.metadata.rawSvg.match(/<rect[^>]*width="243"[^>]*>/g) || []).length
+  assert.equal(before, 1, 'the artwork starts with the trim rectangle in it')
+
+  const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {
+    box: trim.box,
+    format: ID1,
+    keepBleed: true,
+    removeTrimLine: true,
+  })
+  assert.equal(applied.trimLineRemoved, true)
+  assert.equal((applied.svg.match(/<rect[^>]*width="243"[^>]*>/g) || []).length, 0)
+  // Removing it must not disturb the size it was used to work out.
+  assert.equal(applied.widthMm, 88.9)
+  assert.equal(applied.heightMm, 57.15)
+})
+
+check('leaves the trim line alone unless asked', () => {
+  const trim = idFront.metadata.trimCandidates[0]
+  const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {
+    box: trim.box,
+    format: ID1,
+    keepBleed: true,
+  })
+  assert.equal(applied.trimLineRemoved, false)
+  assert.equal((applied.svg.match(/<rect[^>]*width="243"[^>]*>/g) || []).length, 1)
+})
+
+check('never removes a filled rectangle', () => {
+  // A filled rectangle at the same geometry is a panel, not a printer's mark.
+  const svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 162">',
+    '  <rect x="4.5" y="4.5" width="243" height="153" fill="#f0f0f0"/>',
+    '</svg>',
+  ].join('\n')
+  const applied = applyCardArea(
+    svg,
+    { x: 0, y: 0, width: 252, height: 162 },
+    { box: { x: 4.5, y: 4.5, width: 243, height: 153 }, format: ID1, keepBleed: true, removeTrimLine: true },
+  )
+  assert.equal(applied.trimLineRemoved, false, 'a filled rectangle is part of the design')
+  assert.match(applied.svg, /width="243"/)
+})
+
 check('cropping to the trim line gives the card size exactly', () => {
   const trim = idFront.metadata.trimCandidates[0]
   const applied = applyCardArea(idFront.metadata.rawSvg, idFrontCanvas, {

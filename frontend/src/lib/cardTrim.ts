@@ -47,6 +47,8 @@ export type TrimCandidate = {
   evenInset: boolean
   /** The rectangle carried a stroke, which is how a trim line is usually drawn. */
   stroked: boolean
+  /** Stroked with no fill: a printer's mark rather than part of the design. */
+  outlineOnly: boolean
   /** Closest standard card format by aspect ratio. */
   bestFormat: CardFormat | null
   /** How far the aspect is from that format, as a percentage. */
@@ -80,31 +82,83 @@ function readNumber(value: string | null): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-function hasStroke(element: Element, strokedClasses: Set<string>): boolean {
+/**
+ * Whether the element is painted, as opposed to being a bare outline.
+ *
+ * A trim line is drawn as a stroke with no fill. A rectangle that is filled is
+ * part of the design — a card background, a panel — and must not be removed.
+ * SVG paints a shape black when nothing says otherwise, so the absence of any
+ * fill declaration counts as filled.
+ */
+function hasFill(element: Element, paint: ClassPaint): boolean {
+  const attr = element.getAttribute('fill')
+  if (attr) return attr.trim().toLowerCase() !== 'none'
+
+  const style = element.getAttribute('style')
+  if (style) {
+    const match = /fill\s*:\s*([^;]+)/i.exec(style)
+    if (match) return match[1].trim().toLowerCase() !== 'none'
+  }
+
+  const classes = element.getAttribute('class')?.split(/\s+/).filter(Boolean) ?? []
+  // Later classes win, as they do for equal-specificity CSS rules.
+  for (let i = classes.length - 1; i >= 0; i -= 1) {
+    if (paint.filled.has(classes[i])) return true
+    if (paint.unfilled.has(classes[i])) return false
+  }
+
+  return true
+}
+
+function hasStroke(element: Element, paint: ClassPaint): boolean {
   const attr = element.getAttribute('stroke')
   if (attr && attr.toLowerCase() !== 'none') return true
   const style = element.getAttribute('style')
   if (style && /stroke\s*:\s*(?!none)[^;]+/i.test(style)) return true
   const classAttr = element.getAttribute('class')
   if (!classAttr) return false
-  return classAttr.split(/\s+/).some((name) => strokedClasses.has(name))
+  return classAttr.split(/\s+/).some((name) => paint.stroked.has(name))
 }
 
-/** Class names whose CSS rule sets a stroke. */
-function collectStrokedClasses(doc: Document): Set<string> {
-  const stroked = new Set<string>()
+type ClassPaint = {
+  /** Classes whose rule gives the element a stroke. */
+  stroked: Set<string>
+  /** Classes whose rule gives it a visible fill. */
+  filled: Set<string>
+  /** Classes whose rule explicitly sets `fill: none`. */
+  unfilled: Set<string>
+}
+
+/**
+ * Read the SVG's own stylesheet for the paint each class applies, since vector
+ * editors put all of it there rather than on the elements.
+ */
+function collectClassPaint(doc: Document): ClassPaint {
+  const paint: ClassPaint = { stroked: new Set(), filled: new Set(), unfilled: new Set() }
+
   for (const styleEl of Array.from(doc.querySelectorAll('style'))) {
     const css = styleEl.textContent || ''
     const rulePattern = /([^{}]+)\{([^}]*)\}/g
     let match
     while ((match = rulePattern.exec(css)) !== null) {
-      if (!/stroke\s*:\s*(?!none)[^;]+/i.test(match[2])) continue
+      const [, selectors, body] = match
+      const strokeMatch = /(?:^|[;\s])stroke\s*:\s*([^;]+)/i.exec(body)
+      const fillMatch = /(?:^|[;\s])fill\s*:\s*([^;]+)/i.exec(body)
+      const hasVisibleStroke = Boolean(strokeMatch) && strokeMatch![1].trim().toLowerCase() !== 'none'
+      const fillValue = fillMatch?.[1].trim().toLowerCase()
+
       const classPattern = /\.(-?[_a-zA-Z][\w-]*)/g
       let classMatch
-      while ((classMatch = classPattern.exec(match[1])) !== null) stroked.add(classMatch[1])
+      while ((classMatch = classPattern.exec(selectors)) !== null) {
+        const name = classMatch[1]
+        if (hasVisibleStroke) paint.stroked.add(name)
+        if (fillValue === 'none') paint.unfilled.add(name)
+        else if (fillValue) paint.filled.add(name)
+      }
     }
   }
-  return stroked
+
+  return paint
 }
 
 /** Ignore rectangles too small to be the card, or ones that fill the canvas. */
@@ -122,7 +176,7 @@ const EVEN_INSET_TOLERANCE = 0.5
 export function detectTrimCandidates(doc: Document, canvas: Box): TrimCandidate[] {
   if (!canvas.width || !canvas.height) return []
 
-  const strokedClasses = collectStrokedClasses(doc)
+  const paint = collectClassPaint(doc)
   const canvasArea = canvas.width * canvas.height
   const seen = new Set<string>()
   const candidates: TrimCandidate[] = []
@@ -165,7 +219,9 @@ export function detectTrimCandidates(doc: Document, canvas: Box): TrimCandidate[
       box: { x, y, width, height },
       inset,
       evenInset,
-      stroked: hasStroke(element, strokedClasses),
+      stroked: hasStroke(element, paint),
+      // A stroke with no fill is a printer's mark, so it is safe to drop.
+      outlineOnly: hasStroke(element, paint) && !hasFill(element, paint),
       bestFormat: format,
       aspectErrorPercent: errorPercent,
     })
@@ -206,6 +262,12 @@ export type CardArea = {
   format: CardFormat
   /** Keep the artwork outside the box as bleed, rather than cropping to the box. */
   keepBleed: boolean
+  /**
+   * Take the trim rectangle out of the artwork once it has been used to set the
+   * scale. It is a printer's mark: left in, it prints as a border on the
+   * finished card.
+   */
+  removeTrimLine?: boolean
 }
 
 export type Bleed = { top: number; right: number; bottom: number; left: number }
@@ -227,6 +289,8 @@ export type AppliedCardArea = {
   /** Physical size of that rectangle. */
   trimWidthMm: number
   trimHeightMm: number
+  /** Whether the trim rectangle was taken out of the artwork. */
+  trimLineRemoved: boolean
 }
 
 function round(value: number): number {
@@ -250,6 +314,8 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
 
   const unitsPerMmX = area.box.width / area.format.widthMm
   const unitsPerMmY = area.box.height / area.format.heightMm
+
+  const trimLineRemoved = area.removeTrimLine ? removeTrimRectangle(root, area.box) : false
 
   let widthMm: number
   let heightMm: number
@@ -289,7 +355,49 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
     trimBox,
     trimWidthMm: area.format.widthMm,
     trimHeightMm: area.format.heightMm,
+    trimLineRemoved,
   }
+}
+
+/** How closely a rectangle's geometry has to match to count as the same one. */
+const GEOMETRY_TOLERANCE = 0.01
+
+/**
+ * Take the trim rectangle out of the artwork.
+ *
+ * Only an unfilled, stroked rectangle at exactly that geometry is removed — a
+ * filled one is part of the design, and removing it would take a panel or a
+ * background off the card.
+ */
+function removeTrimRectangle(root: Element, box: Box): boolean {
+  const doc = root.ownerDocument
+  if (!doc) return false
+  const paint = collectClassPaint(doc)
+
+  for (const element of Array.from(root.querySelectorAll('rect'))) {
+    if (element.getAttribute('transform')) continue
+    const x = readNumber(element.getAttribute('x')) ?? 0
+    const y = readNumber(element.getAttribute('y')) ?? 0
+    const width = readNumber(element.getAttribute('width'))
+    const height = readNumber(element.getAttribute('height'))
+    if (width === undefined || height === undefined) continue
+
+    if (
+      Math.abs(x - box.x) > GEOMETRY_TOLERANCE ||
+      Math.abs(y - box.y) > GEOMETRY_TOLERANCE ||
+      Math.abs(width - box.width) > GEOMETRY_TOLERANCE ||
+      Math.abs(height - box.height) > GEOMETRY_TOLERANCE
+    ) {
+      continue
+    }
+
+    if (!hasStroke(element, paint) || hasFill(element, paint)) continue
+
+    element.parentNode?.removeChild(element)
+    return true
+  }
+
+  return false
 }
 
 /**

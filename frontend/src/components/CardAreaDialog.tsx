@@ -54,6 +54,7 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
   const [selectedId, setSelectedId] = useState<string>(WHOLE_CANVAS)
   const [formatId, setFormatId] = useState<string>(CARD_FORMATS[0].id)
   const [keepBleed, setKeepBleed] = useState(true)
+  const [removeTrimLine, setRemoveTrimLine] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -71,12 +72,17 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
   const applied = useMemo<AppliedCardArea | null>(() => {
     if (!template || !canvas || !selected) return null
     try {
-      return applyCardArea(template.rawSvg, canvas, { box: selected.box, format, keepBleed })
+      return applyCardArea(template.rawSvg, canvas, {
+        box: selected.box,
+        format,
+        keepBleed,
+        removeTrimLine: removeTrimLine && selected.outlineOnly,
+      })
     } catch (cause) {
       console.error(cause)
       return null
     }
-  }, [template, canvas, selected, format, keepBleed])
+  }, [template, canvas, selected, format, keepBleed, removeTrimLine])
 
   // What the app is using right now, for comparison.
   const current = template
@@ -200,6 +206,19 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
                 )}
               </div>
 
+              {selected.outlineOnly && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem', fontSize: '0.875rem' }}>
+                  <Switch checked={removeTrimLine} onCheckedChange={setRemoveTrimLine} />
+                  <span>
+                    Remove the trim line from the card
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280' }}>
+                      It is drawn as a stroke with no fill, so it prints as a border on the finished
+                      card. Once it has been used to set the scale there is nothing else it does.
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem', fontSize: '0.875rem' }}>
                 <Switch checked={keepBleed} onCheckedChange={setKeepBleed} />
                 <span>
@@ -254,6 +273,9 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
               </>
             ) : (
               <div style={{ color: '#6b7280' }}>Pick a rectangle to see the printed size.</div>
+            )}
+            {applied?.trimLineRemoved && (
+              <div style={{ color: '#6b7280' }}>The trim line is taken out, so it will not print.</div>
             )}
             <div style={{ color: '#6b7280' }}>
               This applies to the template open in the editor. Download the adjusted SVG to keep it.

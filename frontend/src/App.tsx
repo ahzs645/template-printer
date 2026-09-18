@@ -792,7 +792,8 @@ function App() {
       setSelectedFieldId((current) => (nextFields.some((f) => f.id === current) ? current : nextFields[0]?.id ?? null))
       setStatusMessage(
         `Card area set: printing at ${applied.widthMm} × ${applied.heightMm} mm.` +
-          (applied.bleedMm ? ` Bleed kept at ${applied.bleedMm.top} mm.` : ' Bleed cropped away.'),
+          (applied.bleedMm ? ` Bleed kept at ${applied.bleedMm.top} mm.` : ' Bleed cropped away.') +
+          (applied.trimLineRemoved ? ' Trim line removed.' : ''),
       )
     } catch (error) {
       console.error(error)
