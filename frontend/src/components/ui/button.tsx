@@ -2,23 +2,26 @@ import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../../lib/utils'
 
+// Colours come from the theme variables rather than a fixed palette, so a
+// button matches the panel it sits in under either theme. Heights come from
+// the shared control scale, so a button beside a field lines up with it.
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 dark:ring-offset-zinc-950',
+  'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control font-medium leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200',
-        destructive: 'bg-red-600 text-zinc-50 hover:bg-red-700 dark:bg-red-900 dark:text-zinc-50 dark:hover:bg-red-800',
-        outline: 'border border-zinc-300 bg-transparent hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-800',
-        secondary: 'bg-zinc-200 text-zinc-900 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700',
-        ghost: 'hover:bg-zinc-100 dark:text-zinc-50 dark:hover:bg-zinc-800',
-        link: 'text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50',
+        default: 'bg-accent text-ink-on-accent hover:bg-accent-hover',
+        destructive: 'bg-danger text-danger-on hover:bg-danger-hover',
+        outline: 'border border-line bg-surface text-ink hover:bg-hover',
+        secondary: 'bg-surface-alt text-ink border border-line-subtle hover:bg-hover',
+        ghost: 'text-ink-muted hover:bg-hover hover:text-ink',
+        link: 'text-accent underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
-        lg: 'h-11 rounded-md px-8',
-        icon: 'h-10 w-10',
+        default: 'h-control px-3.5 text-sm',
+        sm: 'h-control-sm px-2.5 text-xs',
+        lg: 'h-control-lg px-6 text-sm',
+        icon: 'h-control w-control p-0',
       },
     },
     defaultVariants: {

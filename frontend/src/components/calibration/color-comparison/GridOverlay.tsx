@@ -106,7 +106,7 @@ export function GridOverlay({
               key={`marker-${gridIndex}`}
               className={`absolute border-2 flex items-center justify-center text-xs font-bold ${isDetected
                   ? 'border-blue-600 bg-blue-500/80 text-white'
-                  : 'border-gray-400 bg-gray-400/30 text-gray-600'
+                  : 'border-line-strong bg-line-strong/30 text-ink-muted'
                 }`}
               style={{
                 left: `${left}px`,

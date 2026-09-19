@@ -18,7 +18,7 @@ export type CardDataPanelProps = {
 
 export function CardDataPanel({ fields, cardData, onTextChange, onImageUpload, onImageAdjust }: CardDataPanelProps) {
   if (fields.length === 0) {
-    return <p style={{ fontSize: '0.875rem', color: '#71717a' }}>No editable fields detected yet.</p>
+    return <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>No editable fields detected yet.</p>
   }
 
   return (
@@ -50,7 +50,7 @@ export function CardDataPanel({ fields, cardData, onTextChange, onImageUpload, o
                   {imageValue ? 'Replace Image' : 'Upload Image'}
                 </Button>
                 {imageValue && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', padding: '0.75rem', backgroundColor: '#f9f9f9', borderRadius: '0.375rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', padding: '0.75rem', backgroundColor: 'var(--bg-surface-alt)', borderRadius: '0.375rem' }}>
                     <div>
                       <Label style={{ fontSize: '0.75rem', marginBottom: '0.25rem', display: 'block' }}>Scale: {imageValue.scale.toFixed(2)}</Label>
                       <Slider

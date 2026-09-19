@@ -171,11 +171,11 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   // Swatch Generator Mode - Dashboard Layout
   if (mode === 'swatch') {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 340px)', gap: 12, padding: 12, height: '100%', overflow: 'auto', alignItems: 'start' }}>
+      <div className="calibration-layout">
         {/* Main Content - Chart */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
           {/* Chart Card */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 14, flex: 1 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 14, flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Color Calibration Chart</h2>
@@ -188,16 +188,8 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                   value={selectedPrintLayoutId ?? ''}
                   onChange={(event) => setSelectedPrintLayoutId(event.target.value || null)}
                   disabled={printLayoutsLoading || printLayouts.length === 0}
-                  style={{
-                    width: 300,
-                    maxWidth: '100%',
-                    height: 32,
-                    borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-panel)',
-                    color: 'var(--text-primary)',
-                    padding: '0 10px',
-                  }}
+                  className="form-input form-input--sm"
+                  style={{ width: 300, maxWidth: '100%' }}
                   title="Select a print layout for tray-ready calibration exports"
                 >
                   {printLayouts.length === 0 ? (
@@ -251,7 +243,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
           </div>
 
           {/* Color Palette Quick Add */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 12 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Quick Add Colors</h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               {['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3',
@@ -273,7 +265,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                     height: 24,
                     borderRadius: 4,
                     backgroundColor: color,
-                    border: colorChart.includes(color) ? '2px solid var(--primary)' : '1px solid var(--border)',
+                    border: colorChart.includes(color) ? '2px solid var(--accent)' : '1px solid var(--border-default)',
                     cursor: colorChart.includes(color) || colorChart.length >= maxColors ? 'not-allowed' : 'pointer',
                     opacity: colorChart.includes(color) ? 0.5 : 1
                   }}
@@ -287,14 +279,15 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
         {/* Right Sidebar */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12 }}>
           {/* Color Picker Card */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 12 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Custom Color</h3>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
               <input
                 type="color"
                 value={selectedColor}
                 onChange={(e) => setSelectedColor(e.target.value)}
-                style={{ width: 48, height: 48, borderRadius: 6, cursor: 'pointer', border: 'none' }}
+                className="color-swatch"
+                style={{ width: 48, height: 48 }}
               />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, fontFamily: 'monospace' }}>{selectedColor}</div>
@@ -313,7 +306,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
           </div>
 
           {/* Settings Card */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 12 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Chart Settings</h3>
 
             <div style={{ marginBottom: 12 }}>
@@ -342,7 +335,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
 
           {/* Selected Swatch Info */}
           {hoveredSwatch !== null && colorChart[hoveredSwatch] && (
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 12 }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 12 }}>
               <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Selected Swatch</h3>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div
@@ -351,7 +344,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                     height: 48,
                     borderRadius: 6,
                     backgroundColor: colorChart[hoveredSwatch],
-                    border: '1px solid var(--border)'
+                    border: '1px solid var(--border-default)'
                   }}
                 />
                 <div>
@@ -368,7 +361,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
           )}
 
           {/* Import/Export Card */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 12 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Configuration</h3>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={handleExportTestPrint}>
@@ -387,12 +380,12 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
           </div>
 
           {/* CR80 Card Preview */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 12 }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>CR80 Card Preview</h3>
             <div
               style={{
                 aspectRatio: '85.6 / 54',
-                border: '2px solid var(--border)',
+                border: '2px solid var(--border-default)',
                 borderRadius: 6,
                 overflow: 'hidden',
                 backgroundColor: 'white',
@@ -453,7 +446,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                         top: `${(gridPos.y / cardLayout.cardHeight) * 100}%`,
                         width: `${(gridPos.width / cardLayout.cardWidth) * 100}%`,
                         height: `${(gridPos.height / cardLayout.cardHeight) * 100}%`,
-                        backgroundColor: color || '#E5E7EB'
+                        backgroundColor: color || 'var(--border-default)'
                       }}
                     />
                   )
@@ -476,9 +469,9 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   // Color Comparison Mode - Split View
   if (mode === 'compare') {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: scannedImage ? 'minmax(0, 0.75fr) minmax(0, 1.25fr)' : 'minmax(0, 1fr)', gap: 12, padding: 12, height: '100%', overflow: 'auto', alignItems: 'start' }}>
+      <div className={`calibration-layout ${scannedImage ? 'calibration-layout--compare' : 'calibration-layout--single'}`}>
         {/* Left - Expected Colors / Upload */}
-        <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', position: scannedImage ? 'sticky' : 'static', top: 12 }}>
+        <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 14, display: 'flex', flexDirection: 'column', position: scannedImage ? 'sticky' : 'static', top: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Expected Colors</h2>
@@ -500,14 +493,14 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                     style={{
                       aspectRatio: '1',
                       borderRadius: 2,
-                      border: '1px solid #1f2937',
-                      background: '#e5e7eb',
+                      border: '1px solid var(--border-strong)',
+                      background: 'var(--bg-active)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 10,
                       fontWeight: 700,
-                      color: '#4b5563',
+                      color: 'var(--text-secondary)',
                     }}
                     title={`Marker M${markerPosition?.id ?? ''}`}
                   >
@@ -523,9 +516,9 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                     key={`empty-${gridIndex}`}
                     style={{
                       aspectRatio: '1',
-                      backgroundColor: '#E5E7EB',
+                      backgroundColor: 'var(--border-default)',
                       borderRadius: 2,
-                      border: '1px solid var(--border)'
+                      border: '1px solid var(--border-default)'
                     }}
                     title="Empty swatch slot"
                   />
@@ -540,7 +533,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                     aspectRatio: '1',
                     backgroundColor: color,
                     borderRadius: 2,
-                    border: '1px solid var(--border)'
+                    border: '1px solid var(--border-default)'
                   }}
                   title={`Swatch #${swatchIndex + 1}: ${color}`}
                 />
@@ -549,7 +542,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
           </div>
 
           {!scannedImage && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)', paddingTop: 24 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-default)', paddingTop: 24 }}>
               <ScanLine size={48} style={{ color: 'var(--text-muted)', marginBottom: 16 }} />
               <h3 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Upload Scanned Chart</h3>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', maxWidth: 300, marginBottom: 16 }}>
@@ -576,7 +569,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
         {/* Right - Scanned Image & Analysis */}
         {scannedImage && (
           <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 12, minWidth: 0 }}>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 14 }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div>
                   <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Scanned Result</h2>
@@ -606,7 +599,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
               />
             </div>
 
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', padding: 14, flex: 1, overflow: 'auto' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', padding: 14, flex: 1, overflow: 'auto' }}>
               <AnalysisDisplay
                 isAnalyzing={isAnalyzing}
                 colorComparisons={colorComparisons}
@@ -625,10 +618,10 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
   if (mode === 'profiles') {
     return (
       <div style={{ padding: 12, height: '100%', width: '100%', overflow: 'auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: selectedProfile ? '280px minmax(0, 1fr)' : '1fr', gap: 12, height: '100%', width: '100%', alignItems: 'stretch' }}>
+        <div className={`calibration-layout ${selectedProfile ? 'calibration-layout--profiles' : 'calibration-layout--single'}`} style={{ padding: 0 }}>
           {/* Profiles List */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ padding: 12, borderBottom: '1px solid var(--border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Color Profiles</h2>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
@@ -710,8 +703,8 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
 
           {/* Profile Details */}
           {selectedProfile && (
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ padding: 14, borderBottom: '1px solid var(--border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>{selectedProfile.name}</h2>
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selectedProfile.device}</p>
@@ -754,11 +747,11 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                         <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 2 }}>EXPECTED</div>
-                            <div style={{ width: '100%', height: 28, borderRadius: 4, backgroundColor: baseColor, border: '1px solid var(--border)' }} />
+                            <div style={{ width: '100%', height: 28, borderRadius: 4, backgroundColor: baseColor, border: '1px solid var(--border-default)' }} />
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 2 }}>PRINTED</div>
-                            <div style={{ width: '100%', height: 28, borderRadius: 4, backgroundColor: scannedColor, border: '1px solid var(--border)' }} />
+                            <div style={{ width: '100%', height: 28, borderRadius: 4, backgroundColor: scannedColor, border: '1px solid var(--border-default)' }} />
                           </div>
                         </div>
                         <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
@@ -779,7 +772,7 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
 
           {/* Empty state when no profile selected */}
           {!selectedProfile && profiles.length > 0 && (
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ textAlign: 'center', padding: 40 }}>
                 <Settings2 size={48} style={{ color: 'var(--text-muted)', marginBottom: 16 }} />
                 <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>

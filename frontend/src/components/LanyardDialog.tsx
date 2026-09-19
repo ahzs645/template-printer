@@ -155,30 +155,30 @@ export function LanyardDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(220px, 1fr)', gap: '1.25rem' }}>
+        <div className="dialog-split dialog-split--preview-first">
           <div
             ref={containerRef}
             style={{
               position: 'relative',
               height: 460,
               borderRadius: '0.75rem',
-              background: 'linear-gradient(180deg, #f4f4f5 0%, #e4e4e7 100%)',
+              background: 'linear-gradient(180deg, var(--bg-surface-alt) 0%, var(--border-default) 100%)',
               overflow: 'hidden',
             }}
           >
             <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
             {loading && (
-              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
+              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                 Building the card…
               </p>
             )}
             {error && (
-              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: '#b91c1c', padding: '2rem', textAlign: 'center' }}>
+              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--danger)', padding: '2rem', textAlign: 'center' }}>
                 {error}
               </p>
             )}
             {!frontSvg && (
-              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
+              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                 Open a template to hang it on a lanyard.
               </p>
             )}
@@ -200,7 +200,7 @@ export function LanyardDialog({
                 </SelectContent>
               </Select>
               {punch === 'none' && (
-                <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
                   With no punch the card hangs from a clip on its top edge.
                 </p>
               )}
@@ -224,7 +224,7 @@ export function LanyardDialog({
             </div>
 
             {punchHitsStripe && (
-              <p style={{ fontSize: '0.75rem', color: '#b45309', margin: 0 }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--warning)', margin: 0 }}>
                 This punch cuts through the magnetic stripe on the back.
               </p>
             )}
@@ -246,7 +246,8 @@ export function LanyardDialog({
                 type="color"
                 value={strapColor}
                 onChange={(event) => setStrapColor(event.target.value)}
-                style={{ width: '100%', height: 34, border: '1px solid #e4e4e7', borderRadius: '0.375rem', background: 'none' }}
+                className="color-swatch"
+                style={{ width: '100%' }}
               />
             </div>
 

@@ -59,7 +59,7 @@ export function CardPreview({
         </div>
 
         <div
-          className="aspect-[85.6/54] border-2 border-border rounded-lg overflow-hidden bg-white relative"
+          className="aspect-[85.6/54] border-2 border-line rounded-lg overflow-hidden bg-card-stock relative"
         >
           {/* Render entire grid */}
           {Array.from({ length: 77 }).map((_, gridIndex) => {
@@ -78,7 +78,7 @@ export function CardPreview({
               return (
                 <div
                   key={`marker-${gridIndex}`}
-                  className="absolute border border-gray-800 bg-white"
+                  className="absolute border border-line-strong bg-card-stock"
                   style={{
                     left: `${(gridPos.x / cardLayout.cardWidth) * 100}%`,
                     top: `${(gridPos.y / cardLayout.cardHeight) * 100}%`,
@@ -101,7 +101,7 @@ export function CardPreview({
                       return (
                         <div
                           key={cellIdx}
-                          className={`${isBlack ? 'bg-black' : 'bg-white'}`}
+                          className={`${isBlack ? 'bg-black' : 'bg-card-stock'}`}
                         />
                       )
                     })}

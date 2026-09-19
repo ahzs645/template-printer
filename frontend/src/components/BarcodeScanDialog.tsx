@@ -117,7 +117,7 @@ export function BarcodeScanDialog({
                 void handleFile(file)
               }}
             />
-            <span style={{ alignSelf: 'center', fontSize: '0.8125rem', color: '#6b7280' }}>
+            <span style={{ alignSelf: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
               or paste one with ⌘/Ctrl+V
             </span>
           </div>
@@ -125,10 +125,10 @@ export function BarcodeScanDialog({
           {previewUrl && (
             <div
               style={{
-                border: '1px solid #e4e4e7',
+                border: '1px solid var(--border-default)',
                 borderRadius: '0.5rem',
                 padding: '0.5rem',
-                background: '#fafafa',
+                background: 'var(--bg-surface-alt)',
                 textAlign: 'center',
               }}
             >
@@ -136,7 +136,7 @@ export function BarcodeScanDialog({
             </div>
           )}
 
-          {scanning && <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Reading…</p>}
+          {scanning && <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Reading…</p>}
 
           {error && (
             <div
@@ -144,14 +144,14 @@ export function BarcodeScanDialog({
                 display: 'flex',
                 gap: '0.5rem',
                 alignItems: 'flex-start',
-                background: '#fffbeb',
-                border: '1px solid #fde68a',
+                background: 'var(--warning-soft)',
+                border: '1px solid var(--warning)',
                 borderRadius: '0.5rem',
                 padding: '0.75rem',
               }}
             >
-              <AlertTriangle size={16} style={{ color: '#b45309', flexShrink: 0, marginTop: 2 }} />
-              <p style={{ fontSize: '0.875rem', color: '#92400e', margin: 0 }}>{error}</p>
+              <AlertTriangle size={16} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: 2 }} />
+              <p style={{ fontSize: '0.875rem', color: 'var(--warning)', margin: 0 }}>{error}</p>
             </div>
           )}
 
@@ -162,23 +162,31 @@ export function BarcodeScanDialog({
                 <p style={{ margin: 0, fontSize: '0.9375rem' }}>
                   {describeScan(scan)}
                   {scan.symbology ? (
-                    <span style={{ color: '#6b7280' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>
                       {' '}
                       — generated here as {BARCODE_SYMBOLOGY_LABELS[scan.symbology]}
                     </span>
                   ) : (
-                    <span style={{ color: '#b45309' }}> — this app cannot generate this format yet</span>
+                    <span style={{ color: 'var(--warning)' }}> — this app cannot generate this format yet</span>
                   )}
                 </p>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                 <Label htmlFor="scan-value">Value</Label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <Input id="scan-value" readOnly value={scan.text} onFocus={(e) => e.currentTarget.select()} />
+                <div className="field-row">
+                  <Input
+                    id="scan-value"
+                    readOnly
+                    value={scan.text}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="field-row__grow"
+                  />
                   <Button
                     type="button"
                     variant="outline"
+                    size="icon"
+                    aria-label="Copy value"
                     onClick={async () => {
                       await navigator.clipboard.writeText(scan.text)
                       setCopied(true)
@@ -188,7 +196,7 @@ export function BarcodeScanDialog({
                   </Button>
                 </div>
                 {scan.codabarStartStop && (
-                  <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
                     The "{scan.codabarStartStop.start}" and "{scan.codabarStartStop.stop}" at the ends
                     are Codabar's start and stop characters. They are part of the encoding and are
                     not usually printed under the bars.

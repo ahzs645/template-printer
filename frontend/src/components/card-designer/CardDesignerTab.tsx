@@ -227,7 +227,7 @@ export function CardDesignerTab({
           gap: 16,
           padding: '8px 16px',
           backgroundColor: 'var(--bg-surface)',
-          borderBottom: '1px solid var(--border-color)',
+          borderBottom: '1px solid var(--border-default)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -235,7 +235,7 @@ export function CardDesignerTab({
           <Input
             value={designName}
             onChange={(e) => setDesignName(e.target.value)}
-            style={{ width: 200, height: 32 }}
+            style={{ width: 200 }}
             placeholder="Enter design name"
           />
         </div>
@@ -357,7 +357,7 @@ export function CardDesignerTab({
                         border: 'none',
                         borderRadius: 4,
                         backgroundColor: isSelected ? 'var(--accent)' : 'transparent',
-                        color: isSelected ? '#fff' : 'var(--text-primary)',
+                        color: isSelected ? 'var(--accent-on)' : 'var(--text-primary)',
                         cursor: 'pointer',
                         textAlign: 'left',
                         fontSize: 12,

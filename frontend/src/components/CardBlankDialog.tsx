@@ -90,7 +90,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
       <Label>{label}</Label>
       {control}
-      {helper && <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>{helper}</p>}
+      {helper && <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>{helper}</p>}
     </div>
   )
 
@@ -100,7 +100,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
         <Switch checked={value} onCheckedChange={onToggle} />
         {label}
       </label>
-      {helper && <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0, paddingLeft: '2.75rem' }}>{helper}</p>}
+      {helper && <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, paddingLeft: '2.75rem' }}>{helper}</p>}
     </div>
   )
 
@@ -115,7 +115,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
           </DialogDescription>
         </DialogHeader>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1.25rem' }}>
+        <div className="dialog-split">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {row(
               'Side',
@@ -199,10 +199,10 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
             <div
               style={{
                 marginTop: '0.5rem',
-                border: '1px solid #e4e4e7',
+                border: '1px solid var(--border-default)',
                 borderRadius: '0.5rem',
                 padding: '0.75rem',
-                background: '#fafafa',
+                background: 'var(--bg-surface-alt)',
                 display: 'flex',
                 justifyContent: 'center',
               }}
@@ -215,14 +215,14 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
             </div>
 
             {punchHitsStripe && (
-              <p style={{ fontSize: '0.75rem', color: '#b45309', margin: 0 }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--warning)', margin: 0 }}>
                 This punch cuts through the magnetic stripe, which destroys the encoding under the
                 hole. Cards with a stripe are normally punched on an end or along the bottom:{' '}
                 {STRIPE_SAFE_PUNCHES.map((position) => PUNCH_POSITION_LABELS[position]).join(', ')}.
               </p>
             )}
 
-            <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
               Stripe and punch positions follow the ISO specs, but card printers vary — check them
               against yours before a production run.
             </p>

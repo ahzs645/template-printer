@@ -28,7 +28,7 @@ const TabsList = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'inline-flex h-10 items-center justify-center rounded-md bg-zinc-100 p-1 text-zinc-500',
+      'inline-flex h-control-lg max-w-full items-center justify-center gap-1 overflow-x-auto rounded-control bg-surface-alt p-1 text-ink-muted',
       className
     )}
     {...props}
@@ -50,10 +50,10 @@ const TabsTrigger = React.forwardRef<
       ref={ref}
       type="button"
       className={cn(
-        'inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50',
         isSelected
-          ? 'bg-white text-zinc-950 shadow-sm'
-          : 'text-zinc-600 hover:text-zinc-950',
+          ? 'bg-surface text-ink shadow-[var(--shadow-soft)]'
+          : 'text-ink-muted hover:text-ink',
         className
       )}
       onClick={() => onValueChange?.(value)}
@@ -77,7 +77,7 @@ const TabsContent = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        'mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2',
+        'mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
         className
       )}
       {...props}

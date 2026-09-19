@@ -1,8 +1,20 @@
 @import 'tailwindcss';
 
+/* ThemeContext toggles a `.dark` class on <html>; Tailwind v4 otherwise
+   compiles `dark:` to a prefers-color-scheme query, which leaves every
+   `dark:` utility following the OS instead of the in-app switch. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ===== Theme Variables ===== */
 :root {
   --radius: 0.375rem;
+
+  /* Height scale shared by every field and every button. A button beside a
+     field lines up because both measure from the same variable rather than
+     each picking its own pixel value. */
+  --control-h: 2.125rem;
+  --control-h-sm: 1.75rem;
+  --control-h-lg: 2.5rem;
 
   /* Light theme (default) */
   --bg-app: #f0f0f0;
@@ -26,10 +38,31 @@
   --accent: #0078d4;
   --accent-hover: #106ebe;
   --accent-light: #e6f2fa;
+  /* Foreground for text sitting on an accent fill. It is not the same thing
+     as --text-on-dark, which is for the permanently dark icon rail. */
+  --accent-on: #ffffff;
 
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  /* Each status has three parts: the hue itself (readable as text on a
+     surface, and used for borders and icons), a tinted background, and the
+     foreground to put on top when the hue is used as a fill. */
+  --success: #047857;
+  --success-soft: #d1fae5;
+  --success-on: #ffffff;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --warning-on: #ffffff;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+  --danger-soft: #fee2e2;
+  --danger-on: #ffffff;
+
+  /* Card stock stays white in both themes: it is printed paper, not chrome. */
+  --card-stock: #ffffff;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.18);
+
+  color-scheme: light;
 
   font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.4;
@@ -42,27 +75,98 @@
 
 /* Dark theme */
 .dark {
+  color-scheme: dark;
+
   --bg-app: #1e1e1e;
   --bg-surface: #252526;
   --bg-surface-alt: #2d2d2d;
   --bg-panel: #333333;
   --bg-hover: #3c3c3c;
-  --bg-active: #4a4a4a;
+  --bg-active: #575757;
   --bg-nav: #252526;
   --bg-ribbon: #323233;
 
-  --border-default: #3c3c3c;
-  --border-subtle: #333333;
-  --border-strong: #525252;
+  --border-default: #4a4a4a;
+  --border-subtle: #3a3a3a;
+  --border-strong: #6e6e6e;
 
   --text-primary: #e5e5e5;
   --text-secondary: #a3a3a3;
-  --text-muted: #737373;
+  --text-muted: #8f8f8f;
   --text-on-dark: #ffffff;
 
   --accent: #4da6ff;
-  --accent-hover: #3d8bd9;
+  --accent-hover: #6fb8ff;
   --accent-light: #1e3a5f;
+  --accent-on: #08243d;
+
+  --success: #34d399;
+  --success-soft: #0d2a20;
+  --success-on: #06251a;
+  --warning: #fbbf24;
+  --warning-soft: #2e2413;
+  --warning-on: #2b2105;
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-soft: #34191a;
+  --danger-on: #2a0d0d;
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* A finger needs a larger target than a mouse pointer. */
+@media (pointer: coarse) {
+  :root {
+    --control-h: 2.5rem;
+    --control-h-sm: 2.25rem;
+    --control-h-lg: 2.75rem;
+  }
+}
+
+/* Hand the same palette to Tailwind so utility classes and the hand-written
+   rules below cannot drift apart. `inline` substitutes the variable itself,
+   so every utility re-resolves when `.dark` redefines it. */
+@theme inline {
+  --color-app: var(--bg-app);
+  --color-surface: var(--bg-surface);
+  --color-surface-alt: var(--bg-surface-alt);
+  --color-panel: var(--bg-panel);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+
+  --color-line: var(--border-default);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+
+  --color-ink: var(--text-primary);
+  --color-ink-muted: var(--text-secondary);
+  --color-ink-subtle: var(--text-muted);
+  --color-ink-on-accent: var(--accent-on);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-light);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-on: var(--success-on);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-on: var(--warning-on);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-on: var(--danger-on);
+
+  --color-card-stock: var(--card-stock);
+
+  --radius-control: var(--radius);
+
+  --spacing-control: var(--control-h);
+  --spacing-control-sm: var(--control-h-sm);
+  --spacing-control-lg: var(--control-h-lg);
 }
 
 a {
@@ -93,6 +197,15 @@ input,
 select,
 textarea {
   font-family: inherit;
+}
+
+/* Native controls take the theme accent rather than the browser default blue,
+   so a checkbox matches the buttons next to it. */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 /* ===== App Layout ===== */
@@ -150,7 +263,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-on-dark);
+  color: var(--accent-on);
   margin-bottom: 12px;
   background: var(--accent);
   border-radius: var(--radius);
@@ -199,7 +312,7 @@ textarea {
 
 .icon-nav__item--active {
   background: var(--accent);
-  color: var(--text-on-dark);
+  color: var(--accent-on);
 }
 
 .icon-nav__item--active:hover {
@@ -540,6 +653,33 @@ textarea {
     -webkit-overflow-scrolling: touch;
   }
 
+  /* Tab labels are short; let the strip scroll sideways rather than wrap each
+     label onto two cramped lines. */
+  .design-mode-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px;
+  }
+
+  .design-mode-tab {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    white-space: nowrap;
+  }
+
+  .settings-page {
+    padding: 16px 12px;
+  }
+
+  .settings-card {
+    padding: 16px;
+  }
+
+  /* Tighter gutters between a field and its buttons on a narrow row. */
+  .field-row {
+    gap: 6px;
+  }
+
   /* The card is what someone opening a shared link came to see, so it goes
      above the side panels rather than after the left one. */
   .app-workspace {
@@ -616,8 +756,8 @@ textarea {
   position: relative;
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--card-stock);
+  box-shadow: var(--shadow-panel);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -645,13 +785,25 @@ textarea {
 
 .form-input {
   width: 100%;
-  padding: 6px 8px;
+  height: var(--control-h);
+  padding: 0 8px;
   font-size: 13px;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-input--sm {
+  height: var(--control-h-sm);
+  font-size: 12px;
+}
+
+textarea.form-input {
+  height: auto;
+  min-height: calc(var(--control-h) * 2);
+  padding: 6px 8px;
 }
 
 .form-input:focus {
@@ -664,15 +816,63 @@ textarea {
   color: var(--text-muted);
 }
 
+/* A native colour well is a field, so it carries the same frame as the text
+   input it usually sits beside instead of a borderless square. */
+.color-swatch {
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  padding: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.color-swatch::-moz-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+/* A field and the buttons that act on it. Stretching the row keeps them the
+   same height even when a child sets its own padding. */
+.field-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field-row > * {
+  height: var(--control-h);
+}
+
+.field-row__grow {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ===== Buttons ===== */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  height: var(--control-h);
+  padding: 0 12px;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
   border-radius: var(--radius);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -681,7 +881,7 @@ textarea {
 
 .btn-primary {
   background: var(--accent);
-  color: var(--text-on-dark);
+  color: var(--accent-on);
   border-color: var(--accent);
 }
 
@@ -711,14 +911,113 @@ textarea {
 }
 
 .btn-sm {
-  padding: 4px 8px;
+  height: var(--control-h-sm);
+  padding: 0 10px;
   font-size: 12px;
 }
 
+/* Square, so a row of icon buttons reads as one strip rather than a set of
+   slightly different rectangles. */
 .btn-icon {
-  width: 28px;
-  height: 28px;
+  width: var(--control-h);
   padding: 0;
+}
+
+.btn-sm.btn-icon {
+  width: var(--control-h-sm);
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Dialog Layout ===== */
+/* A dialog wide enough for two panes on a desktop is only as wide as the
+   phone it is on, so the split folds into one column there. */
+.dialog-split {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dialog-split--preview-first {
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+}
+
+@media (max-width: 768px) {
+  .dialog-split,
+  .dialog-split--preview-first {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===== Calibration Layout ===== */
+/* Two columns on a desktop, one on a phone. The fixed track on the side
+   column used to be wider than a phone, so the two columns overlapped. */
+.calibration-layout {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  overflow: auto;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+
+.calibration-layout--compare {
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+}
+
+.calibration-layout--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.calibration-layout--profiles {
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .calibration-layout,
+  .calibration-layout--compare,
+  .calibration-layout--profiles {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* ===== Settings Page ===== */
+.settings-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-card {
+  padding: 20px;
+  background: var(--bg-surface);
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+}
+
+/* Copy on the left, its action on the right, stacking once the pair no longer
+   fits side by side rather than pushing the button off-screen. */
+.settings-card__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.settings-card__body {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 
 /* ===== Status Messages ===== */
@@ -732,19 +1031,19 @@ textarea {
 }
 
 .status-message--success {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--success-soft);
   border: 1px solid var(--success);
   color: var(--success);
 }
 
 .status-message--error {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-soft);
   border: 1px solid var(--danger);
   color: var(--danger);
 }
 
 .status-message--warning {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--warning-soft);
   border: 1px solid var(--warning);
   color: var(--warning);
 }
@@ -846,12 +1145,12 @@ textarea {
 }
 
 .font-item__status--loaded {
-  background: rgba(16, 185, 129, 0.15);
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .font-item__status--missing {
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
@@ -883,7 +1182,7 @@ textarea {
   padding: 10px 16px;
   font-size: 13px;
   line-height: 1.4;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-panel);
 }
 
 .link-result-banner__text {

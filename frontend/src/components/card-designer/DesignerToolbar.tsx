@@ -108,7 +108,7 @@ export function DesignerToolbar({
         gap: 16,
         padding: '8px 16px',
         backgroundColor: 'var(--bg-surface, #fff)',
-        borderBottom: '1px solid var(--border-color, #e5e5e5)',
+        borderBottom: '1px solid var(--border-default)',
       }}
     >
       {/* Elements Group */}
@@ -159,7 +159,7 @@ export function DesignerToolbar({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          borderLeft: '1px solid var(--border-color, #e5e5e5)',
+          borderLeft: '1px solid var(--border-default)',
           paddingLeft: 16,
         }}
       >
@@ -210,7 +210,7 @@ export function DesignerToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            borderLeft: '1px solid var(--border-color, #e5e5e5)',
+            borderLeft: '1px solid var(--border-default)',
             paddingLeft: 16,
           }}
         >
@@ -256,7 +256,7 @@ export function DesignerToolbar({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          borderLeft: '1px solid var(--border-color, #e5e5e5)',
+          borderLeft: '1px solid var(--border-default)',
           paddingLeft: 16,
         }}
       >
@@ -286,7 +286,7 @@ export function DesignerToolbar({
           onClick={onDelete}
           disabled={!hasSelection}
           title="Delete (Del)"
-          style={{ padding: '6px 8px', color: hasSelection ? 'var(--danger, #dc2626)' : undefined }}
+          style={{ padding: '6px 8px', color: hasSelection ? 'var(--danger, var(--danger))' : undefined }}
         >
           <Trash2 size={16} />
         </Button>
@@ -301,7 +301,7 @@ export function DesignerToolbar({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          borderLeft: '1px solid var(--border-color, #e5e5e5)',
+          borderLeft: '1px solid var(--border-default)',
           paddingLeft: 16,
         }}
       >
@@ -332,7 +332,7 @@ export function DesignerToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            borderLeft: '1px solid var(--border-color, #e5e5e5)',
+            borderLeft: '1px solid var(--border-default)',
             paddingLeft: 16,
           }}
         >
@@ -365,7 +365,7 @@ export function DesignerToolbar({
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          borderLeft: '1px solid var(--border-color, #e5e5e5)',
+          borderLeft: '1px solid var(--border-default)',
           paddingLeft: 16,
         }}
       >
@@ -380,7 +380,7 @@ export function DesignerToolbar({
           Size
         </span>
         <Select value={currentPreset} onValueChange={handlePresetChange}>
-          <SelectTrigger style={{ width: 140, height: 32 }}>
+          <SelectTrigger style={{ width: 140 }}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

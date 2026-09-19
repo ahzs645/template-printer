@@ -181,8 +181,8 @@ export function FieldMappingDialog({
             <div style={{
               padding: '2rem',
               textAlign: 'center',
-              color: '#71717a',
-              border: '1px dashed #d4d4d8',
+              color: 'var(--text-muted)',
+              border: '1px dashed var(--border-strong)',
               borderRadius: '0.5rem'
             }}>
               No fields detected in this template
@@ -198,30 +198,30 @@ export function FieldMappingDialog({
                     gap: '0.75rem',
                     alignItems: 'center',
                     padding: '0.75rem',
-                    border: '1px solid #e4e4e7',
+                    border: '1px solid var(--border-default)',
                     borderRadius: '0.375rem',
-                    backgroundColor: mappings[field] ? '#f0fdf4' : '#fff',
+                    backgroundColor: mappings[field] ? 'var(--success-soft)' : '#fff',
                   }}
                 >
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       {mappings[field] ? (
-                        <Check style={{ width: '1rem', height: '1rem', color: '#16a34a' }} />
+                        <Check style={{ width: '1rem', height: '1rem', color: 'var(--success)' }} />
                       ) : (
-                        <X style={{ width: '1rem', height: '1rem', color: '#71717a' }} />
+                        <X style={{ width: '1rem', height: '1rem', color: 'var(--text-muted)' }} />
                       )}
                       <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{field}</span>
                     </div>
                     {fieldTextContent[field] && (
                       <div style={{
                         fontSize: '0.75rem',
-                        color: '#71717a',
+                        color: 'var(--text-muted)',
                         marginBottom: '0.5rem',
                         fontStyle: 'italic',
                         padding: '0.25rem 0.5rem',
-                        backgroundColor: '#f4f4f5',
+                        backgroundColor: 'var(--bg-surface-alt)',
                         borderRadius: '0.25rem',
-                        border: '1px solid #e4e4e7'
+                        border: '1px solid var(--border-default)'
                       }}>
                         Example: "{fieldTextContent[field]}"
                       </div>
@@ -241,7 +241,7 @@ export function FieldMappingDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">
-                          <em style={{ color: '#71717a' }}>No mapping</em>
+                          <em style={{ color: 'var(--text-muted)' }}>No mapping</em>
                         </SelectItem>
                         <SelectItem value={CUSTOM_STATIC_VALUE}>
                           <strong>Custom Static Text...</strong>

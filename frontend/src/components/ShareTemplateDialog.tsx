@@ -106,18 +106,25 @@ export function ShareTemplateDialog({
           {icon}
           {label}
         </Label>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <Input readOnly value={value} onFocus={(event) => event.currentTarget.select()} />
+        <div className="field-row">
+          <Input
+            readOnly
+            value={value}
+            onFocus={(event) => event.currentTarget.select()}
+            className="field-row__grow"
+          />
           <Button
             type="button"
             variant="outline"
+            size="icon"
+            aria-label="Copy link"
             onClick={() => handleCopy(key, value)}
             disabled={links.isTooLong}
           >
             {copied === key ? <Check size={16} /> : <Copy size={16} />}
           </Button>
         </div>
-        <p style={{ fontSize: '0.8125rem', color: '#6b7280', margin: 0 }}>{helper}</p>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: 0 }}>{helper}</p>
       </div>
     )
   }
@@ -134,7 +141,7 @@ export function ShareTemplateDialog({
         </DialogHeader>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {building && <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Compressing template…</p>}
+          {building && <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Compressing template…</p>}
 
           {error && (
             <div
@@ -142,14 +149,14 @@ export function ShareTemplateDialog({
                 display: 'flex',
                 gap: '0.5rem',
                 alignItems: 'flex-start',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
+                background: 'var(--danger-soft)',
+                border: '1px solid var(--danger)',
                 borderRadius: '0.5rem',
                 padding: '0.75rem',
               }}
             >
-              <AlertTriangle size={16} style={{ color: '#b91c1c', flexShrink: 0, marginTop: '0.125rem' }} />
-              <p style={{ fontSize: '0.875rem', color: '#b91c1c', margin: 0 }}>{error}</p>
+              <AlertTriangle size={16} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: '0.125rem' }} />
+              <p style={{ fontSize: '0.875rem', color: 'var(--danger)', margin: 0 }}>{error}</p>
             </div>
           )}
 
@@ -173,7 +180,7 @@ export function ShareTemplateDialog({
           {links && (
             <div
               style={{
-                background: '#f4f4f5',
+                background: 'var(--bg-surface-alt)',
                 borderRadius: '0.5rem',
                 padding: '0.75rem',
                 display: 'flex',
@@ -181,17 +188,17 @@ export function ShareTemplateDialog({
                 gap: '0.375rem',
               }}
             >
-              <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0 }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
                 Link size: {formatSize(links.length)}
                 {links.isLong && !links.isTooLong
                   ? ' — long enough that some chat and mail clients may break it. Send it as a file if it arrives truncated.'
                   : ''}
               </p>
-              <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0 }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
                 Fonts and photos are not included — a link has no room for them. Download a package
                 instead to send the design with its fonts.
               </p>
-              <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0 }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
                 View-only is a convenience, not a lock: anyone with either link can read the
                 template out of it.
               </p>

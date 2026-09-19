@@ -139,7 +139,7 @@ export function DesignerCanvas({
         justifyContent: 'center',
         flex: 1,
         padding: 24,
-        backgroundColor: 'var(--bg-surface-alt, #f5f5f5)',
+        backgroundColor: 'var(--bg-surface-alt, var(--bg-surface-alt))',
         overflow: 'hidden',
       }}
     >

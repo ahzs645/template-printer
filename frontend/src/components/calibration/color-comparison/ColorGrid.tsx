@@ -10,7 +10,7 @@ export function ColorGrid({ colorChart }: ColorGridProps) {
         {colorChart.map((color, index) => (
           <div key={index} className="space-y-1">
             <div
-              className="aspect-square rounded border-2 border-border flex items-center justify-center text-xs font-bold text-white mix-blend-difference"
+              className="aspect-square rounded border-2 border-line flex items-center justify-center text-xs font-bold text-white mix-blend-difference"
               style={{ backgroundColor: color }}
             >
               #{index}

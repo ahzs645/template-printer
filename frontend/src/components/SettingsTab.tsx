@@ -221,11 +221,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
 
   return (
     <div className="app-workspace" style={{ overflow: 'auto' }}>
-      <div style={{
-        maxWidth: 800,
-        margin: '0 auto',
-        padding: 32,
-      }}>
+      <div className="settings-page">
         <h1 style={{
           fontSize: 24,
           fontWeight: 600,
@@ -257,12 +253,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
             Storage Mode
           </h2>
 
-          <div style={{
-            padding: 16,
-            backgroundColor: 'var(--bg-surface)',
-            borderRadius: 8,
-            border: '1px solid var(--border-color)',
-          }}>
+          <div className="settings-card" style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
                 width: 10,
@@ -299,14 +290,9 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
             gap: 16,
           }}>
             {/* Export Card */}
-            <div style={{
-              padding: 20,
-              backgroundColor: 'var(--bg-surface)',
-              borderRadius: 8,
-              border: '1px solid var(--border-color)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-                <div style={{ flex: 1 }}>
+            <div className="settings-card">
+              <div className="settings-card__row">
+                <div className="settings-card__body">
                   <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Export Workspace</div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
                     Download all your templates, users, card designs, fonts, and settings as a ZIP file.
@@ -329,14 +315,9 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
             </div>
 
             {/* Import Card */}
-            <div style={{
-              padding: 20,
-              backgroundColor: 'var(--bg-surface)',
-              borderRadius: 8,
-              border: '1px solid var(--border-color)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-                <div style={{ flex: 1 }}>
+            <div className="settings-card">
+              <div className="settings-card__row">
+                <div className="settings-card__body">
                   <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Import Workspace</div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
                     Restore from a previously exported ZIP backup. This will replace all existing data
@@ -367,14 +348,9 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
             </div>
 
             {storageMode === 'local' && (
-              <div style={{
-                padding: 20,
-                backgroundColor: 'var(--bg-surface)',
-                borderRadius: 8,
-                border: '1px solid var(--border-color)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-                  <div style={{ flex: 1 }}>
+              <div className="settings-card">
+                <div className="settings-card__row">
+                  <div className="settings-card__body">
                     <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Copy Local Data to Convex</div>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
                       Copies the current Dexie workspace into the Convex deployment configured by VITE_CONVEX_URL.
@@ -413,8 +389,8 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
                 borderRadius: 8,
                 fontSize: 14,
                 backgroundColor: status.type === 'success'
-                  ? 'rgba(16, 185, 129, 0.1)'
-                  : 'rgba(239, 68, 68, 0.1)',
+                  ? 'var(--success-soft)'
+                  : 'var(--danger-soft)',
                 border: `1px solid ${status.type === 'success' ? 'var(--success)' : 'var(--danger)'}`,
                 color: status.type === 'success' ? 'var(--success)' : 'var(--danger)',
               }}>
@@ -440,12 +416,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
             What's Included in Export
           </h2>
 
-          <div style={{
-            padding: 20,
-            backgroundColor: 'var(--bg-surface)',
-            borderRadius: 8,
-            border: '1px solid var(--border-color)',
-          }}>
+          <div className="settings-card">
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',

@@ -11,7 +11,7 @@ export function FileUpload({ onImageUpload }: FileUploadProps) {
   }
 
   return (
-    <div className="h-[300px] border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-4">
+    <div className="h-[300px] border-2 border-dashed border-line rounded-lg flex flex-col items-center justify-center gap-4">
       <div className="text-center">
         <p className="text-lg font-medium mb-2">Upload Scanned Color Chart</p>
         <p className="text-muted-foreground mb-4">
