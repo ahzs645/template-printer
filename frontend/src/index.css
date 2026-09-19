@@ -933,6 +933,26 @@ textarea.form-input {
   cursor: not-allowed;
 }
 
+/* ===== Dialog Layout ===== */
+/* A dialog wide enough for two panes on a desktop is only as wide as the
+   phone it is on, so the split folds into one column there. */
+.dialog-split {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dialog-split--preview-first {
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+}
+
+@media (max-width: 768px) {
+  .dialog-split,
+  .dialog-split--preview-first {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ===== Calibration Layout ===== */
 /* Two columns on a desktop, one on a phone. The fixed track on the side
    column used to be wider than a phone, so the two columns overlapped. */

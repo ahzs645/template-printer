@@ -115,7 +115,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
           </DialogDescription>
         </DialogHeader>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1.25rem' }}>
+        <div className="dialog-split">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {row(
               'Side',

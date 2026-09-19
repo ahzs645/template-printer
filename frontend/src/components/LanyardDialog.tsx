@@ -155,7 +155,7 @@ export function LanyardDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(220px, 1fr)', gap: '1.25rem' }}>
+        <div className="dialog-split dialog-split--preview-first">
           <div
             ref={containerRef}
             style={{
