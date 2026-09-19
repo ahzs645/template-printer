@@ -42,7 +42,7 @@ export function UserSelector({ selectedUserIds, onSelectionChange }: UserSelecto
           <CardTitle style={{ fontSize: '1rem' }}>User Selection</CardTitle>
         </CardHeader>
         <CardContent>
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>Loading users...</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Loading users...</p>
         </CardContent>
       </Card>
     )
@@ -55,7 +55,7 @@ export function UserSelector({ selectedUserIds, onSelectionChange }: UserSelecto
           <CardTitle style={{ fontSize: '1rem' }}>User Selection</CardTitle>
         </CardHeader>
         <CardContent>
-          <p style={{ fontSize: '0.875rem', color: '#dc2626' }}>Error: {error}</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--danger)' }}>Error: {error}</p>
         </CardContent>
       </Card>
     )
@@ -68,7 +68,7 @@ export function UserSelector({ selectedUserIds, onSelectionChange }: UserSelecto
           <CardTitle style={{ fontSize: '1rem' }}>User Selection</CardTitle>
         </CardHeader>
         <CardContent>
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             No users in database. Go to Users tab to add users.
           </p>
         </CardContent>
@@ -147,8 +147,8 @@ export function UserSelector({ selectedUserIds, onSelectionChange }: UserSelecto
                   style={{
                     padding: '0.75rem',
                     border: '1px solid',
-                    borderColor: isSelected ? '#18181b' : '#e4e4e7',
-                    backgroundColor: isSelected ? '#fafafa' : '#fff',
+                    borderColor: isSelected ? 'var(--text-primary)' : 'var(--border-default)',
+                    backgroundColor: isSelected ? 'var(--bg-surface-alt)' : '#fff',
                     borderRadius: '0.375rem',
                     cursor: 'pointer',
                     display: 'flex',
@@ -158,7 +158,7 @@ export function UserSelector({ selectedUserIds, onSelectionChange }: UserSelecto
                   }}
                   onMouseEnter={(e) => {
                     if (!isSelected) {
-                      e.currentTarget.style.backgroundColor = '#f9f9f9'
+                      e.currentTarget.style.backgroundColor = 'var(--bg-surface-alt)'
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -186,12 +186,12 @@ export function UserSelector({ selectedUserIds, onSelectionChange }: UserSelecto
                     <div style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user.firstName} {user.lastName}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#71717a', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user.studentId || user.email || user.position || 'No details'}
                     </div>
                   </div>
                   {isSelected && (
-                    <UserCheck style={{ width: '1rem', height: '1rem', color: '#16a34a', flexShrink: 0 }} />
+                    <UserCheck style={{ width: '1rem', height: '1rem', color: 'var(--success)', flexShrink: 0 }} />
                   )}
                 </div>
               )

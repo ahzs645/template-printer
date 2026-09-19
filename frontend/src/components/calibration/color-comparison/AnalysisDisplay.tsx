@@ -23,11 +23,11 @@ function calculateColorAccuracy(comparison: ColorComparison): { deltaE: number, 
 
 function getQualityColor(quality: string): string {
   switch (quality) {
-    case 'excellent': return 'text-green-600 bg-green-50 border-green-200'
-    case 'good': return 'text-blue-600 bg-blue-50 border-blue-200'
-    case 'fair': return 'text-yellow-600 bg-yellow-50 border-yellow-200'
-    case 'poor': return 'text-red-600 bg-red-50 border-red-200'
-    default: return 'text-gray-600 bg-gray-50 border-gray-200'
+    case 'excellent': return 'text-success bg-success-soft border-success'
+    case 'good': return 'text-accent bg-accent-soft border-accent'
+    case 'fair': return 'text-warning bg-warning-soft border-warning'
+    case 'poor': return 'text-danger bg-danger-soft border-danger'
+    default: return 'text-ink-muted bg-surface-alt border-line-subtle'
   }
 }
 
@@ -86,7 +86,7 @@ export function AnalysisDisplay({
           const { deltaE, quality } = calculateColorAccuracy(comparison)
 
           return (
-            <div key={index} className="space-y-2 p-2 border rounded-md bg-white">
+            <div key={index} className="space-y-2 rounded-control border border-line-subtle bg-surface p-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Color #{index + 1}</span>
                 <span className={`px-2 py-1 text-xs rounded-full border ${getQualityColor(quality)}`}>
@@ -95,9 +95,9 @@ export function AnalysisDisplay({
               </div>
 
               <div className="space-y-1">
-                <div className="flex h-9 rounded border overflow-hidden">
+                <div className="flex h-9 overflow-hidden rounded-control border border-line">
                   <div
-                    className="flex-1 border-r"
+                    className="flex-1 border-r border-line"
                     style={{ backgroundColor: comparison.original }}
                     title={`Original: ${comparison.original}`}
                   />

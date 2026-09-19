@@ -9,7 +9,9 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       <input
         type="checkbox"
         className={cn(
-          'peer h-4 w-4 shrink-0 rounded-sm border border-zinc-200 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+          // accent-* paints the native check in the theme colour, which keeps
+          // the control legible on a dark surface without a custom indicator.
+          'peer h-4 w-4 shrink-0 cursor-pointer rounded-sm border border-line accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
         ref={ref}

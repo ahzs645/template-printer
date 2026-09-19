@@ -18,12 +18,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     ]
 
     return (
-        <aside className="w-64 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 flex flex-col flex-shrink-0">
-            <div className="p-6 border-b border-zinc-200 dark:border-zinc-800">
+        <aside className="flex w-64 flex-shrink-0 flex-col border-r border-line bg-surface">
+            <div className="border-b border-line p-6">
                 <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                     ID Card Maker
                 </h1>
-                <p className="text-xs text-zinc-500 mt-1">Professional Card Printer</p>
+                <p className="mt-1 text-xs text-ink-muted">Professional Card Printer</p>
             </div>
 
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -37,8 +37,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                             className={cn(
                                 "w-full justify-start gap-3 font-medium",
                                 isActive
-                                    ? "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300"
-                                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                                    ? "bg-accent-soft text-accent hover:bg-accent-soft"
+                                    : "text-ink-muted hover:text-ink"
                             )}
                             onClick={() => onTabChange(item.id as ActiveTab)}
                         >
@@ -49,12 +49,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                 })}
             </nav>
 
-            <div className="p-4 border-t border-zinc-200 dark:border-zinc-800">
+            <div className="border-t border-line p-4">
                 <Button
                     variant="ghost"
                     className={cn(
-                        "w-full justify-start gap-3 font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
-                        activeTab === 'settings' && "bg-zinc-100 dark:bg-zinc-800"
+                        "w-full justify-start gap-3 font-medium text-ink-muted hover:text-ink",
+                        activeTab === 'settings' && 'bg-hover text-ink'
                     )}
                     onClick={() => onTabChange('settings')}
                 >

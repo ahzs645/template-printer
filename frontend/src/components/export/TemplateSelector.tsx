@@ -18,9 +18,9 @@ export function TemplateSelector({ template, templates, loading, onSelect }: Tem
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>Loading templates...</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Loading templates...</p>
         ) : templates.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             No templates available. Upload one in the Design tab.
           </p>
         ) : (

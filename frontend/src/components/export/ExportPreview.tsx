@@ -26,13 +26,13 @@ export function ExportPreview({
 }: ExportPreviewProps) {
   if (!template && !templateMeta) {
     return (
-      <Card className="flex flex-1 flex-col border-zinc-200 dark:border-zinc-800">
+      <Card className="flex flex-1 flex-col">
         <CardHeader>
           <CardTitle className="text-lg">Export Preview</CardTitle>
           <CardDescription>Preview how your export will look</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-1 items-center justify-center p-6">
-          <div className="text-center text-zinc-500">
+          <div className="text-center text-ink-muted">
             <p>Select a card design to preview export</p>
           </div>
         </CardContent>
@@ -43,7 +43,7 @@ export function ExportPreview({
   return (
     <div className="flex flex-1 flex-col gap-3">
       {/* Summary / header card */}
-      <Card className="border-zinc-200 dark:border-zinc-800">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Export Preview</CardTitle>
           <CardDescription>
@@ -56,13 +56,13 @@ export function ExportPreview({
 
       {/* Main visual preview: composite print layout or single card */}
       {compositeSvg && printLayoutName ? (
-        <Card className="border-zinc-200 dark:border-zinc-800 self-start w-full max-w-[640px]">
+        <Card className="w-full max-w-[640px] self-start">
           <CardContent className="flex items-center justify-center p-4">
             <InlineSvg className="export-preview-svg w-full" markup={compositeSvg} name="export-composite" />
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-zinc-200 dark:border-zinc-800 self-start w-full max-w-[520px]">
+        <Card className="w-full max-w-[520px] self-start">
           <CardContent className="flex items-center justify-center p-4">
             {previewSvg && (
               <InlineSvg
@@ -85,7 +85,7 @@ export function ExportPreview({
                 <DialogDescription>{printLayoutName}</DialogDescription>
               )}
             </DialogHeader>
-            <div className="mt-2 rounded-md bg-zinc-100 p-3">
+            <div className="mt-2 rounded-control bg-surface-alt p-3">
               <InlineSvg className="export-preview-svg w-full" markup={layoutSvg} name="export-layout" />
             </div>
           </DialogContent>

@@ -65,15 +65,15 @@ export function TestCardsDialog({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: totals.errors ? '#b91c1c' : '#15803d' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: totals.errors ? 'var(--danger)' : 'var(--success)' }}>
               {totals.errors ? <XCircle size={15} /> : <CheckCircle2 size={15} />}
               {totals.errors} error{totals.errors === 1 ? '' : 's'}
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: totals.warnings ? '#b45309' : '#6b7280' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: totals.warnings ? 'var(--warning)' : 'var(--text-muted)' }}>
               <AlertTriangle size={15} />
               {totals.warnings} warning{totals.warnings === 1 ? '' : 's'}
             </span>
-            <span style={{ color: '#6b7280' }}>across {results.length} cards</span>
+            <span style={{ color: 'var(--text-muted)' }}>across {results.length} cards</span>
           </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
@@ -92,7 +92,7 @@ export function TestCardsDialog({
         </div>
 
         {shown.length === 0 && (
-          <p style={{ fontSize: '0.875rem', color: '#6b7280', padding: '2rem 0', textAlign: 'center' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', padding: '2rem 0', textAlign: 'center' }}>
             {results.length === 0
               ? 'Open a template with mapped fields to run the test cards.'
               : 'Nothing to flag — every test case rendered cleanly.'}
@@ -110,7 +110,7 @@ export function TestCardsDialog({
           {shown.map((result) => {
             const hasError = result.issues.some((issue) => issue.severity === 'error')
             const hasWarning = result.issues.some((issue) => issue.severity === 'warning')
-            const border = hasError ? '#fca5a5' : hasWarning ? '#fcd34d' : '#e4e4e7'
+            const border = hasError ? 'var(--danger)' : hasWarning ? 'var(--warning)' : 'var(--border-default)'
 
             return (
               <div
@@ -123,14 +123,14 @@ export function TestCardsDialog({
                   flexDirection: 'column',
                 }}
               >
-                <div style={{ background: '#fafafa', padding: '0.5rem 0.625rem', borderBottom: `1px solid ${border}` }}>
+                <div style={{ background: 'var(--bg-surface-alt)', padding: '0.5rem 0.625rem', borderBottom: `1px solid ${border}` }}>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{result.testCase.title}</div>
-                  <div style={{ fontSize: '0.6875rem', color: '#6b7280', lineHeight: 1.35, marginTop: 2 }}>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.35, marginTop: 2 }}>
                     {result.testCase.rationale}
                   </div>
                 </div>
 
-                <div style={{ background: '#ffffff', padding: '0.5rem' }}>
+                <div style={{ background: 'var(--card-stock)', padding: '0.5rem' }}>
                   {result.svg ? (
                     <InlineSvg
                       markup={result.svg}
@@ -138,15 +138,15 @@ export function TestCardsDialog({
                       style={{ width: '100%', height: cardWidth * aspect, overflow: 'hidden' }}
                     />
                   ) : (
-                    <div style={{ height: cardWidth * aspect, display: 'grid', placeItems: 'center', color: '#b91c1c', fontSize: '0.75rem' }}>
+                    <div style={{ height: cardWidth * aspect, display: 'grid', placeItems: 'center', color: 'var(--danger)', fontSize: '0.75rem' }}>
                       Failed to render
                     </div>
                   )}
                 </div>
 
-                <div style={{ padding: '0.5rem 0.625rem', borderTop: '1px solid #f4f4f5', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                <div style={{ padding: '0.5rem 0.625rem', borderTop: '1px solid var(--bg-surface-alt)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                   {result.issues.length === 0 ? (
-                    <span style={{ fontSize: '0.75rem', color: '#15803d', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <CheckCircle2 size={13} />
                       Clean
                     </span>
@@ -157,7 +157,7 @@ export function TestCardsDialog({
                         style={{
                           fontSize: '0.6875rem',
                           lineHeight: 1.4,
-                          color: issue.severity === 'error' ? '#b91c1c' : '#b45309',
+                          color: issue.severity === 'error' ? 'var(--danger)' : 'var(--warning)',
                           display: 'flex',
                           gap: 4,
                         }}

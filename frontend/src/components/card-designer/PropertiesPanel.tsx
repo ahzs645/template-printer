@@ -182,7 +182,6 @@ export function PropertiesPanel({
               type="number"
               value={localProps.left as number ?? 0}
               onChange={(e) => handleChange('left', parseFloat(e.target.value) || 0, true)}
-              style={{ height: 32 }}
             />
           </div>
           <div>
@@ -191,7 +190,6 @@ export function PropertiesPanel({
               type="number"
               value={localProps.top as number ?? 0}
               onChange={(e) => handleChange('top', parseFloat(e.target.value) || 0, true)}
-              style={{ height: 32 }}
             />
           </div>
           <div>
@@ -205,7 +203,6 @@ export function PropertiesPanel({
                 const scale = newWidth / currentWidth * (selectedObject.scaleX ?? 1)
                 handleChange('scaleX', scale)
               }}
-              style={{ height: 32 }}
             />
           </div>
           <div>
@@ -219,7 +216,6 @@ export function PropertiesPanel({
                 const scale = newHeight / currentHeight * (selectedObject.scaleY ?? 1)
                 handleChange('scaleY', scale)
               }}
-              style={{ height: 32 }}
             />
           </div>
         </div>
@@ -272,7 +268,6 @@ export function PropertiesPanel({
               <Input
                 value={localProps.text as string ?? ''}
                 onChange={(e) => handleChange('text', e.target.value)}
-                style={{ height: 32 }}
               />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -282,7 +277,7 @@ export function PropertiesPanel({
                   value={localProps.fontFamily as string ?? 'Arial'}
                   onValueChange={(value) => handleChange('fontFamily', value)}
                 >
-                  <SelectTrigger style={{ height: 32 }}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -302,7 +297,6 @@ export function PropertiesPanel({
                   onChange={(e) => handleChange('fontSize', parseInt(e.target.value) || 24)}
                   min={8}
                   max={200}
-                  style={{ height: 32 }}
                 />
               </div>
             </div>
@@ -313,7 +307,7 @@ export function PropertiesPanel({
                   value={localProps.fontWeight as string ?? 'normal'}
                   onValueChange={(value) => handleChange('fontWeight', value)}
                 >
-                  <SelectTrigger style={{ height: 32 }}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -329,7 +323,7 @@ export function PropertiesPanel({
                   value={localProps.textAlign as string ?? 'left'}
                   onValueChange={(value) => handleChange('textAlign', value)}
                 >
-                  <SelectTrigger style={{ height: 32 }}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -342,17 +336,17 @@ export function PropertiesPanel({
             </div>
             <div>
               <Label style={{ fontSize: 11 }}>Color</Label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="field-row">
                 <input
                   type="color"
                   value={localProps.fill as string ?? '#000000'}
                   onChange={(e) => handleChange('fill', e.target.value)}
-                  style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer' }}
+                  className="color-swatch"
                 />
                 <Input
                   value={localProps.fill as string ?? '#000000'}
                   onChange={(e) => handleChange('fill', e.target.value)}
-                  style={{ height: 32, flex: 1 }}
+                  className="field-row__grow"
                 />
               </div>
             </div>
@@ -369,34 +363,34 @@ export function PropertiesPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>
               <Label style={{ fontSize: 11 }}>Fill Color</Label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="field-row">
                 <input
                   type="color"
                   value={localProps.fill as string ?? '#3b82f6'}
                   onChange={(e) => handleChange('fill', e.target.value)}
-                  style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer' }}
+                  className="color-swatch"
                 />
                 <Input
                   value={localProps.fill as string ?? '#3b82f6'}
                   onChange={(e) => handleChange('fill', e.target.value)}
-                  style={{ height: 32, flex: 1 }}
+                  className="field-row__grow"
                 />
               </div>
             </div>
             <div>
               <Label style={{ fontSize: 11 }}>Stroke Color</Label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="field-row">
                 <input
                   type="color"
                   value={localProps.stroke as string ?? '#000000'}
                   onChange={(e) => handleChange('stroke', e.target.value)}
-                  style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer' }}
+                  className="color-swatch"
                 />
                 <Input
                   value={localProps.stroke as string ?? ''}
                   onChange={(e) => handleChange('stroke', e.target.value)}
                   placeholder="None"
-                  style={{ height: 32, flex: 1 }}
+                  className="field-row__grow"
                 />
               </div>
             </div>
@@ -408,7 +402,6 @@ export function PropertiesPanel({
                 onChange={(e) => handleChange('strokeWidth', parseInt(e.target.value) || 0)}
                 min={0}
                 max={20}
-                style={{ height: 32 }}
               />
             </div>
             {selectedObject.type === 'rect' && (
@@ -424,7 +417,6 @@ export function PropertiesPanel({
                   }}
                   min={0}
                   max={50}
-                  style={{ height: 32 }}
                 />
               </div>
             )}
@@ -441,17 +433,17 @@ export function PropertiesPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>
               <Label style={{ fontSize: 11 }}>Color</Label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="field-row">
                 <input
                   type="color"
                   value={localProps.stroke as string ?? '#000000'}
                   onChange={(e) => handleChange('stroke', e.target.value)}
-                  style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer' }}
+                  className="color-swatch"
                 />
                 <Input
                   value={localProps.stroke as string ?? '#000000'}
                   onChange={(e) => handleChange('stroke', e.target.value)}
-                  style={{ height: 32, flex: 1 }}
+                  className="field-row__grow"
                 />
               </div>
             </div>
@@ -463,7 +455,6 @@ export function PropertiesPanel({
                 onChange={(e) => handleChange('strokeWidth', parseInt(e.target.value) || 1)}
                 min={1}
                 max={20}
-                style={{ height: 32 }}
               />
             </div>
           </div>
@@ -482,7 +473,6 @@ export function PropertiesPanel({
               value={localProps.fieldId as string ?? ''}
               onChange={(e) => handleDataChange({ fieldId: e.target.value })}
               placeholder="e.g., firstName, photo"
-              style={{ height: 32 }}
             />
             <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
               This field will be replaced with user data when printing

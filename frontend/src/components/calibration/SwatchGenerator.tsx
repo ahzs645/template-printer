@@ -89,7 +89,7 @@ export function SwatchGenerator({
           onChange={handleColorChange}
         />
         <div
-          className="w-16 h-16 rounded border border-border"
+          className="w-16 h-16 rounded border border-line"
           style={{ backgroundColor: selectedColor }}
         />
         <div className="flex-1 space-y-1">

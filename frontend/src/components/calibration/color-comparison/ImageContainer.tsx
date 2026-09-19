@@ -27,7 +27,7 @@ export function ImageContainer({
     <div className="space-y-2">
       <div
         ref={containerRef}
-        className="relative w-full bg-gray-100 rounded-lg border-2 border-border overflow-hidden"
+        className="relative w-full bg-surface-alt rounded-lg border-2 border-line overflow-hidden"
         style={{ height: 'clamp(220px, 34vh, 360px)' }}
       >
         <img
@@ -48,7 +48,7 @@ export function ImageContainer({
 
       {/* Debug info panel outside the image */}
       {analysisResult && (
-        <div className="bg-black/10 text-gray-700 text-xs p-2 rounded-lg border">
+        <div className="rounded-control border border-line bg-surface-alt p-2 text-xs text-ink">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="font-semibold mb-1">Detection Status</div>
@@ -69,7 +69,7 @@ export function ImageContainer({
             </div>
           </div>
           {(!analysisResult.detectedMarkers || analysisResult.detectedMarkers.length < 4) && (
-            <div className="mt-3 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800">
+            <div className="mt-3 rounded-control border border-warning bg-warning-soft p-2 text-warning">
               <strong>Low marker detection:</strong> For accurate color sampling, print a new calibration card from the Swatch Generator tab. The markers enable precise alignment.
             </div>
           )}

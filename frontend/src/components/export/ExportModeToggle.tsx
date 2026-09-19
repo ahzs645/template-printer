@@ -27,7 +27,7 @@ export function ExportModeToggle({ mode, onModeChange }: ExportModeToggleProps) 
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.75rem' }}>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
           {mode === 'quick'
             ? 'Export with manually entered data'
             : 'Export for multiple users from database'}

@@ -489,7 +489,7 @@ export function FieldNamingTab() {
         </CardHeader>
         <CardContent style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#27272a' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               Field Category
             </label>
             <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
@@ -505,14 +505,14 @@ export function FieldNamingTab() {
               </SelectContent>
             </Select>
             {selectedCategory?.description && (
-              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                 {selectedCategory.description}
               </p>
             )}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#27272a' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               Field
             </label>
             <Select value={selectedFieldId} onValueChange={setSelectedFieldId}>
@@ -528,7 +528,7 @@ export function FieldNamingTab() {
               </SelectContent>
             </Select>
             {selectedField?.description && (
-              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                 {selectedField.description}
               </p>
             )}
@@ -536,7 +536,7 @@ export function FieldNamingTab() {
 
           {selectedField && selectedField.formats.length > 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#27272a' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
                 Format
               </label>
               <Select value={selectedFormatId} onValueChange={setSelectedFormatId}>
@@ -552,7 +552,7 @@ export function FieldNamingTab() {
                 </SelectContent>
               </Select>
               {selectedFormat?.helper && (
-                <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                   {selectedFormat.helper}
                 </p>
               )}
@@ -561,7 +561,7 @@ export function FieldNamingTab() {
 
           {selectedField && selectedField.capitalization?.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#27272a' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
                 Capitalization
               </label>
               <Select value={selectedCapitalizationId} onValueChange={(value) => setSelectedCapitalizationId(value as CapitalizationVariantId)}>
@@ -581,7 +581,7 @@ export function FieldNamingTab() {
                 </SelectContent>
               </Select>
               {selectedCapitalizationOption?.helper && (
-                <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                   {selectedCapitalizationOption.helper}
                 </p>
               )}
@@ -589,17 +589,17 @@ export function FieldNamingTab() {
           ) : null}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#27272a' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               Generated Layer ID
             </label>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <Input value={layerId} readOnly />
+            <div className="field-row">
+              <Input value={layerId} readOnly className="field-row__grow" />
               <Button type="button" variant="outline" onClick={() => handleCopyLayerId(layerId)}>
                 {mainCopyFeedback ? 'Copied!' : 'Copy'}
               </Button>
             </div>
             {exampleOutput && (
-              <p style={{ fontSize: '0.875rem', color: '#6b7280', whiteSpace: 'pre-line' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', whiteSpace: 'pre-line' }}>
                 Example output: {exampleOutput}
               </p>
             )}
@@ -614,8 +614,8 @@ export function FieldNamingTab() {
             </Button>
           </div>
 
-          <div style={{ background: '#f4f4f5', padding: '0.75rem', borderRadius: '0.5rem' }}>
-            <p style={{ fontSize: '0.75rem', color: '#52525b' }}>
+          <div style={{ background: 'var(--bg-surface-alt)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
               Tip: For custom static text, name your layer starting with <code>custom</code> (e.g. <code>customSchoolMotto</code>).
             </p>
           </div>
@@ -638,24 +638,24 @@ export function FieldNamingTab() {
           </div>
           <ScrollArea style={{ maxHeight: '320px' }}>
             {savedNames.length === 0 ? (
-              <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                 Saved layer names will appear here.
               </p>
             ) : (
               <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: 0, margin: 0, listStyle: 'none' }}>
                 {savedNames.map((entry) => (
-                  <li key={entry.layerId} style={{ border: '1px solid #e4e4e7', borderRadius: '0.5rem', padding: '0.75rem', background: '#ffffff' }}>
+                  <li key={entry.layerId} style={{ border: '1px solid var(--border-default)', borderRadius: '0.5rem', padding: '0.75rem', background: 'var(--bg-surface)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                       <div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#18181b', wordBreak: 'break-all' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-all' }}>
                           {entry.layerId}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#71717a' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           {entry.fieldLabel}
                           {entry.formatLabel ? ` • ${entry.formatLabel}` : ''}
                           {entry.capitalizationLabel ? ` • ${entry.capitalizationLabel}` : ''}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#52525b', marginTop: '0.25rem', whiteSpace: 'pre-line' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem', whiteSpace: 'pre-line' }}>
                           Example: {entry.exampleOutput}
                         </div>
                       </div>

@@ -76,21 +76,21 @@ export function ProfileManager({
           return (
             <div
               key={profile.id}
-              className={`p-4 border rounded-lg cursor-pointer transition-colors ${selectedProfileId === profile.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+              className={`p-4 border rounded-lg cursor-pointer transition-colors ${selectedProfileId === profile.id ? 'border-accent bg-accent-soft' : 'border-line-subtle hover:border-line'
                 }`}
               onClick={() => setSelectedProfileId(profile.id)}
             >
               <div className="flex justify-between items-start mb-2">
                 <h3 className="font-medium truncate">{profile.name}</h3>
-                <span className={`px-2 py-1 text-xs rounded ${avgAdjustment < 10 ? 'bg-green-100 text-green-800' :
-                    avgAdjustment < 25 ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
+                <span className={`px-2 py-1 text-xs rounded ${avgAdjustment < 10 ? 'bg-success-soft text-success' :
+                    avgAdjustment < 25 ? 'bg-warning-soft text-warning' :
+                      'bg-danger-soft text-danger'
                   }`}>
                   {avgAdjustment < 10 ? 'Fine' : avgAdjustment < 25 ? 'Moderate' : 'Heavy'}
                 </span>
               </div>
-              <p className="text-sm text-gray-600 mb-2">{profile.device}</p>
-              <div className="flex justify-between text-xs text-gray-500">
+              <p className="text-sm text-ink-muted mb-2">{profile.device}</p>
+              <div className="flex justify-between text-xs text-ink-muted">
                 <span>{adjustmentCount} colors</span>
                 <span>{new Date(profile.createdAt || profile.created || '').toLocaleDateString()}</span>
               </div>
@@ -99,9 +99,9 @@ export function ProfileManager({
         })}
 
         {profiles.length === 0 && (
-          <div className="col-span-full p-8 text-center border-2 border-dashed border-gray-300 rounded-lg">
-            <p className="text-gray-500 mb-2">No calibration profiles yet</p>
-            <p className="text-sm text-gray-400">Create profiles by analyzing printed color charts in the Color Comparison tab</p>
+          <div className="col-span-full p-8 text-center border-2 border-dashed border-line rounded-lg">
+            <p className="text-ink-muted mb-2">No calibration profiles yet</p>
+            <p className="text-sm text-ink-subtle">Create profiles by analyzing printed color charts in the Color Comparison tab</p>
           </div>
         )}
       </div>
@@ -109,12 +109,12 @@ export function ProfileManager({
 
       {/* Selected Profile Details */}
       {selectedProfile && (
-        <div className="border rounded-lg p-6 bg-gray-50">
+        <div className="rounded-control border border-line p-6 bg-surface-alt">
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="text-xl font-medium">{selectedProfile.name}</h3>
-              <p className="text-gray-600">{selectedProfile.device}</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-ink-muted">{selectedProfile.device}</p>
+              <p className="text-sm text-ink-muted">
                 Created: {new Date(selectedProfile.createdAt || selectedProfile.created || '').toLocaleDateString()}
               </p>
             </div>
@@ -142,7 +142,7 @@ export function ProfileManager({
             <div className="flex justify-between items-center mb-3">
               <h4 className="font-medium">Profile Color Adjustments ({Object.keys(selectedProfile.adjustments || {}).length} colors)</h4>
               <button
-                className="px-3 py-1 border rounded text-sm hover:bg-gray-100"
+                className="h-control-sm rounded-control border border-line px-3 text-sm text-ink hover:bg-hover"
                 onClick={() => setShowFineTuning(!showFineTuning)}
               >
                 {showFineTuning ? 'Hide' : 'Enable'} Fine-Tuning
@@ -163,25 +163,25 @@ export function ProfileManager({
                     }`
 
                   return (
-                    <div key={color} className="bg-white p-3 rounded border">
+                    <div key={color} className="rounded-control border border-line-subtle bg-surface p-3">
                       <div className="flex gap-1 mb-2">
                         <div className="flex-1">
                           <div
-                            className="w-full h-6 rounded-t border border-gray-300"
+                            className="w-full h-6 rounded-t border border-line"
                             style={{ backgroundColor: baseColor }}
                             title="Original"
                           />
                           <div
-                            className="w-full h-6 rounded-b border border-gray-300 border-t-0"
+                            className="w-full h-6 rounded-b border border-line border-t-0"
                             style={{ backgroundColor: scannedColor }}
                             title="Scanned"
                           />
                         </div>
                       </div>
-                      <div className="text-xs font-mono text-gray-600">
+                      <div className="text-xs font-mono text-ink-muted">
                         {baseColor}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-ink-muted mt-1">
                         R{adjustment.r >= 0 ? '+' : ''}{adjustment.r}
                         G{adjustment.g >= 0 ? '+' : ''}{adjustment.g}
                         B{adjustment.b >= 0 ? '+' : ''}{adjustment.b}
@@ -218,36 +218,36 @@ export function ProfileManager({
                     }`
 
                   return (
-                    <div key={color} className="bg-white p-4 rounded-lg border-2 border-gray-200">
+                    <div key={color} className="bg-surface p-4 rounded-lg border-2 border-line-subtle">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Color Display */}
                         <div>
                           <div className="flex gap-3 items-center">
                             <div className="text-center">
                               <div
-                                className="w-16 h-16 rounded border-2 border-gray-300"
+                                className="w-16 h-16 rounded border-2 border-line"
                                 style={{ backgroundColor: baseColor }}
                               />
                               <div className="text-xs mt-1 font-medium">Original</div>
-                              <div className="text-xs text-gray-500">{baseColor}</div>
+                              <div className="text-xs text-ink-muted">{baseColor}</div>
                             </div>
                             <div className="text-xl">-&gt;</div>
                             <div className="text-center">
                               <div
-                                className="w-16 h-16 rounded border-2 border-gray-300"
+                                className="w-16 h-16 rounded border-2 border-line"
                                 style={{ backgroundColor: scannedColor }}
                               />
                               <div className="text-xs mt-1 font-medium">Scanned</div>
-                              <div className="text-xs text-gray-500">{scannedColor}</div>
+                              <div className="text-xs text-ink-muted">{scannedColor}</div>
                             </div>
                             <div className="text-xl">-&gt;</div>
                             <div className="text-center">
                               <div
-                                className="w-16 h-16 rounded border-2 border-green-500"
+                                className="w-16 h-16 rounded border-2 border-success"
                                 style={{ backgroundColor: adjustedColor }}
                               />
-                              <div className="text-xs mt-1 font-medium text-green-700">Adjusted</div>
-                              <div className="text-xs text-gray-500">{adjustedColor}</div>
+                              <div className="text-xs mt-1 font-medium text-success">Adjusted</div>
+                              <div className="text-xs text-ink-muted">{adjustedColor}</div>
                             </div>
                           </div>
                         </div>
@@ -258,7 +258,7 @@ export function ProfileManager({
 
                           {/* Red */}
                           <div className="flex items-center gap-2">
-                            <label className="text-xs w-8 text-red-700 font-medium">R</label>
+                            <label className="text-xs w-8 text-red-500 font-medium">R</label>
                             <Slider
                               value={[fineTuneAdjustment.r]}
                               onValueChange={([value]) => {
@@ -279,7 +279,7 @@ export function ProfileManager({
 
                           {/* Green */}
                           <div className="flex items-center gap-2">
-                            <label className="text-xs w-8 text-green-700 font-medium">G</label>
+                            <label className="text-xs w-8 text-green-500 font-medium">G</label>
                             <Slider
                               value={[fineTuneAdjustment.g]}
                               onValueChange={([value]) => {
@@ -300,7 +300,7 @@ export function ProfileManager({
 
                           {/* Blue */}
                           <div className="flex items-center gap-2">
-                            <label className="text-xs w-8 text-blue-700 font-medium">B</label>
+                            <label className="text-xs w-8 text-blue-500 font-medium">B</label>
                             <Slider
                               value={[fineTuneAdjustment.b]}
                               onValueChange={([value]) => {
@@ -327,11 +327,11 @@ export function ProfileManager({
             )}
 
             {showFineTuning && (
-              <div className="mt-4 pt-4 border-t bg-blue-50 p-4 rounded-lg">
+              <div className="mt-4 pt-4 border-t bg-accent-soft p-4 rounded-lg">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h5 className="font-medium text-blue-900">Apply Fine-Tuning Adjustments</h5>
-                    <p className="text-sm text-blue-700">Save your fine-tuning adjustments to this profile</p>
+                    <h5 className="font-medium text-ink">Apply Fine-Tuning Adjustments</h5>
+                    <p className="text-sm text-ink-muted">Save your fine-tuning adjustments to this profile</p>
                   </div>
                   <button
                     onClick={() => {
@@ -351,7 +351,7 @@ export function ProfileManager({
                         alert('Fine-tuning adjustments applied to profile!')
                       }
                     }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    className="h-control rounded-control bg-accent px-4 text-ink-on-accent hover:bg-accent-hover"
                   >
                     Apply Adjustments
                   </button>
@@ -368,7 +368,7 @@ export function ProfileManager({
           <h3 className="text-lg font-medium">Profile Management</h3>
           <div className="flex gap-2">
             <button
-              className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="h-control rounded-control border border-line px-4 text-ink hover:bg-hover disabled:opacity-50"
               onClick={onExportProfiles}
               disabled={profiles.length === 0}
             >
@@ -381,16 +381,16 @@ export function ProfileManager({
                 onChange={(e) => e.target.files?.[0] && onImportProfiles(e.target.files[0])}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
-              <button className="px-4 py-2 border rounded hover:bg-gray-50">
+              <button className="h-control rounded-control border border-line px-4 text-ink hover:bg-hover">
                 Import Profiles
               </button>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-          <h4 className="font-medium text-blue-900 mb-2">How to Use Profiles</h4>
-          <ol className="text-sm text-blue-800 space-y-1">
+        <div className="mt-4 p-4 bg-accent-soft rounded-lg">
+          <h4 className="mb-2 font-medium text-ink">How to Use Profiles</h4>
+          <ol className="space-y-1 text-sm text-ink-muted">
             <li>1. <strong>Create:</strong> Use Color Comparison tab to analyze printed charts and create profiles</li>
             <li>2. <strong>Apply:</strong> Click "Apply Profile" to load adjustments for future print jobs</li>
             <li>3. <strong>Export:</strong> Share profiles between devices or back up your calibrations</li>

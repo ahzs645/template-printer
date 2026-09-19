@@ -79,7 +79,7 @@ export function PreviewWorkspace({
               width: previewWidth,
               height: previewHeight,
               position: 'relative',
-              border: '1px solid #e4e4e7',
+              border: '1px solid var(--border-default)',
               borderRadius: '0.375rem',
               backgroundColor: '#fff',
               boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
@@ -105,7 +105,7 @@ export function PreviewWorkspace({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#71717a',
+                  color: 'var(--text-muted)',
                   fontSize: '0.875rem'
                 }}>
                   <p>Upload an SVG template to see the live preview.</p>
@@ -154,7 +154,7 @@ export function PreviewWorkspace({
                       onClick={() => onDeleteField(selectedField.id)}
                       title="Delete field"
                     >
-                      <Trash2 style={{ width: '0.875rem', height: '0.875rem', color: '#dc2626' }} />
+                      <Trash2 style={{ width: '0.875rem', height: '0.875rem', color: 'var(--danger)' }} />
                     </Button>
                   </div>
                 )}
@@ -169,7 +169,7 @@ export function PreviewWorkspace({
                   missingFonts={missingFonts}
                 />
               ) : (
-                <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                   Select a field to edit its properties.
                 </p>
               )}

@@ -36,9 +36,9 @@ export function ColorSwatchChart({
             return (
               <div
                 key={gridIndex}
-                className="aspect-square border-2 border-gray-800 bg-gray-200 rounded-sm flex items-center justify-center min-w-0"
+                className="aspect-square border-2 border-line-strong bg-active rounded-sm flex items-center justify-center min-w-0"
               >
-                <span className="text-xs font-bold text-gray-600">M{cardLayout.markerPositions.find(m => m.gridIndex === gridIndex)?.id}</span>
+                <span className="text-xs font-bold text-ink-muted">M{cardLayout.markerPositions.find(m => m.gridIndex === gridIndex)?.id}</span>
               </div>
             )
           }
@@ -51,7 +51,7 @@ export function ColorSwatchChart({
           return (
             <div
               key={gridIndex}
-              className="aspect-square border border-border relative group rounded-sm overflow-hidden min-w-0"
+              className="aspect-square border border-line relative group rounded-sm overflow-hidden min-w-0"
               style={{ backgroundColor: color || '#E5E7EB' }}
               onMouseEnter={() => onSwatchHover(swatchIndex)}
               onMouseLeave={() => onSwatchHover(null)}

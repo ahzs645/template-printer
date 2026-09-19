@@ -18,7 +18,7 @@ export function QuickModeFields({ fields, cardData, onCardDataChange }: QuickMod
       </CardHeader>
       <CardContent>
         {fields.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>No fields defined in template</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>No fields defined in template</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {fields.filter(f => f.type === 'text').map((field) => (

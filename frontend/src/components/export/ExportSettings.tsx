@@ -40,7 +40,7 @@ export function ExportSettings({
   onExport,
 }: ExportSettingsProps) {
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm">
+    <Card>
       <CardHeader className="pb-4">
         <CardTitle className="text-lg font-semibold">Export Settings</CardTitle>
         <CardDescription>Configure export format and quality</CardDescription>
@@ -108,10 +108,10 @@ export function ExportSettings({
 
         {/* Vector Graphics Toggle for PDF */}
         {options.format === 'pdf' && (
-          <div className="flex items-center justify-between space-x-2 border p-3 rounded-md border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+          <div className="flex items-center justify-between gap-2 rounded-control border border-line-subtle bg-surface-alt p-3">
             <div className="space-y-0.5">
               <Label htmlFor="maintain-vectors" className="text-base">Maintain Vectors</Label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-ink-muted">
                 Keep text and shapes as vectors for infinite scalability
               </p>
             </div>
@@ -146,7 +146,7 @@ export function ExportSettings({
                   onChange={onPrintLayoutUpload}
                   className="hidden"
                 />
-                <div className="inline-flex h-8 items-center justify-center rounded-md border border-zinc-200 bg-white px-3 text-xs font-medium shadow-sm hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-300">
+                <div className="inline-flex h-control-sm items-center justify-center rounded-control border border-line bg-surface px-3 text-xs font-medium text-ink hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50">
                   <Upload className="mr-2 h-3 w-3" />
                   Upload
                 </div>
@@ -183,7 +183,7 @@ export function ExportSettings({
             <p className="text-xs text-red-500">{printTemplatesError}</p>
           )}
           {printTemplatesLoading && (
-            <p className="text-xs text-zinc-500">Loading layouts...</p>
+            <p className="text-xs text-ink-muted">Loading layouts...</p>
           )}
         </div>
 

@@ -134,11 +134,11 @@ export function TemplateSidebar({
             <div style={{
               marginTop: '0.75rem',
               padding: '0.75rem',
-              backgroundColor: '#f0fdf4',
-              border: '1px solid #86efac',
+              backgroundColor: 'var(--success-soft)',
+              border: '1px solid var(--success)',
               borderRadius: '0.375rem',
               fontSize: '0.875rem',
-              color: '#166534',
+              color: 'var(--success)',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem'
@@ -152,11 +152,11 @@ export function TemplateSidebar({
             <div style={{
               marginTop: '0.75rem',
               padding: '0.75rem',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fca5a5',
+              backgroundColor: 'var(--danger-soft)',
+              border: '1px solid var(--danger)',
               borderRadius: '0.375rem',
               fontSize: '0.875rem',
-              color: '#dc2626',
+              color: 'var(--danger)',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem'
@@ -182,7 +182,7 @@ export function TemplateSidebar({
         </CardHeader>
         <CardContent>
           {fontList.length === 0 ? (
-            <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
               Fonts from the template appear here once an SVG is imported.
             </p>
           ) : (
@@ -193,7 +193,7 @@ export function TemplateSidebar({
                     key={font.name}
                     style={{
                       padding: '0.75rem',
-                      border: '1px solid #e4e4e7',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '0.375rem',
                       display: 'flex',
                       flexDirection: 'column',
@@ -209,7 +209,7 @@ export function TemplateSidebar({
                       </Badge>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#71717a' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       <span>{font.source === 'template' ? 'Template font' : 'Custom font'}</span>
                       {font.fileName && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{font.fileName}</span>}
                     </div>
@@ -260,7 +260,7 @@ export function TemplateSidebar({
         </CardHeader>
         <CardContent>
           {fields.length === 0 ? (
-            <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
               Upload a template or add a new field to get started.
             </p>
           ) : (
@@ -276,8 +276,8 @@ export function TemplateSidebar({
                       padding: '0.75rem',
                       textAlign: 'left',
                       border: '1px solid',
-                      borderColor: field.id === selectedFieldId ? '#18181b' : '#e4e4e7',
-                      backgroundColor: field.id === selectedFieldId ? '#fafafa' : '#fff',
+                      borderColor: field.id === selectedFieldId ? 'var(--text-primary)' : 'var(--border-default)',
+                      backgroundColor: field.id === selectedFieldId ? 'var(--bg-surface-alt)' : 'var(--bg-surface)',
                       borderRadius: '0.375rem',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
@@ -287,12 +287,12 @@ export function TemplateSidebar({
                     }}
                     onMouseEnter={(e) => {
                       if (field.id !== selectedFieldId) {
-                        e.currentTarget.style.backgroundColor = '#f9f9f9'
+                        e.currentTarget.style.backgroundColor = 'var(--bg-surface-alt)'
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (field.id !== selectedFieldId) {
-                        e.currentTarget.style.backgroundColor = '#fff'
+                        e.currentTarget.style.backgroundColor = 'var(--bg-surface)'
                       }
                     }}
                   >
@@ -300,7 +300,7 @@ export function TemplateSidebar({
                       <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{field.label}</span>
                       <div style={{ display: 'flex', gap: '0.25rem' }}>
                         {isFieldMapped(field) && (
-                          <Badge variant="default" style={{ fontSize: '0.625rem', backgroundColor: '#10b981', borderColor: '#10b981' }}>
+                          <Badge variant="default" style={{ fontSize: '0.625rem', backgroundColor: 'var(--success)', borderColor: 'var(--success)', color: 'var(--success-on)' }}>
                             <Link style={{ width: '0.75rem', height: '0.75rem', marginRight: '0.25rem' }} />
                             mapped
                           </Badge>
@@ -312,7 +312,7 @@ export function TemplateSidebar({
                         )}
                       </div>
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: '#71717a' }}>{field.type}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{field.type}</span>
                   </button>
                 ))}
               </div>

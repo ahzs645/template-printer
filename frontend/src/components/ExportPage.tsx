@@ -822,7 +822,7 @@ export function ExportPage({
                   style={{
                     padding: 10,
                     background: 'var(--bg-surface)',
-                    border: '1px solid var(--border-color)',
+                    border: '1px solid var(--border-default)',
                     borderRadius: 'var(--radius)',
                   }}
                 >
@@ -842,7 +842,7 @@ export function ExportPage({
                         templateId: value === 'default' ? null : value
                       })}
                     >
-                      <SelectTrigger style={{ height: 32, fontSize: 12 }}>
+                      <SelectTrigger style={{ fontSize: 12 }}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -870,7 +870,7 @@ export function ExportPage({
                       value={assignment.source}
                       onValueChange={(value) => updateSlotAssignment(index, { source: value })}
                     >
-                      <SelectTrigger style={{ height: 32, fontSize: 12 }}>
+                      <SelectTrigger style={{ fontSize: 12 }}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

@@ -1,61 +1,26 @@
 import * as React from 'react'
 import * as SliderPrimitive from '@radix-ui/react-slider'
 
+import { cn } from '../../lib/utils'
+
 const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
 >(({ className, ...props }, ref) => (
   <SliderPrimitive.Root
     ref={ref}
-    style={{
-      position: 'relative',
-      display: 'flex',
-      width: '100%',
-      touchAction: 'none',
-      alignItems: 'center',
-      userSelect: 'none',
-      cursor: 'pointer',
-    }}
+    className={cn(
+      // The row is control-height so a slider sitting in a form lines up with
+      // the fields around it, while the track itself stays slim.
+      'relative flex h-control w-full cursor-pointer touch-none select-none items-center',
+      className
+    )}
     {...props}
   >
-    <SliderPrimitive.Track
-      style={{
-        position: 'relative',
-        height: '0.5rem',
-        width: '100%',
-        flexGrow: 1,
-        overflow: 'hidden',
-        borderRadius: '9999px',
-        backgroundColor: '#e4e4e7',
-      }}
-    >
-      <SliderPrimitive.Range
-        style={{
-          position: 'absolute',
-          height: '100%',
-          backgroundColor: '#18181b',
-        }}
-      />
+    <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-active">
+      <SliderPrimitive.Range className="absolute h-full bg-accent" />
     </SliderPrimitive.Track>
-    <SliderPrimitive.Thumb
-      style={{
-        display: 'block',
-        height: '1.25rem',
-        width: '1.25rem',
-        borderRadius: '9999px',
-        border: '2px solid #18181b',
-        backgroundColor: '#fff',
-        boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-        transition: 'box-shadow 0.2s',
-        outline: 'none',
-      }}
-      onFocus={(e) => {
-        e.currentTarget.style.boxShadow = '0 0 0 2px #fff, 0 0 0 4px #18181b'
-      }}
-      onBlur={(e) => {
-        e.currentTarget.style.boxShadow = '0 1px 3px 0 rgb(0 0 0 / 0.1)'
-      }}
-    />
+    <SliderPrimitive.Thumb className="block h-4 w-4 rounded-full border-2 border-accent bg-surface shadow-[var(--shadow-soft)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50" />
   </SliderPrimitive.Root>
 ))
 Slider.displayName = SliderPrimitive.Root.displayName

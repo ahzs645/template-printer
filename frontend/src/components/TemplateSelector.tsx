@@ -79,7 +79,7 @@ export function TemplateSelector({
   return (
     <div className="flex flex-col gap-3">
       {/* Header with actions */}
-      {title && <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{title}</h2>}
+      {title && <h2 className="text-sm font-medium text-ink">{title}</h2>}
 
       <div className="flex gap-2">
         {onUploadClick && (
@@ -96,17 +96,17 @@ export function TemplateSelector({
 
       {/* Loading state */}
       {isLoading && templates.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading templates…</p>
+        <p className="text-sm text-ink-muted">Loading templates…</p>
       ) : null}
 
       {/* Error state */}
       {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
       ) : null}
 
       {/* Empty state */}
       {!isLoading && !error && templates.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No templates available yet. Upload one to get started.</p>
+        <p className="text-sm text-ink-muted">No templates available yet. Upload one to get started.</p>
       ) : null}
 
       {/* Template list */}
@@ -123,7 +123,7 @@ export function TemplateSelector({
                 >
                   {isEditing ? (
                     <div
-                      className="flex flex-1 flex-col gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/60"
+                      className="flex flex-1 flex-col gap-2 rounded-control border border-line-subtle bg-surface-alt p-3"
                     >
                       <div>
                         <Input
@@ -140,7 +140,7 @@ export function TemplateSelector({
                         />
                       </div>
                       {renameError && (
-                        <p className="text-xs text-red-600 dark:text-red-400">{renameError}</p>
+                        <p className="text-xs text-danger">{renameError}</p>
                       )}
                       <div className="flex gap-2">
                         <Button
@@ -171,15 +171,15 @@ export function TemplateSelector({
                       onClick={() => onSelect(template)}
                       disabled={isLoading}
                       className={cn(
-                        'flex flex-1 flex-col gap-1 rounded-md border p-3 text-left text-zinc-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 dark:text-zinc-100 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed',
+                        'flex flex-1 flex-col gap-1 rounded-control border p-3 text-left text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed',
                         isSelected
-                          ? 'border-zinc-900 bg-zinc-100 dark:border-zinc-500 dark:bg-zinc-800'
-                          : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/70'
+                          ? 'border-accent bg-accent-soft'
+                          : 'border-line-subtle bg-surface-alt hover:bg-hover'
                       )}
                     >
                       <span className="text-sm font-medium">{template.name}</span>
                       {template.description && (
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">{template.description}</span>
+                        <span className="text-xs text-ink-muted">{template.description}</span>
                       )}
                     </button>
                   )}
@@ -213,7 +213,7 @@ export function TemplateSelector({
                         title="Delete template"
                         className="shrink-0 px-2"
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                        <Trash2 className="h-3.5 w-3.5 text-danger" />
                       </Button>
                     )}
                   </div>

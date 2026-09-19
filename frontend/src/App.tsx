@@ -1997,9 +1997,9 @@ function App() {
             className="link-result-banner"
             role={linkResult.ok ? 'status' : 'alert'}
             style={{
-              background: linkResult.ok ? '#ecfdf5' : '#fef2f2',
-              borderBottom: `1px solid ${linkResult.ok ? '#a7f3d0' : '#fecaca'}`,
-              color: linkResult.ok ? '#065f46' : '#991b1b',
+              background: linkResult.ok ? 'var(--success-soft)' : 'var(--danger-soft)',
+              borderBottom: `1px solid ${linkResult.ok ? 'var(--success)' : 'var(--danger)'}`,
+              color: linkResult.ok ? 'var(--success)' : 'var(--danger)',
             }}
           >
             <span className="link-result-banner__text">{linkResult.text}</span>
@@ -2152,7 +2152,7 @@ function App() {
                           </div>
                           <div style={{ display: 'flex', gap: 4 }}>
                             {isFieldMapped(field) && (
-                              <Badge variant="default" style={{ fontSize: '0.625rem', backgroundColor: 'var(--success)' }}>
+                              <Badge variant="default" style={{ fontSize: '0.625rem', backgroundColor: 'var(--success)', color: 'var(--success-on)' }}>
                                 <Link size={10} style={{ marginRight: 2 }} />
                                 mapped
                               </Badge>
@@ -2178,8 +2178,8 @@ function App() {
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 6,
-                      background: 'var(--muted, #f4f4f5)',
-                      color: 'var(--muted-foreground, #52525b)',
+                      background: 'var(--bg-surface-alt)',
+                      color: 'var(--text-muted)',
                     }}
                   >
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2200,8 +2200,8 @@ function App() {
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 6,
-                      background: 'var(--bg-surface-alt, #f4f4f5)',
-                      color: 'var(--text-muted, #52525b)',
+                      background: 'var(--bg-surface-alt, var(--bg-surface-alt))',
+                      color: 'var(--text-muted, var(--text-secondary))',
                     }}
                   >
                     <span style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
@@ -2733,7 +2733,7 @@ function App() {
         >
           <div
             style={{
-              background: '#ffffff',
+              background: 'var(--bg-surface)',
               borderRadius: '0.75rem',
               padding: '1.25rem 1.5rem',
               maxWidth: 360,
@@ -2741,8 +2741,8 @@ function App() {
               boxShadow: '0 20px 45px rgba(0,0,0,0.3)',
             }}
           >
-            <p style={{ margin: 0, fontWeight: 600, color: '#18181b' }}>Opening card design…</p>
-            <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
+            <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)' }}>Opening card design…</p>
+            <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
               Downloading from {linkLoading}, with its fonts.
             </p>
           </div>

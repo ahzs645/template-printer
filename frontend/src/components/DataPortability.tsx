@@ -108,8 +108,8 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
 
   return (
     <div className={`space-y-4 ${className}`}>
-      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-        <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700">
+      <div className="flex items-center gap-2 text-sm text-ink-muted">
+        <span className="rounded px-2 py-0.5 text-xs font-medium bg-surface-alt text-ink">
           {getStorageModeLabel(storageMode)}
         </span>
       </div>
@@ -127,7 +127,7 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
         <button
           onClick={handleImportClick}
           disabled={isExporting || isImporting}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex h-control items-center gap-2 rounded-control bg-surface-alt px-4 text-sm font-medium text-ink transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Upload className="w-4 h-4" />
           {isImporting ? 'Importing...' : 'Import Data'}
@@ -146,8 +146,8 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
         <div
           className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
             message.type === 'success'
-              ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-              : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+              ? 'bg-success-soft text-success'
+              : 'bg-danger-soft text-danger'
           }`}
         >
           {message.type === 'success' ? (
@@ -159,7 +159,7 @@ export function DataPortability({ className = '' }: DataPortabilityProps) {
         </div>
       )}
 
-      <p className="text-xs text-gray-500 dark:text-gray-400">
+      <p className="text-xs text-ink-muted">
         Export creates a backup file containing all templates, users, card designs, fonts, and color profiles.
         {(storageMode === 'local' || storageMode.startsWith('convex-')) && ' Import will completely replace all existing data.'}
         {storageMode === 'server' && ' Import will add data to the existing database.'}

@@ -50,16 +50,16 @@ export function UserSelector({
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>Loading users...</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Loading users...</p>
         ) : users.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: '#71717a' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             No users in database. Add users in the Users tab.
           </p>
         ) : (
           <>
             {isSlotAssignmentActive && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <p style={{ fontSize: '0.75rem', color: '#52525b' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   Assign which user appears in each card position of the selected print layout.
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -116,11 +116,11 @@ export function UserSelector({
                       alignItems: 'center',
                       gap: '0.5rem',
                       padding: '0.5rem',
-                      border: '1px solid #e4e4e7',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '0.375rem',
                       cursor: 'pointer',
                       backgroundColor: effectiveSelectedIds.includes(user.id!)
-                        ? '#f0fdf4'
+                        ? 'var(--success-soft)'
                         : '#fff',
                     }}
                   >
@@ -137,7 +137,7 @@ export function UserSelector({
                         {user.firstName} {user.lastName}
                       </div>
                       {user.studentId && (
-                        <div style={{ fontSize: '0.75rem', color: '#71717a' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           {user.studentId}
                         </div>
                       )}

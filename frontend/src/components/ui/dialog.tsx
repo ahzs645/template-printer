@@ -82,7 +82,7 @@ const DialogContent = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-zinc-200 bg-white p-6 shadow-lg sm:rounded-lg dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50',
+          'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain rounded-control border border-line bg-surface p-4 text-ink shadow-[var(--shadow-overlay)] sm:w-full sm:p-6',
           className
         )}
         onClick={(e) => e.stopPropagation()}
@@ -91,7 +91,7 @@ const DialogContent = React.forwardRef<
         {children}
         <button
           onClick={() => onOpenChange?.(false)}
-          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-white transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 disabled:pointer-events-none dark:ring-offset-zinc-950 dark:focus:ring-zinc-300"
+          className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-control text-ink-muted opacity-70 transition-opacity hover:bg-hover hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface disabled:pointer-events-none"
         >
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
@@ -122,7 +122,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
       className
     )}
     {...props}
@@ -137,7 +137,7 @@ const DialogTitle = React.forwardRef<
   <h2
     ref={ref}
     className={cn(
-      'text-lg font-semibold leading-none tracking-tight',
+      'pr-8 text-lg font-semibold leading-none tracking-tight text-ink',
       className
     )}
     {...props}
@@ -151,7 +151,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm text-zinc-500 dark:text-zinc-400', className)}
+    className={cn('text-sm text-ink-muted', className)}
     {...props}
   />
 ))
