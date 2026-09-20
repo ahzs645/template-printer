@@ -10,6 +10,7 @@ import type { FieldDefinition, CardData, PrintLayout, CardDesign } from '../lib/
 import type { UserData } from '../lib/fieldParser'
 import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
+import type { ExportBackSide } from '../hooks/useExportBackSide'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
 import type { SlotAssignment } from '../lib/exporter'
@@ -54,6 +55,8 @@ export type ExportPageProps = {
   designTemplatesLoading: boolean
   cardDesigns: CardDesign[]
   selectedCardDesignId: string | null
+  /** The back of the active card design, when it has one. */
+  backSide: ExportBackSide | null
   onCardDesignSelect: (designId: string | null) => void
   onTemplateSelect: (template: TemplateSummary) => void
   onCardDataChange: (fieldId: string, value: string) => void
@@ -116,6 +119,7 @@ export function ExportPage({
   designTemplatesLoading,
   cardDesigns,
   selectedCardDesignId,
+  backSide,
   onCardDesignSelect,
   onTemplateSelect,
   onCardDataChange,
@@ -171,6 +175,7 @@ export function ExportPage({
     users,
     fields,
     renderedSvg,
+    backSide,
   })
 
   const selectedPrintLayout = printTemplates.find(
@@ -443,21 +448,22 @@ export function ExportPage({
         slotOutline.setAttribute('height', `${cardHeight}`)
         slotsOverlay.appendChild(slotOutline)
 
-        let cardMarkup: string | null = previewSvg
-
         if (slotAssignment?.source === 'empty') {
           continue
         }
 
+        const slotSide = slotAssignment?.side === 'back' && backSide ? 'back' : 'front'
+        let cardMarkup: string | null = slotSide === 'back' ? backSide!.svg : previewSvg
+
         if (slotAssignment?.source && slotAssignment.source !== 'custom') {
-          const renderedForUser = renderCardForUser(slotAssignment.source)
+          const renderedForUser = renderCardForUser(slotAssignment.source, slotSide)
           if (renderedForUser) {
             cardMarkup = renderedForUser
           }
         } else if (exportOptions.mode === 'database') {
           const userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
           if (userIdForSlot) {
-            const renderedForUser = renderCardForUser(userIdForSlot)
+            const renderedForUser = renderCardForUser(userIdForSlot, slotSide)
             if (renderedForUser) {
               cardMarkup = renderedForUser
             }
@@ -511,6 +517,7 @@ export function ExportPage({
   }, [
     selectedJsonLayout,
     previewSvg,
+    backSide,
     exportOptions.slotAssignments,
     exportOptions.mode,
     exportOptions.selectedUserIds,
@@ -568,8 +575,11 @@ export function ExportPage({
     })
   }
 
-  // Check if the selected template has a back side available
-  const hasBackTemplate = templateMeta?.backTemplateId || false
+  // Whether the card design being printed actually has a back to print
+  const hasBackSide = Boolean(backSide)
+  const selectedCardDesign = selectedCardDesignId
+    ? cardDesigns.find((design) => design.id === selectedCardDesignId) ?? null
+    : null
 
   return (
     <div className="app-content" style={{ height: '100%' }}>
@@ -849,7 +859,7 @@ export function ExportPage({
                         <SelectItem value="default">
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <CreditCard size={12} />
-                            {template?.name || 'Selected Design'}
+                            {selectedCardDesign?.name || template?.name || 'Selected Design'}
                           </span>
                         </SelectItem>
                         {designTemplates.filter(t => t.id !== template?.id).map((t) => (
@@ -922,8 +932,8 @@ export function ExportPage({
                         className={cn('btn btn-sm', assignment.side === 'back' ? 'btn-primary' : 'btn-secondary')}
                         style={{ flex: 1, fontSize: 11, padding: '4px 8px' }}
                         onClick={() => updateSlotAssignment(index, { side: 'back' })}
-                        disabled={!hasBackTemplate}
-                        title={!hasBackTemplate ? 'No back template configured' : undefined}
+                        disabled={!hasBackSide}
+                        title={!hasBackSide ? 'This card design has no back artwork' : undefined}
                       >
                         Back
                       </button>
@@ -971,7 +981,7 @@ export function ExportPage({
                 >
                   All Custom
                 </button>
-                {hasBackTemplate && (
+                {hasBackSide && (
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"

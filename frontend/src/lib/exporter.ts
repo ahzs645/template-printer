@@ -13,6 +13,18 @@ export type SlotAssignment = {
   side: 'front' | 'back'     // Which side of the card design to use
   templateId?: string | null // Optional: override with a different design template
 }
+
+/**
+ * The back of the card design, for slots set to print it. The back is its own
+ * artwork with its own placeholders, so it carries its own fields and mappings
+ * rather than borrowing the front's.
+ */
+export type SlotBackSide = {
+  template: TemplateMeta
+  fields: FieldDefinition[]
+  fieldMappings: Record<string, string>
+  customValues?: Record<string, string>
+}
 import {
   buildCanvasFontString,
   clamp,
@@ -621,7 +633,7 @@ export async function exportBatchCardsWithJsonLayout(
  */
 export async function exportWithSlotAssignments(
   defaultTemplate: TemplateMeta | null,
-  backTemplate: TemplateMeta | null,
+  backSide: SlotBackSide | null,
   fields: FieldDefinition[],
   customCardData: CardData,
   users: UserData[],
@@ -638,7 +650,7 @@ export async function exportWithSlotAssignments(
   if (maintainVectors) {
     await exportWithSlotAssignmentsVector(
       defaultTemplate,
-      backTemplate,
+      backSide,
       fields,
       customCardData,
       users,
@@ -687,7 +699,9 @@ export async function exportWithSlotAssignments(
 
     // Determine which template to use
     let template: TemplateMeta | null = null
+    let templateFields = fields
     let slotFieldMappings = fieldMappings
+    let slotCustomValues = customValues
 
     if (assignment.templateId && allTemplates?.has(assignment.templateId)) {
       // Use the specific template selected for this slot
@@ -696,9 +710,14 @@ export async function exportWithSlotAssignments(
       if (allFieldMappings?.has(assignment.templateId)) {
         slotFieldMappings = allFieldMappings.get(assignment.templateId)!
       }
+    } else if (assignment.side === 'back' && backSide) {
+      // The back is its own artwork, so it brings its own fields and mappings
+      template = backSide.template
+      templateFields = backSide.fields
+      slotFieldMappings = backSide.fieldMappings
+      slotCustomValues = backSide.customValues ?? customValues
     } else {
-      // Fall back to default template based on side
-      template = assignment.side === 'back' && backTemplate ? backTemplate : defaultTemplate
+      template = defaultTemplate
     }
 
     if (!template) {
@@ -706,9 +725,6 @@ export async function exportWithSlotAssignments(
       cardImages.push(null)
       continue
     }
-
-    // Get fields for this template (use default fields for now, templates should have their own)
-    const templateFields = fields
 
     // Determine card data based on source
     let cardData: CardData
@@ -730,7 +746,7 @@ export async function exportWithSlotAssignments(
         const layerId = field.sourceId || field.id
         const standardFieldName = slotFieldMappings[layerId]
         if (standardFieldName) {
-          const customValue = customValues?.[layerId]
+          const customValue = slotCustomValues?.[layerId]
           cardData[field.id] = parseField(standardFieldName, user, customValue)
         }
       })
@@ -1058,7 +1074,7 @@ async function exportBatchCardsWithJsonLayoutVector(
 
 async function exportWithSlotAssignmentsVector(
   defaultTemplate: TemplateMeta | null,
-  backTemplate: TemplateMeta | null,
+  backSide: SlotBackSide | null,
   fields: FieldDefinition[],
   customCardData: CardData,
   users: UserData[],
@@ -1097,15 +1113,22 @@ async function exportWithSlotAssignmentsVector(
     }
 
     let template: TemplateMeta | null = null
+    let templateFields = fields
     let slotFieldMappings = fieldMappings
+    let slotCustomValues = customValues
 
     if (assignment.templateId && allTemplates?.has(assignment.templateId)) {
       template = allTemplates.get(assignment.templateId)!
       if (allFieldMappings?.has(assignment.templateId)) {
         slotFieldMappings = allFieldMappings.get(assignment.templateId)!
       }
+    } else if (assignment.side === 'back' && backSide) {
+      template = backSide.template
+      templateFields = backSide.fields
+      slotFieldMappings = backSide.fieldMappings
+      slotCustomValues = backSide.customValues ?? customValues
     } else {
-      template = assignment.side === 'back' && backTemplate ? backTemplate : defaultTemplate
+      template = defaultTemplate
     }
 
     if (!template) {
@@ -1113,7 +1136,6 @@ async function exportWithSlotAssignmentsVector(
       continue
     }
 
-    const templateFields = fields
     let slotCardData: CardData
     if (assignment.source === 'custom') {
       slotCardData = customCardData
@@ -1129,7 +1151,7 @@ async function exportWithSlotAssignmentsVector(
         const layerId = field.sourceId || field.id
         const standardFieldName = slotFieldMappings[layerId]
         if (standardFieldName) {
-          const customValue = customValues?.[layerId]
+          const customValue = slotCustomValues?.[layerId]
           slotCardData[field.id] = parseField(standardFieldName, user, customValue)
         }
       })
@@ -1487,7 +1509,7 @@ function getTemplateTrimFractions(template: TemplateMeta): { x: number; y: numbe
  * scale is chosen so the trim line lands on the rectangle the layout reserves
  * for the card, and the bleed overhangs into the space the slot allows for it.
  */
-function getSlotScale(
+export function getSlotScale(
   template: TemplateMeta,
   artworkWidthPoints: number,
   artworkHeightPoints: number,
@@ -1506,7 +1528,8 @@ function getSlotScale(
       return Math.min(slot.trimWidth / trimWidthPoints, slot.trimHeight / trimHeightPoints)
     }
   }
-  return getSlotScale(template, artworkWidthPoints, artworkHeightPoints, slot)
+  // Nothing says where the card's edge is, so fit the whole artwork to the slot.
+  return Math.min(slot.width / artworkWidthPoints, slot.height / artworkHeightPoints)
 }
 
 function getTemplateSizeInMm(template: TemplateMeta): { widthMm: number; heightMm: number } {

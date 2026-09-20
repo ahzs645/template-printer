@@ -83,7 +83,7 @@ const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await 
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
 const { TEST_CASES, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
 const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } = await import('../src/lib/cardTrim.ts')
-const { calculateCardPositions } = await import('../src/lib/exporter.ts')
+const { calculateCardPositions, getSlotScale } = await import('../src/lib/exporter.ts')
 const {
   ID1_HEIGHT_MM,
   ID1_WIDTH_MM,
@@ -806,9 +806,7 @@ function placedTrimInches(template, slot) {
   const [artworkW, artworkH] = templateSizeInPoints(template)
   const fractionX = template.cardArea ? template.cardArea.trimBox.width / template.viewBox.width : 243 / 252
   const fractionY = template.cardArea ? template.cardArea.trimBox.height / template.viewBox.height : 153 / 162
-  const scale = template.cardArea
-    ? Math.min(slot.trimWidth / (artworkW * fractionX), slot.trimHeight / (artworkH * fractionY))
-    : Math.min(slot.width / artworkW, slot.height / artworkH)
+  const scale = getSlotScale(template, artworkW, artworkH, slot)
   return [
     (artworkW * fractionX * scale) / POINTS_PER_INCH,
     (artworkH * fractionY * scale) / POINTS_PER_INCH,
@@ -830,6 +828,14 @@ check('artwork with bleed prints undersized until a card area is set', () => {
   // Fitting the whole artwork to the slot puts the trim line 2.2% short.
   assert.ok(width < 3.375 * 0.99, `trim printed at ${width.toFixed(4)} in, expected well under 3.375`)
   assert.ok(Math.abs(width / 3.375 - height / 2.125) < 0.001, 'both axes are off by the same amount')
+})
+
+check('artwork with no card area is fitted to the whole slot', () => {
+  const [slot] = calculateCardPositions(canonTray, 2)
+  const [artworkW, artworkH] = templateSizeInPoints(idFront.metadata)
+  const scale = getSlotScale({ ...idFront.metadata, cardArea: undefined }, artworkW, artworkH, slot)
+  const fitted = Math.min(slot.width / artworkW, slot.height / artworkH)
+  assert.ok(Math.abs(scale - fitted) < 1e-12, `scale was ${scale}, expected the fit-to-slot ${fitted}`)
 })
 
 check('a card area lands the trim line exactly on the tray slot', async () => {

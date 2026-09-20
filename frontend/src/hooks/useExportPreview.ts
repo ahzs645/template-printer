@@ -6,6 +6,9 @@ import { renderSvgWithData } from '../lib/svgTemplate'
 import { generateAutoMappings } from '../lib/autoMapping'
 import { useStorage } from '../lib/storage'
 import type { ExportMode } from '../components/ExportPage'
+import type { ExportBackSide } from './useExportBackSide'
+
+export type CardSide = 'front' | 'back'
 
 type UseExportPreviewParams = {
   mode: ExportMode
@@ -15,6 +18,8 @@ type UseExportPreviewParams = {
   users: UserData[]
   fields: FieldDefinition[]
   renderedSvg: string | null
+  /** The other side of the card design, for slots set to print the back. */
+  backSide?: ExportBackSide | null
 }
 
 export function useExportPreview({
@@ -25,6 +30,7 @@ export function useExportPreview({
   users,
   fields,
   renderedSvg,
+  backSide = null,
 }: UseExportPreviewParams) {
   const storage = useStorage()
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
@@ -79,35 +85,44 @@ export function useExportPreview({
   }, [selectedTemplateId, storage, fields])
 
   const renderCardForUser = useCallback(
-    (userId: string | null | undefined): string | null => {
-      if (!templateMeta || !userId) {
-        return renderedSvg
+    (userId: string | null | undefined, side: CardSide = 'front'): string | null => {
+      // The back is its own artwork with its own placeholders, so it renders
+      // from the back's fields and mappings rather than the front's.
+      const useBack = side === 'back' && Boolean(backSide)
+      const sideMeta = useBack ? backSide!.meta : templateMeta
+      const sideFields = useBack ? backSide!.fields : fields
+      const sideMappings = useBack ? backSide!.fieldMappings : fieldMappings
+      const sideCustomValues = useBack ? backSide!.customValues : customValues
+      const sideFallback = useBack ? backSide!.svg : renderedSvg
+
+      if (!sideMeta || !userId) {
+        return sideFallback
       }
 
       const user = users.find(u => u.id === userId)
-      if (!user || Object.keys(fieldMappings).length === 0) {
-        return renderedSvg
+      if (!user || Object.keys(sideMappings).length === 0) {
+        return sideFallback
       }
 
       try {
         const cardData: CardData = {}
 
-        fields.forEach(field => {
+        sideFields.forEach(field => {
           const layerId = field.sourceId || field.id
-          const standardFieldName = fieldMappings[layerId]
+          const standardFieldName = sideMappings[layerId]
           if (standardFieldName) {
-            const customValue = customValues[layerId]
+            const customValue = sideCustomValues[layerId]
             cardData[field.id] = parseField(standardFieldName, user, customValue)
           }
         })
 
-        return renderSvgWithData(templateMeta, fields, cardData)
+        return renderSvgWithData(sideMeta, sideFields, cardData)
       } catch (error) {
         console.error('Failed to render card for user:', error)
-        return renderedSvg
+        return sideFallback
       }
     },
-    [templateMeta, users, fieldMappings, customValues, fields, renderedSvg],
+    [templateMeta, users, fieldMappings, customValues, fields, renderedSvg, backSide],
   )
 
   // Generate preview SVG
