@@ -10,6 +10,7 @@ import type { FieldDefinition, CardData, PrintLayout, CardDesign } from '../lib/
 import type { UserData } from '../lib/fieldParser'
 import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
+import type { ExportBackSide } from '../hooks/useExportBackSide'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
 import type { SlotAssignment } from '../lib/exporter'
@@ -54,6 +55,8 @@ export type ExportPageProps = {
   designTemplatesLoading: boolean
   cardDesigns: CardDesign[]
   selectedCardDesignId: string | null
+  /** The back of the active card design, when it has one. */
+  backSide: ExportBackSide | null
   onCardDesignSelect: (designId: string | null) => void
   onTemplateSelect: (template: TemplateSummary) => void
   onCardDataChange: (fieldId: string, value: string) => void
@@ -89,6 +92,14 @@ function getSvgNaturalSize(svgElement: Element): { width: number; height: number
   }
 }
 
+/**
+ * The tray's name without its card count: the closed control has one line to
+ * say which tray this is, and the count is on the line right below it.
+ */
+function trayName(name: string): string {
+  return name.replace(/\s*[-\u2013]\s*\d+\s+cards?$/i, '')
+}
+
 function shouldRotateCard(cardWidth: number, cardHeight: number, slotWidth: number, slotHeight: number): boolean {
   const normalScale = Math.min(slotWidth / cardWidth, slotHeight / cardHeight)
   const rotatedScale = Math.min(slotWidth / cardHeight, slotHeight / cardWidth)
@@ -116,6 +127,7 @@ export function ExportPage({
   designTemplatesLoading,
   cardDesigns,
   selectedCardDesignId,
+  backSide,
   onCardDesignSelect,
   onTemplateSelect,
   onCardDataChange,
@@ -171,11 +183,14 @@ export function ExportPage({
     users,
     fields,
     renderedSvg,
+    backSide,
   })
 
   const selectedPrintLayout = printTemplates.find(
     (t) => t.id === exportOptions.printLayoutId
   )
+
+  const selectedLayoutName = selectedJsonLayout?.name ?? selectedPrintLayout?.name ?? null
 
   // Load print layout SVG when selected
   useEffect(() => {
@@ -443,21 +458,22 @@ export function ExportPage({
         slotOutline.setAttribute('height', `${cardHeight}`)
         slotsOverlay.appendChild(slotOutline)
 
-        let cardMarkup: string | null = previewSvg
-
         if (slotAssignment?.source === 'empty') {
           continue
         }
 
+        const slotSide = slotAssignment?.side === 'back' && backSide ? 'back' : 'front'
+        let cardMarkup: string | null = slotSide === 'back' ? backSide!.svg : previewSvg
+
         if (slotAssignment?.source && slotAssignment.source !== 'custom') {
-          const renderedForUser = renderCardForUser(slotAssignment.source)
+          const renderedForUser = renderCardForUser(slotAssignment.source, slotSide)
           if (renderedForUser) {
             cardMarkup = renderedForUser
           }
         } else if (exportOptions.mode === 'database') {
           const userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
           if (userIdForSlot) {
-            const renderedForUser = renderCardForUser(userIdForSlot)
+            const renderedForUser = renderCardForUser(userIdForSlot, slotSide)
             if (renderedForUser) {
               cardMarkup = renderedForUser
             }
@@ -511,6 +527,7 @@ export function ExportPage({
   }, [
     selectedJsonLayout,
     previewSvg,
+    backSide,
     exportOptions.slotAssignments,
     exportOptions.mode,
     exportOptions.selectedUserIds,
@@ -568,8 +585,11 @@ export function ExportPage({
     })
   }
 
-  // Check if the selected template has a back side available
-  const hasBackTemplate = templateMeta?.backTemplateId || false
+  // Whether the card design being printed actually has a back to print
+  const hasBackSide = Boolean(backSide)
+  const selectedCardDesign = selectedCardDesignId
+    ? cardDesigns.find((design) => design.id === selectedCardDesignId) ?? null
+    : null
 
   return (
     <div className="app-content" style={{ height: '100%' }}>
@@ -715,8 +735,17 @@ export function ExportPage({
               }
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select a print layout" />
+            <SelectTrigger title={selectedLayoutName ?? undefined}>
+              {selectedLayoutName ? (
+                <SelectValue>
+                  <span className="select-option">
+                    <Printer size={12} />
+                    <span className="select-option__label">{trayName(selectedLayoutName)}</span>
+                  </span>
+                </SelectValue>
+              ) : (
+                <SelectValue placeholder="Select a print layout" />
+              )}
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None (Single Card)</SelectItem>
@@ -726,9 +755,9 @@ export function ExportPage({
                     <SelectLabel>Printer Tray Layouts</SelectLabel>
                     {jsonPrintLayouts.filter(l => l.name.includes('Canon') || l.name.includes('Epson')).map((layout) => (
                       <SelectItem key={layout.id} value={layout.id}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="select-option">
                           <Printer size={12} />
-                          {layout.name}
+                          <span className="select-option__label">{layout.name}</span>
                         </span>
                       </SelectItem>
                     ))}
@@ -847,14 +876,18 @@ export function ExportPage({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="default">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="select-option">
                             <CreditCard size={12} />
-                            {template?.name || 'Selected Design'}
+                            <span className="select-option__label">
+                              {selectedCardDesign?.name || template?.name || 'Selected Design'}
+                            </span>
                           </span>
                         </SelectItem>
                         {designTemplates.filter(t => t.id !== template?.id).map((t) => (
                           <SelectItem key={t.id} value={t.id}>
-                            {t.name}
+                            <span className="select-option">
+                              <span className="select-option__label">{t.name}</span>
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -875,15 +908,15 @@ export function ExportPage({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="empty">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="select-option">
                             <Ban size={12} />
-                            Empty Slot
+                            <span className="select-option__label">Empty Slot</span>
                           </span>
                         </SelectItem>
                         <SelectItem value="custom">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="select-option">
                             <Zap size={12} />
-                            Custom Fields
+                            <span className="select-option__label">Custom Fields</span>
                           </span>
                         </SelectItem>
                         {users.length > 0 && (
@@ -891,9 +924,11 @@ export function ExportPage({
                             <SelectLabel>Database Users</SelectLabel>
                             {users.map((user) => (
                               <SelectItem key={user.id} value={user.id!}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span className="select-option">
                                   <Users size={12} />
-                                  {user.firstName} {user.lastName}
+                                  <span className="select-option__label">
+                                    {user.firstName} {user.lastName}
+                                  </span>
                                 </span>
                               </SelectItem>
                             ))}
@@ -922,8 +957,8 @@ export function ExportPage({
                         className={cn('btn btn-sm', assignment.side === 'back' ? 'btn-primary' : 'btn-secondary')}
                         style={{ flex: 1, fontSize: 11, padding: '4px 8px' }}
                         onClick={() => updateSlotAssignment(index, { side: 'back' })}
-                        disabled={!hasBackTemplate}
-                        title={!hasBackTemplate ? 'No back template configured' : undefined}
+                        disabled={!hasBackSide}
+                        title={!hasBackSide ? 'This card design has no back artwork' : undefined}
                       >
                         Back
                       </button>
@@ -971,7 +1006,7 @@ export function ExportPage({
                 >
                   All Custom
                 </button>
-                {hasBackTemplate && (
+                {hasBackSide && (
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
@@ -1037,15 +1072,15 @@ export function ExportPage({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  None (No correction)
+                <span className="select-option">
+                  <span className="select-option__label">None (No correction)</span>
                 </span>
               </SelectItem>
               {colorProfiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="select-option">
                     <Palette size={12} />
-                    {profile.name}
+                    <span className="select-option__label">{profile.name}</span>
                   </span>
                 </SelectItem>
               ))}

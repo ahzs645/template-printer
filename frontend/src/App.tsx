@@ -58,6 +58,7 @@ import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { useUsers } from './hooks/useUsers'
 import { useCardDesigns } from './hooks/useCardDesigns'
+import { useExportBackSide } from './hooks/useExportBackSide'
 import { useStorage } from './lib/storage'
 import { loadTemplateSvgContent } from './lib/templates'
 import { FieldMappingDialog, type FieldMapping } from './components/FieldMappingDialog'
@@ -95,6 +96,7 @@ import {
   type SharedTemplatePayload,
 } from './lib/shareLink'
 import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments, setOutlineFontBuffers, clearOutlineFontBuffers } from './lib/exporter'
+import type { SlotBackSide } from './lib/exporter'
 import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
 import { isAutoMappable } from './lib/autoMapping'
@@ -391,7 +393,9 @@ function App() {
     }
 
     const selectedDesign = cardDesigns.find((design) => design.id === selectedExportCardDesignId)
-    if (!selectedDesign) {
+    if (!selectedDesign || selectedDesign.designerMode !== 'canvas') {
+      // A template-based design prints through its own saved templates, which
+      // are loaded as the active template when the design is picked.
       setExportCanvasDesign(null)
       return () => { cancelled = true }
     }
@@ -452,6 +456,27 @@ function App() {
       return template.rawSvg
     }
   }, [template, fields, cardData])
+
+  /** The card design picked on the Export tab, if one was. */
+  const exportCardDesign = useMemo(
+    () => (selectedExportCardDesignId
+      ? cardDesigns.find((design) => design.id === selectedExportCardDesignId) ?? null
+      : null),
+    [selectedExportCardDesignId, cardDesigns],
+  )
+  const exportDesignIsCanvas = exportCardDesign?.designerMode === 'canvas'
+
+  /**
+   * The design the Export tab is printing: the one picked there, or the one the
+   * open template is the front of, so the back is offered either way.
+   */
+  const exportDesign = useMemo(() => {
+    if (exportCardDesign) return exportCardDesign
+    if (!selectedTemplateId) return null
+    return cardDesigns.find((design) => design.frontTemplateId === selectedTemplateId) ?? null
+  }, [exportCardDesign, selectedTemplateId, cardDesigns])
+
+  const { backSide: exportBackSide } = useExportBackSide(exportDesign, designTemplates)
 
   const activeExportTemplate = exportCanvasDesign?.meta ?? template
   const activeExportFields = exportCanvasDesign?.fields ?? fields
@@ -625,7 +650,10 @@ function App() {
     }
   }
 
-  const handleTemplateSelect = async (templateSummary: TemplateSummary) => {
+  const handleTemplateSelect = async (
+    templateSummary: TemplateSummary,
+    { keepExportDesign = false }: { keepExportDesign?: boolean } = {},
+  ) => {
     try {
       setErrorMessage(null)
       const svgText = await loadTemplateSvgContent(templateSummary)
@@ -638,7 +666,9 @@ function App() {
       setCardData(() => ({}))
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
-      setSelectedExportCardDesignId(null)
+      if (!keepExportDesign) {
+        setSelectedExportCardDesignId(null)
+      }
 
       setTemplateWarnings(metadata.warnings ?? [])
       await syncLinkedDesign(templateSummary.id)
@@ -665,6 +695,44 @@ function App() {
       console.error(error)
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load template')
     }
+  }
+
+  /**
+   * Pick a card design to print. A design drawn in the card designer renders
+   * from its canvas; one built from a pair of templates prints through its
+   * front template, which is the path the rest of the export already takes.
+   */
+  const handleExportCardDesignSelect = async (designId: string | null) => {
+    if (!designId) {
+      setSelectedExportCardDesignId(null)
+      return
+    }
+
+    const design = cardDesigns.find((candidate) => candidate.id === designId)
+    if (!design) return
+
+    if (design.designerMode === 'canvas') {
+      setSelectedExportCardDesignId(designId)
+      setSelectedTemplateId(null)
+      setTemplate(null)
+      setFields([])
+      setCardData({})
+      return
+    }
+
+    const frontSummary = design.frontTemplateId
+      ? designTemplates.find((summary) => summary.id === design.frontTemplateId) ?? null
+      : null
+
+    if (!frontSummary) {
+      setErrorMessage(
+        `"${design.name}" has no front artwork. Open it in the Design tab and assign a front template.`,
+      )
+      return
+    }
+
+    setSelectedExportCardDesignId(designId)
+    await handleTemplateSelect(frontSummary, { keepExportDesign: true })
   }
 
   /**
@@ -1254,6 +1322,14 @@ function App() {
     const exportFields = activeExportFields
     const exportCardData = activeExportCardData
     const exportTemplateId = exportCanvasDesign ? null : selectedTemplateId
+    const exportBackSideForSlots: SlotBackSide | null = exportBackSide
+      ? {
+          template: exportBackSide.meta,
+          fields: exportBackSide.fields,
+          fieldMappings: exportBackSide.fieldMappings,
+          customValues: exportBackSide.customValues,
+        }
+      : null
 
     if (!exportTemplate) {
       setErrorMessage('Select a template or canvas design before exporting.')
@@ -1381,7 +1457,7 @@ function App() {
 
               await exportWithSlotAssignments(
                 exportTemplate,  // default front template
-                null,      // back template (TODO: add back template support)
+                exportBackSideForSlots,
                 exportFields,
                 exportCardData,  // custom card data for slots set to 'custom'
                 users,
@@ -1510,7 +1586,7 @@ function App() {
 
               await exportWithSlotAssignments(
                 exportTemplate,  // default front template
-                null,      // back template (TODO: add back template support)
+                exportBackSideForSlots,
                 exportFields,
                 exportCardData,
                 users,
@@ -2641,9 +2717,9 @@ function App() {
 
           {activeTab === 'export' && (
             <ExportPage
-                template={selectedExportCardDesignId ? null : selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
+                template={exportDesignIsCanvas ? null : selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
                 templateMeta={activeExportTemplate}
-                selectedTemplateId={selectedExportCardDesignId ? null : selectedTemplateId}
+                selectedTemplateId={exportDesignIsCanvas ? null : selectedTemplateId}
                 fields={activeExportFields}
                 cardData={activeExportCardData}
                 printTemplates={printTemplates}
@@ -2660,15 +2736,8 @@ function App() {
                 designTemplatesLoading={designTemplatesLoading}
                 cardDesigns={cardDesigns}
                 selectedCardDesignId={selectedExportCardDesignId}
-                onCardDesignSelect={(designId) => {
-                  setSelectedExportCardDesignId(designId)
-                  if (designId) {
-                    setSelectedTemplateId(null)
-                    setTemplate(null)
-                    setFields([])
-                    setCardData({})
-                  }
-                }}
+                backSide={exportBackSide}
+                onCardDesignSelect={handleExportCardDesignSelect}
                 onTemplateSelect={(templateSummary) => {
                   setSelectedExportCardDesignId(null)
                   handleTemplateSelect(templateSummary)

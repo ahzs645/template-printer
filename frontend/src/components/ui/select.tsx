@@ -16,14 +16,16 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-control w-full min-w-0 items-center justify-between gap-2 rounded-control border border-line bg-surface px-3 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      // The value keeps to one line and gives way with an ellipsis: a long
+      // option in a narrow panel used to wrap and be clipped mid-word.
+      'flex h-control w-full min-w-0 items-center justify-between gap-2 rounded-control border border-line bg-surface px-3 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left',
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
