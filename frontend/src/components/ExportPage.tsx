@@ -92,6 +92,14 @@ function getSvgNaturalSize(svgElement: Element): { width: number; height: number
   }
 }
 
+/**
+ * The tray's name without its card count: the closed control has one line to
+ * say which tray this is, and the count is on the line right below it.
+ */
+function trayName(name: string): string {
+  return name.replace(/\s*[-\u2013]\s*\d+\s+cards?$/i, '')
+}
+
 function shouldRotateCard(cardWidth: number, cardHeight: number, slotWidth: number, slotHeight: number): boolean {
   const normalScale = Math.min(slotWidth / cardWidth, slotHeight / cardHeight)
   const rotatedScale = Math.min(slotWidth / cardHeight, slotHeight / cardWidth)
@@ -181,6 +189,8 @@ export function ExportPage({
   const selectedPrintLayout = printTemplates.find(
     (t) => t.id === exportOptions.printLayoutId
   )
+
+  const selectedLayoutName = selectedJsonLayout?.name ?? selectedPrintLayout?.name ?? null
 
   // Load print layout SVG when selected
   useEffect(() => {
@@ -725,8 +735,17 @@ export function ExportPage({
               }
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select a print layout" />
+            <SelectTrigger title={selectedLayoutName ?? undefined}>
+              {selectedLayoutName ? (
+                <SelectValue>
+                  <span className="select-option">
+                    <Printer size={12} />
+                    <span className="select-option__label">{trayName(selectedLayoutName)}</span>
+                  </span>
+                </SelectValue>
+              ) : (
+                <SelectValue placeholder="Select a print layout" />
+              )}
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None (Single Card)</SelectItem>
@@ -736,9 +755,9 @@ export function ExportPage({
                     <SelectLabel>Printer Tray Layouts</SelectLabel>
                     {jsonPrintLayouts.filter(l => l.name.includes('Canon') || l.name.includes('Epson')).map((layout) => (
                       <SelectItem key={layout.id} value={layout.id}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="select-option">
                           <Printer size={12} />
-                          {layout.name}
+                          <span className="select-option__label">{layout.name}</span>
                         </span>
                       </SelectItem>
                     ))}
@@ -857,14 +876,18 @@ export function ExportPage({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="default">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="select-option">
                             <CreditCard size={12} />
-                            {selectedCardDesign?.name || template?.name || 'Selected Design'}
+                            <span className="select-option__label">
+                              {selectedCardDesign?.name || template?.name || 'Selected Design'}
+                            </span>
                           </span>
                         </SelectItem>
                         {designTemplates.filter(t => t.id !== template?.id).map((t) => (
                           <SelectItem key={t.id} value={t.id}>
-                            {t.name}
+                            <span className="select-option">
+                              <span className="select-option__label">{t.name}</span>
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -885,15 +908,15 @@ export function ExportPage({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="empty">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="select-option">
                             <Ban size={12} />
-                            Empty Slot
+                            <span className="select-option__label">Empty Slot</span>
                           </span>
                         </SelectItem>
                         <SelectItem value="custom">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="select-option">
                             <Zap size={12} />
-                            Custom Fields
+                            <span className="select-option__label">Custom Fields</span>
                           </span>
                         </SelectItem>
                         {users.length > 0 && (
@@ -901,9 +924,11 @@ export function ExportPage({
                             <SelectLabel>Database Users</SelectLabel>
                             {users.map((user) => (
                               <SelectItem key={user.id} value={user.id!}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span className="select-option">
                                   <Users size={12} />
-                                  {user.firstName} {user.lastName}
+                                  <span className="select-option__label">
+                                    {user.firstName} {user.lastName}
+                                  </span>
                                 </span>
                               </SelectItem>
                             ))}
@@ -1047,15 +1072,15 @@ export function ExportPage({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  None (No correction)
+                <span className="select-option">
+                  <span className="select-option__label">None (No correction)</span>
                 </span>
               </SelectItem>
               {colorProfiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="select-option">
                     <Palette size={12} />
-                    {profile.name}
+                    <span className="select-option__label">{profile.name}</span>
                   </span>
                 </SelectItem>
               ))}

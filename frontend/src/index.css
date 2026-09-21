@@ -816,6 +816,27 @@ textarea.form-input {
   color: var(--text-muted);
 }
 
+/* An option with an icon, in the list and in the closed select alike. The icon
+   holds its size and the label gives way, so a long name ends in an ellipsis
+   rather than wrapping inside a control that is one line tall. */
+.select-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.select-option > svg {
+  flex-shrink: 0;
+}
+
+.select-option__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A native colour well is a field, so it carries the same frame as the text
    input it usually sits beside instead of a borderless square. */
 .color-swatch {
