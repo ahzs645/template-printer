@@ -125,6 +125,32 @@ export function useExportPreview({
     [templateMeta, users, fieldMappings, customValues, fields, renderedSvg, backSide],
   )
 
+  /**
+   * Render one side of the card with data typed in by hand, for a slot whose
+   * values differ from the card's own. Falls back to the side's plain preview
+   * when rendering is not possible.
+   */
+  const renderCardWithData = useCallback(
+    (cardData: CardData, side: CardSide = 'front'): string | null => {
+      const useBack = side === 'back' && Boolean(backSide)
+      const sideMeta = useBack ? backSide!.meta : templateMeta
+      const sideFields = useBack ? backSide!.fields : fields
+      const sideFallback = useBack ? backSide!.svg : renderedSvg
+
+      if (!sideMeta) {
+        return sideFallback
+      }
+
+      try {
+        return renderSvgWithData(sideMeta, sideFields, cardData)
+      } catch (error) {
+        console.error('Failed to render card with slot data:', error)
+        return sideFallback
+      }
+    },
+    [templateMeta, fields, renderedSvg, backSide],
+  )
+
   // Generate preview SVG
   const previewSvg = useMemo(() => {
     if (mode === 'quick') {
@@ -140,5 +166,5 @@ export function useExportPreview({
     return renderCardForUser(firstUserId)
   }, [mode, selectedUserIds, renderCardForUser])
 
-  return { previewSvg, renderCardForUser }
+  return { previewSvg, renderCardForUser, renderCardWithData }
 }
