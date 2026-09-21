@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, type ChangeEvent } from 'react'
-import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard, Ban } from 'lucide-react'
+import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard, Ban, Undo2 } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { Label } from './ui/label'
@@ -13,7 +13,7 @@ import { useExportPreview } from '../hooks/useExportPreview'
 import type { ExportBackSide } from '../hooks/useExportBackSide'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
-import type { SlotAssignment } from '../lib/exporter'
+import { resolveSlotCardData, type SlotAssignment } from '../lib/exporter'
 import { scopeSvgElement } from '../lib/svgTemplate'
 import { InlineSvg } from './InlineSvg'
 
@@ -106,6 +106,99 @@ function shouldRotateCard(cardWidth: number, cardHeight: number, slotWidth: numb
   return rotatedScale > normalScale * 1.05
 }
 
+/** The print layout last used, so a repeat visit does not start from "None". */
+const LAST_LAYOUT_KEY = 'template-printer.export-layout'
+
+function readLastLayoutId(): string | null {
+  try {
+    return localStorage.getItem(LAST_LAYOUT_KEY)
+  } catch {
+    return null
+  }
+}
+
+function rememberLastLayoutId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(LAST_LAYOUT_KEY, id)
+    else localStorage.removeItem(LAST_LAYOUT_KEY)
+  } catch {
+    // Private browsing or blocked storage: the choice just is not remembered.
+  }
+}
+
+/** A slot's edits count as its own only once one of its fields has been changed. */
+function slotHasOwnData(assignment: SlotAssignment): boolean {
+  return Boolean(assignment.customData && Object.keys(assignment.customData).length > 0)
+}
+
+function countPrintedSlots(assignments: SlotAssignment[]): number {
+  return assignments.filter((assignment) => assignment.source !== 'empty').length
+}
+
+type SlotFieldInputsProps = {
+  fields: FieldDefinition[]
+  values: CardData
+  hasOwnData: boolean
+  onChange: (fieldId: string, value: string) => void
+  onReset: () => void
+}
+
+/**
+ * The fields of one slot, so each card on the page can name a different
+ * person. Image fields are left to the card's own data: a photo is picked in
+ * the Design tab, not typed in.
+ */
+function SlotFieldInputs({ fields, values, hasOwnData, onChange, onReset }: SlotFieldInputsProps) {
+  const textFields = fields.filter((field) => field.type !== 'image')
+  if (textFields.length === 0) {
+    return (
+      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+        This side has no text fields to fill in.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {hasOwnData ? 'Fields for this slot' : 'Fields (same as the card)'}
+        </span>
+        {hasOwnData && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 10, padding: '2px 6px' }}
+            onClick={onReset}
+            title="Go back to the values entered for the card"
+          >
+            <Undo2 size={11} style={{ marginRight: 3 }} />
+            Reset
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {textFields.map((field) => {
+          const value = values[field.id]
+          return (
+            <div key={field.id} className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>{field.label || field.id}</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ fontSize: 12 }}
+                value={typeof value === 'string' ? value : ''}
+                onChange={(event) => onChange(field.id, event.target.value)}
+                placeholder={`Enter ${field.label || field.id}`}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 
 export function ExportPage({
   template,
@@ -147,9 +240,29 @@ export function ExportPage({
     colorProfileId: null,
   })
   const [showInstructions, setShowInstructions] = useState(false)
+  /**
+   * How many of the layout's slots to print. A tray that holds two cards is
+   * often loaded with one, so the rest of the slots are left blank rather than
+   * printing the same card twice.
+   */
+  const [cardsToPrint, setCardsToPrint] = useState(0)
 
   // Load JSON print layouts from storage
   const { printLayouts: jsonPrintLayouts, isLoading: jsonLayoutsLoading } = usePrintLayouts()
+
+  // Pick up the layout used last time, once the layouts have loaded. Someone
+  // who prints from the same tray every visit should not have to choose it
+  // again, and a design opened from a link lands straight on a ready page.
+  const [restoredLayout, setRestoredLayout] = useState(false)
+  useEffect(() => {
+    if (restoredLayout || jsonLayoutsLoading) return
+    setRestoredLayout(true)
+    const lastId = readLastLayoutId()
+    if (!lastId || !jsonPrintLayouts.some((layout) => layout.id === lastId)) return
+    setExportOptions((prev) =>
+      prev.jsonPrintLayoutId || prev.printLayoutId ? prev : { ...prev, jsonPrintLayoutId: lastId, printLayoutId: null },
+    )
+  }, [restoredLayout, jsonLayoutsLoading, jsonPrintLayouts])
 
   const selectedJsonLayout = jsonPrintLayouts.find(
     (l) => l.id === exportOptions.jsonPrintLayoutId
@@ -165,8 +278,10 @@ export function ExportPage({
         templateId: null,
       }))
       setExportOptions((prev) => ({ ...prev, slotAssignments: newAssignments }))
+      setCardsToPrint(slotCount)
     } else {
       setExportOptions((prev) => ({ ...prev, slotAssignments: [] }))
+      setCardsToPrint(0)
     }
   }, [selectedJsonLayout?.id])
   const [printLayoutSvg, setPrintLayoutSvg] = useState<string | null>(null)
@@ -175,7 +290,7 @@ export function ExportPage({
   const [showLayoutInspector, setShowLayoutInspector] = useState(false)
   const [layoutSlotCount, setLayoutSlotCount] = useState(0)
 
-  const { previewSvg, renderCardForUser } = useExportPreview({
+  const { previewSvg, renderCardForUser, renderCardWithData } = useExportPreview({
     mode: exportOptions.mode,
     templateMeta,
     selectedTemplateId,
@@ -470,6 +585,12 @@ export function ExportPage({
           if (renderedForUser) {
             cardMarkup = renderedForUser
           }
+        } else if (slotAssignment && !slotAssignment.templateId && slotHasOwnData(slotAssignment)) {
+          // This slot has its own values, so it shows its own person
+          const renderedWithData = renderCardWithData(resolveSlotCardData(slotAssignment, cardData), slotSide)
+          if (renderedWithData) {
+            cardMarkup = renderedWithData
+          }
         } else if (exportOptions.mode === 'database') {
           const userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
           if (userIdForSlot) {
@@ -528,10 +649,12 @@ export function ExportPage({
     selectedJsonLayout,
     previewSvg,
     backSide,
+    cardData,
     exportOptions.slotAssignments,
     exportOptions.mode,
     exportOptions.selectedUserIds,
     renderCardForUser,
+    renderCardWithData,
   ])
 
   const layoutCompositePreview = selectedJsonLayout
@@ -584,6 +707,51 @@ export function ExportPage({
       return { ...prev, slotAssignments: newAssignments }
     })
   }
+
+  /** Change one field of one slot, leaving the card's own data untouched. */
+  const updateSlotField = (slotIndex: number, fieldId: string, value: string) => {
+    setExportOptions((prev) => {
+      const newAssignments = [...prev.slotAssignments]
+      const current = newAssignments[slotIndex]
+      if (!current) return prev
+      newAssignments[slotIndex] = {
+        ...current,
+        customData: { ...(current.customData ?? {}), [fieldId]: value },
+      }
+      return { ...prev, slotAssignments: newAssignments }
+    })
+  }
+
+  /**
+   * Print only the first `count` slots. The ones after it go blank; the ones
+   * kept that had been blanked this way come back as a card again.
+   */
+  const changeCardsToPrint = (count: number) => {
+    setCardsToPrint(count)
+    setExportOptions((prev) => ({
+      ...prev,
+      slotAssignments: prev.slotAssignments.map((assignment, index) => {
+        if (index >= count) {
+          return assignment.source === 'empty' ? assignment : { ...assignment, source: 'empty' }
+        }
+        return assignment.source === 'empty' ? { ...assignment, source: 'custom', side: 'front' } : assignment
+      }),
+    }))
+  }
+
+  /** Apply a change to every slot being printed, leaving the hidden ones blank. */
+  const updateVisibleSlots = (change: (assignment: SlotAssignment, index: number) => SlotAssignment) => {
+    setExportOptions((prev) => ({
+      ...prev,
+      slotAssignments: prev.slotAssignments.map((assignment, index) =>
+        index < cardsToPrint ? change(assignment, index) : assignment,
+      ),
+    }))
+  }
+
+  const slotCount = exportOptions.slotAssignments.length
+  const visibleSlots = exportOptions.slotAssignments.slice(0, cardsToPrint)
+  const printedSlotCount = countPrintedSlots(exportOptions.slotAssignments)
 
   // Whether the card design being printed actually has a back to print
   const hasBackSide = Boolean(backSide)
@@ -661,13 +829,10 @@ export function ExportPage({
         </PanelSection>
 
         {/* Card Data Entry - shows when needed for custom data */}
-        {((exportOptions.slotAssignments.length === 0 && exportOptions.mode === 'quick') ||
-          exportOptions.slotAssignments.some(s => s.source === 'custom')) && template && fields.length > 0 && (
+        {slotCount === 0 && exportOptions.mode === 'quick' && template && fields.length > 0 && (
           <PanelSection title="Custom Card Data" defaultOpen={true}>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-              {exportOptions.slotAssignments.length > 0
-                ? 'Data for slots set to "Custom Fields"'
-                : 'Enter data for the card'}
+              Enter data for the card
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {fields.map((field) => (
@@ -726,12 +891,15 @@ export function ExportPage({
             onValueChange={(value) => {
               if (value === 'none') {
                 updateExportOptions({ jsonPrintLayoutId: null, printLayoutId: null })
+                rememberLastLayoutId(null)
               } else if (value.startsWith('layout-')) {
                 // JSON layout
                 updateExportOptions({ jsonPrintLayoutId: value, printLayoutId: null })
+                rememberLastLayoutId(value)
               } else {
                 // SVG layout
                 updateExportOptions({ printLayoutId: value, jsonPrintLayoutId: null })
+                rememberLastLayoutId(null)
               }
             }}
           >
@@ -838,14 +1006,62 @@ export function ExportPage({
         </PanelSection>
 
         {/* Card Slots - separate section for configuring each slot on the print layout */}
-        {selectedJsonLayout && exportOptions.slotAssignments.length > 0 && (
-          <PanelSection title={`Card Slots (${exportOptions.slotAssignments.length})`} defaultOpen={true}>
+        {selectedJsonLayout && slotCount > 0 && (
+          <PanelSection title={`Card Slots (${printedSlotCount}/${slotCount})`} defaultOpen={true}>
+            {slotCount > 1 && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                  Cards to print
+                </label>
+                {slotCount <= 4 ? (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {Array.from({ length: slotCount }, (_, i) => i + 1).map((count) => (
+                      <button
+                        key={count}
+                        type="button"
+                        className={cn('btn btn-sm', cardsToPrint === count ? 'btn-primary' : 'btn-secondary')}
+                        style={{ flex: 1, fontSize: 11, padding: '4px 8px' }}
+                        onClick={() => changeCardsToPrint(count)}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <Select
+                    value={String(cardsToPrint)}
+                    onValueChange={(value) => changeCardsToPrint(parseInt(value, 10))}
+                  >
+                    <SelectTrigger style={{ fontSize: 12 }}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: slotCount }, (_, i) => i + 1).map((count) => (
+                        <SelectItem key={count} value={String(count)}>
+                          {count} of {slotCount}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  {cardsToPrint === 1
+                    ? 'Only the first slot prints; the rest of the page stays blank.'
+                    : cardsToPrint < slotCount
+                      ? `The first ${cardsToPrint} slots print; the rest stay blank.`
+                      : 'Every slot on the page prints.'}
+                </p>
+              </div>
+            )}
+
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
-              Configure what prints in each slot on the page
+              {visibleSlots.length > 1
+                ? 'Each slot can be a different person: type the fields in, or pick someone from the database.'
+                : 'Type the fields in, or pick someone from the database.'}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {exportOptions.slotAssignments.map((assignment, index) => (
+              {visibleSlots.map((assignment, index) => (
                 <div
                   key={index}
                   style={{
@@ -970,24 +1186,34 @@ export function ExportPage({
                       This slot will export as blank.
                     </div>
                   )}
+
+                  {/* This slot's own fields, when it is typed in by hand */}
+                  {assignment.source === 'custom' && !assignment.templateId && (
+                    <SlotFieldInputs
+                      fields={assignment.side === 'back' && backSide ? backSide.fields : fields}
+                      values={resolveSlotCardData(assignment, cardData)}
+                      hasOwnData={slotHasOwnData(assignment)}
+                      onChange={(fieldId, value) => updateSlotField(index, fieldId, value)}
+                      onReset={() => updateSlotAssignment(index, { customData: undefined })}
+                    />
+                  )}
+                  {assignment.source === 'custom' && assignment.templateId && (
+                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                      Prints with the data entered in the Design tab.
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
 
             {/* Quick fill options */}
-            {exportOptions.slotAssignments.length > 1 && (
+            {visibleSlots.length > 1 && (
               <div style={{ marginTop: 10, display: 'flex', gap: 4 }}>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
                   style={{ flex: 1, fontSize: 10 }}
-                  onClick={() => {
-                    const newAssignments = exportOptions.slotAssignments.map((a) => ({
-                      ...a,
-                      source: 'empty' as const,
-                    }))
-                    updateExportOptions({ slotAssignments: newAssignments })
-                  }}
+                  onClick={() => updateVisibleSlots((a) => ({ ...a, source: 'empty' as const }))}
                 >
                   All Empty
                 </button>
@@ -995,14 +1221,7 @@ export function ExportPage({
                   type="button"
                   className="btn btn-ghost btn-sm"
                   style={{ flex: 1, fontSize: 10 }}
-                  onClick={() => {
-                    const newAssignments = exportOptions.slotAssignments.map((a) => ({
-                      ...a,
-                      source: 'custom' as const,
-                      side: 'front' as const,
-                    }))
-                    updateExportOptions({ slotAssignments: newAssignments })
-                  }}
+                  onClick={() => updateVisibleSlots((a) => ({ ...a, source: 'custom' as const, side: 'front' as const }))}
                 >
                   All Custom
                 </button>
@@ -1011,14 +1230,13 @@ export function ExportPage({
                     type="button"
                     className="btn btn-ghost btn-sm"
                     style={{ flex: 1, fontSize: 10 }}
-                    onClick={() => {
-                      const newAssignments = exportOptions.slotAssignments.map((a, i) => ({
+                    onClick={() =>
+                      updateVisibleSlots((a, i) => ({
                         ...a,
                         source: 'custom' as const,
                         side: (i % 2 === 0 ? 'front' : 'back') as 'front' | 'back',
                       }))
-                      updateExportOptions({ slotAssignments: newAssignments })
-                    }}
+                    }
                   >
                     Front/Back Pairs
                   </button>
@@ -1161,7 +1379,8 @@ export function ExportPage({
             disabled={
               !templateMeta ||
               isExporting ||
-              (exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0)
+              (exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0) ||
+              (slotCount > 0 && printedSlotCount === 0)
             }
           >
             {isExporting ? (
@@ -1172,15 +1391,22 @@ export function ExportPage({
             ) : (
               <>
                 <FileDown size={16} style={{ marginRight: 6 }} />
-                {exportOptions.mode === 'database'
-                  ? `Export ${exportOptions.selectedUserIds.length} Card${exportOptions.selectedUserIds.length !== 1 ? 's' : ''}`
-                  : `Export ${exportOptions.format.toUpperCase()}`}
+                {slotCount > 0
+                  ? `Export ${printedSlotCount} Card${printedSlotCount !== 1 ? 's' : ''}`
+                  : exportOptions.mode === 'database'
+                    ? `Export ${exportOptions.selectedUserIds.length} Card${exportOptions.selectedUserIds.length !== 1 ? 's' : ''}`
+                    : `Export ${exportOptions.format.toUpperCase()}`}
               </>
             )}
           </button>
           {exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0 && (
             <p style={{ fontSize: 11, color: 'var(--danger)', textAlign: 'center', marginTop: 8 }}>
               Select at least one user
+            </p>
+          )}
+          {slotCount > 0 && printedSlotCount === 0 && (
+            <p style={{ fontSize: 11, color: 'var(--danger)', textAlign: 'center', marginTop: 8 }}>
+              Every slot is empty
             </p>
           )}
         </PanelSection>

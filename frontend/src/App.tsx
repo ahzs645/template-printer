@@ -1471,7 +1471,8 @@ function App() {
                 options.maintainVectors,
                 selectedColorProfile,
               )
-              setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
+              const printed = options.slotAssignments.filter((slot) => slot.source !== 'empty').length
+              setStatusMessage(`Exported ${printed} card${printed === 1 ? '' : 's'} to PDF with "${jsonLayout.name}" layout.`)
             } else {
               // Fallback to old batch behavior (fill pages with selected users)
               await exportBatchCardsWithJsonLayout(
@@ -1600,7 +1601,8 @@ function App() {
                 options.maintainVectors,
                 selectedColorProfile,
               )
-              setStatusMessage(`Exported ${options.slotAssignments.length} cards to PDF with "${jsonLayout.name}" layout.`)
+              const printed = options.slotAssignments.filter((slot) => slot.source !== 'empty').length
+              setStatusMessage(`Exported ${printed} card${printed === 1 ? '' : 's'} to PDF with "${jsonLayout.name}" layout.`)
             } else {
               // Fallback to filling all slots with the same card
               await exportWithJsonLayout(

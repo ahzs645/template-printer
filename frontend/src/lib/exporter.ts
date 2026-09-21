@@ -12,6 +12,20 @@ export type SlotAssignment = {
   source: 'custom' | 'empty' | string  // 'custom' for manual fields, 'empty' for a blank slot, or user ID
   side: 'front' | 'back'     // Which side of the card design to use
   templateId?: string | null // Optional: override with a different design template
+  /**
+   * Values typed in for this slot alone, when its source is 'custom'. Only the
+   * fields that differ are held here; anything not set falls back to the
+   * card's own data, so two slots can print two people from one design.
+   */
+  customData?: CardData
+}
+
+/** The data a 'custom' slot prints: the card's own values, overridden per slot. */
+export function resolveSlotCardData(assignment: SlotAssignment, cardData: CardData): CardData {
+  if (!assignment.customData || Object.keys(assignment.customData).length === 0) {
+    return cardData
+  }
+  return { ...cardData, ...assignment.customData }
 }
 
 /**
@@ -729,8 +743,8 @@ export async function exportWithSlotAssignments(
     // Determine card data based on source
     let cardData: CardData
     if (assignment.source === 'custom') {
-      // Use custom card data entered in the form
-      cardData = customCardData
+      // Use the card data entered in the form, with this slot's own edits on top
+      cardData = resolveSlotCardData(assignment, customCardData)
     } else {
       // Use data from a specific user
       const user = userMap.get(assignment.source)
@@ -1138,7 +1152,7 @@ async function exportWithSlotAssignmentsVector(
 
     let slotCardData: CardData
     if (assignment.source === 'custom') {
-      slotCardData = customCardData
+      slotCardData = resolveSlotCardData(assignment, customCardData)
     } else {
       const user = userMap.get(assignment.source)
       if (!user) {
