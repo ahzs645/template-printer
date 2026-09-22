@@ -192,6 +192,42 @@ export function normalizeStandardFieldName(layerId: string): string | null {
   return segments.join('_')
 }
 
+/** What each kind of field holds, in words a person filling in a card would use. */
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  fullName: 'Full name',
+  firstName: 'First name',
+  lastName: 'Last name',
+  middleName: 'Middle name',
+  middleInitial: 'Middle initial',
+  studentId: 'ID number',
+  department: 'Department',
+  position: 'Position',
+  grade: 'Grade',
+  email: 'Email',
+  phoneNumber: 'Phone number',
+  address: 'Address',
+  emergencyContact: 'Emergency contact',
+  issueDate: 'Issue date',
+  expiryDate: 'Expiry date',
+  birthDate: 'Birth date',
+  photo: 'Photo',
+  signature: 'Signature',
+  logo: 'Logo',
+}
+
+/**
+ * A plain name for the field a layer id names, such as "Full name" for
+ * `fullName_First_LineBreak_Last`. A field's own label is usually the sample
+ * text in the artwork, which says nothing about what to type in.
+ *
+ * Returns null when the id is not a standard field name.
+ */
+export function describeStandardField(layerId: string): string | null {
+  const resolved = normalizeStandardFieldName(layerId)
+  if (!resolved) return null
+  return FIELD_TYPE_LABELS[resolved.split('_')[0]] ?? null
+}
+
 /** True when the layer id names one of the image fields. */
 export function isImageFieldName(layerId: string): boolean {
   const resolved = normalizeStandardFieldName(layerId)

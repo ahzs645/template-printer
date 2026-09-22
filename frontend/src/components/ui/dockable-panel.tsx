@@ -18,6 +18,11 @@ type DockablePanelProps = {
   children: ReactNode
   side: 'left' | 'right'
   defaultOpen?: boolean
+  /**
+   * Start open on a phone as well. For a panel that holds what the tab is for,
+   * such as the list of people, rather than settings for the card above it.
+   */
+  openWhenStacked?: boolean
   width?: number
   className?: string
 }
@@ -27,10 +32,11 @@ export function DockablePanel({
   children,
   side,
   defaultOpen = true,
+  openWhenStacked = false,
   width = 280,
   className,
 }: DockablePanelProps) {
-  const [isOpen, setIsOpen] = useState(() => defaultOpen && !isStackedLayout())
+  const [isOpen, setIsOpen] = useState(() => defaultOpen && (openWhenStacked || !isStackedLayout()))
 
   const ChevronIcon = side === 'left'
     ? (isOpen ? ChevronLeft : ChevronRight)

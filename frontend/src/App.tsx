@@ -24,6 +24,8 @@ import {
   ClipboardCheck,
   IdCard as Badge2,
   Ruler,
+  Zap,
+  Database,
 } from 'lucide-react'
 
 import './App.css'
@@ -53,7 +55,7 @@ import { CalibrationTab, type CalibrationMode } from './components/calibration'
 import { CardDesignerTab, generateSvgFromCanvasData } from './components/card-designer'
 import { useColorProfiles } from './hooks/calibration'
 import { FieldNamingTab } from './components/FieldNamingTab'
-import type { ExportOptions } from './components/ExportPage'
+import type { ExportMode, ExportOptions, ExportPageHandle, ExportStatus } from './components/ExportPage'
 import { useFontManager } from './hooks/useFontManager'
 import { useTemplateLibrary } from './hooks/useTemplateLibrary'
 import { useUsers } from './hooks/useUsers'
@@ -207,6 +209,9 @@ function App() {
   } = useCardDesigns()
   const [selectedCardDesignId, setSelectedCardDesignId] = useState<string | null>(null)
   const [selectedExportCardDesignId, setSelectedExportCardDesignId] = useState<string | null>(null)
+  const [exportMode, setExportMode] = useState<ExportMode>('quick')
+  const [exportStatus, setExportStatus] = useState<ExportStatus>({ disabled: true, label: 'Export PDF' })
+  const exportPageRef = useRef<ExportPageHandle>(null)
   const [exportCanvasDesign, setExportCanvasDesign] = useState<CanvasDesignRenderResult | null>(null)
   const [designDialogOpen, setDesignDialogOpen] = useState(false)
   const [editingDesign, setEditingDesign] = useState<typeof cardDesigns[0] | null>(null)
@@ -1044,6 +1049,8 @@ function App() {
       })
       designId = design.id
       setLinkedDesignId(design.id)
+      // Print the design as a whole, so the Export tab offers its back too.
+      setSelectedExportCardDesignId(design.id)
       setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })
       refreshCardDesigns()
     } else {
@@ -1093,6 +1100,7 @@ function App() {
         if (existing) {
           await reloadDesignTemplates()
           await handleTemplateSelect(existing)
+          if (seen.designId) setSelectedExportCardDesignId(seen.designId)
           const message = `Reopened "${seen.name}" — you already have this design.`
           setStatusMessage(message)
           setLinkResult({ ok: true, text: message })
@@ -1973,22 +1981,25 @@ function App() {
 
       <RibbonGroup title="Mode">
         <RibbonButton
-          icon={<FileDown size={18} />}
+          icon={<Zap size={18} />}
           label="Quick"
-          active={false}
+          onClick={() => setExportMode('quick')}
+          active={exportMode === 'quick'}
         />
         <RibbonButton
-          icon={<Upload size={18} />}
+          icon={<Database size={18} />}
           label="Batch"
-          active={false}
+          onClick={() => setExportMode('database')}
+          active={exportMode === 'database'}
         />
       </RibbonGroup>
 
       <RibbonGroup title="Export">
         <RibbonButton
           icon={<FileDown size={18} />}
-          label="Export PDF"
-          disabled={!activeExportTemplate || isExporting}
+          label={isExporting ? 'Exporting...' : exportStatus.label}
+          onClick={() => exportPageRef.current?.exportNow()}
+          disabled={exportStatus.disabled}
           size="large"
         />
       </RibbonGroup>
@@ -2719,6 +2730,10 @@ function App() {
 
           {activeTab === 'export' && (
             <ExportPage
+                ref={exportPageRef}
+                mode={exportMode}
+                onModeChange={setExportMode}
+                onExportStatusChange={setExportStatus}
                 template={exportDesignIsCanvas ? null : selectedTemplateId ? designTemplates.find(t => t.id === selectedTemplateId) || null : null}
                 templateMeta={activeExportTemplate}
                 selectedTemplateId={exportDesignIsCanvas ? null : selectedTemplateId}
