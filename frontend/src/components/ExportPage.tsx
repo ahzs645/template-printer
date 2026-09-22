@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ChangeEvent } from 'react'
+import { useState, useEffect, useMemo, useImperativeHandle, type ChangeEvent, type Ref } from 'react'
 import { FileDown, Upload, RefreshCw, Users, FileText, Zap, Database, FolderOpen, Palette, Printer, Info, CreditCard, Ban, Undo2, Keyboard, Search } from 'lucide-react'
 import { DockablePanel, PanelSection } from './ui/dockable-panel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
@@ -36,7 +36,25 @@ export type ExportOptions = {
   colorProfileId: string | null
 }
 
+/** What the ribbon above the page can do with it. */
+export type ExportPageHandle = {
+  /** Export with the options set on the page, as its own Export button does. */
+  exportNow: () => void
+}
+
+/** Whether the page can export right now, and what its Export button says. */
+export type ExportStatus = {
+  disabled: boolean
+  label: string
+}
+
 export type ExportPageProps = {
+  ref?: Ref<ExportPageHandle>
+  /** Quick or batch, held by the app so the ribbon and the page agree. */
+  mode: ExportMode
+  onModeChange: (mode: ExportMode) => void
+  /** Told whenever the Export button's state changes, so the ribbon can mirror it. */
+  onExportStatusChange?: (status: ExportStatus) => void
   template: TemplateSummary | null
   templateMeta: any
   selectedTemplateId: string | null
@@ -318,6 +336,10 @@ function slotFill(assignment: SlotAssignment): SlotFill {
 
 
 export function ExportPage({
+  ref,
+  mode,
+  onModeChange,
+  onExportStatusChange,
   template,
   templateMeta,
   selectedTemplateId,
@@ -415,7 +437,7 @@ export function ExportPage({
   const [layoutSlotCount, setLayoutSlotCount] = useState(0)
 
   const { previewSvg, renderCardForUser, renderCardWithData } = useExportPreview({
-    mode: exportOptions.mode,
+    mode,
     templateMeta,
     selectedTemplateId,
     selectedUserIds: exportOptions.selectedUserIds,
@@ -549,7 +571,7 @@ export function ExportPage({
         const slotHeight = parseFloat(targetRect.getAttribute('height') || '0')
 
         let cardMarkup: string | null = previewSvg
-        if (exportOptions.mode === 'database') {
+        if (mode === 'database') {
           const slotAssignment = exportOptions.slotAssignments[index]
           if (slotAssignment?.source === 'empty') {
             return
@@ -624,7 +646,7 @@ export function ExportPage({
   }, [
     printLayoutSvg,
     previewSvg,
-    exportOptions.mode,
+    mode,
     exportOptions.selectedUserIds,
     exportOptions.slotUserIds,
     renderCardForUser,
@@ -715,7 +737,7 @@ export function ExportPage({
           if (renderedWithData) {
             cardMarkup = renderedWithData
           }
-        } else if (exportOptions.mode === 'database') {
+        } else if (mode === 'database') {
           const userIdForSlot = exportOptions.selectedUserIds[index] ?? exportOptions.selectedUserIds[0]
           if (userIdForSlot) {
             const renderedForUser = renderCardForUser(userIdForSlot, slotSide)
@@ -775,7 +797,7 @@ export function ExportPage({
     backSide,
     cardData,
     exportOptions.slotAssignments,
-    exportOptions.mode,
+    mode,
     exportOptions.selectedUserIds,
     renderCardForUser,
     renderCardWithData,
@@ -811,7 +833,7 @@ export function ExportPage({
       : null
 
   const handleExport = () => {
-    onExport(exportOptions)
+    onExport({ ...exportOptions, mode })
   }
 
   const toggleUserSelection = (userId: string) => {
@@ -913,6 +935,30 @@ export function ExportPage({
   const visibleSlots = exportOptions.slotAssignments.slice(0, cardsToPrint)
   const printedSlotCount = countPrintedSlots(exportOptions.slotAssignments)
 
+  const exportDisabled =
+    !templateMeta ||
+    isExporting ||
+    (mode === 'database' && exportOptions.selectedUserIds.length === 0) ||
+    (slotCount > 0 && printedSlotCount === 0)
+  const exportLabel =
+    slotCount > 0
+      ? `Export ${printedSlotCount} Card${printedSlotCount !== 1 ? 's' : ''}`
+      : mode === 'database'
+        ? `Export ${exportOptions.selectedUserIds.length} Card${exportOptions.selectedUserIds.length !== 1 ? 's' : ''}`
+        : `Export ${exportOptions.format.toUpperCase()}`
+
+  // The ribbon's Export button does what this page's does. On a phone it is
+  // the one in view: the page's own sits in a folded panel below the card.
+  useImperativeHandle(ref, () => ({
+    exportNow: () => {
+      if (!exportDisabled) handleExport()
+    },
+  }))
+
+  useEffect(() => {
+    onExportStatusChange?.({ disabled: exportDisabled, label: exportLabel })
+  }, [exportDisabled, exportLabel, onExportStatusChange])
+
   // Whether the card design being printed actually has a back to print
   const hasBackSide = Boolean(backSide)
   const selectedCardDesign = selectedCardDesignId
@@ -973,8 +1019,8 @@ export function ExportPage({
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button"
-              className={cn('btn', exportOptions.mode === 'quick' ? 'btn-primary' : 'btn-secondary')}
-              onClick={() => updateExportOptions({ mode: 'quick' })}
+              className={cn('btn', mode === 'quick' ? 'btn-primary' : 'btn-secondary')}
+              onClick={() => onModeChange('quick')}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
             >
               <Zap size={14} />
@@ -982,8 +1028,8 @@ export function ExportPage({
             </button>
             <button
               type="button"
-              className={cn('btn', exportOptions.mode === 'database' ? 'btn-primary' : 'btn-secondary')}
-              onClick={() => updateExportOptions({ mode: 'database' })}
+              className={cn('btn', mode === 'database' ? 'btn-primary' : 'btn-secondary')}
+              onClick={() => onModeChange('database')}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
             >
               <Database size={14} />
@@ -991,14 +1037,14 @@ export function ExportPage({
             </button>
           </div>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-            {exportOptions.mode === 'quick'
+            {mode === 'quick'
               ? 'Export single card with manual data entry'
               : 'Export multiple cards from user database'}
           </p>
         </PanelSection>
 
         {/* Card Data Entry - shows when needed for custom data */}
-        {slotCount === 0 && exportOptions.mode === 'quick' && template && fields.length > 0 && (
+        {slotCount === 0 && mode === 'quick' && template && fields.length > 0 && (
           <PanelSection title="Custom Card Data" defaultOpen={true}>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
               Enter data for the card
@@ -1021,7 +1067,7 @@ export function ExportPage({
         )}
 
         {/* Database Mode - User Selection */}
-        {exportOptions.mode === 'database' && (
+        {mode === 'database' && (
           <PanelSection title={`Users (${exportOptions.selectedUserIds.length}/${users.length})`}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={selectAllUsers}>
@@ -1539,12 +1585,7 @@ export function ExportPage({
             className="btn btn-primary"
             style={{ width: '100%', justifyContent: 'center' }}
             onClick={handleExport}
-            disabled={
-              !templateMeta ||
-              isExporting ||
-              (exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0) ||
-              (slotCount > 0 && printedSlotCount === 0)
-            }
+            disabled={exportDisabled}
           >
             {isExporting ? (
               <>
@@ -1554,15 +1595,11 @@ export function ExportPage({
             ) : (
               <>
                 <FileDown size={16} style={{ marginRight: 6 }} />
-                {slotCount > 0
-                  ? `Export ${printedSlotCount} Card${printedSlotCount !== 1 ? 's' : ''}`
-                  : exportOptions.mode === 'database'
-                    ? `Export ${exportOptions.selectedUserIds.length} Card${exportOptions.selectedUserIds.length !== 1 ? 's' : ''}`
-                    : `Export ${exportOptions.format.toUpperCase()}`}
+                {exportLabel}
               </>
             )}
           </button>
-          {exportOptions.mode === 'database' && exportOptions.selectedUserIds.length === 0 && (
+          {mode === 'database' && exportOptions.selectedUserIds.length === 0 && (
             <p style={{ fontSize: 11, color: 'var(--danger)', textAlign: 'center', marginTop: 8 }}>
               Select at least one user
             </p>

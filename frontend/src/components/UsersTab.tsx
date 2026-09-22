@@ -563,9 +563,9 @@ export function UsersTab({
 
   return (
     <>
-      <div className="app-content" style={{ height: '100%' }}>
+      <div className="app-content app-content--list-first" style={{ height: '100%' }}>
         {/* Left Panel - User List */}
-        <DockablePanel title="Users" side="left" width={340}>
+        <DockablePanel title="Users" side="left" width={340} openWhenStacked>
           <PanelSection
             title={`All Users (${users.length})`}
             actions={

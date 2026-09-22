@@ -608,6 +608,11 @@ input[type='range'] {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Centred only while it fits: content taller or wider than the area (both
+     sides of a card on a phone) starts at the top instead of running off
+     above it, where it could not be scrolled back into view. */
+  align-items: safe center;
+  justify-content: safe center;
   overflow: auto;
   min-height: 0;
 }
@@ -696,6 +701,64 @@ input[type='range'] {
     overflow: visible;
   }
 
+  /* The card designer lays its panels out in a row of its own; stacked, the
+     canvas goes first and the panels fold under it, as on the other tabs. */
+  .designer-main {
+    flex-direction: column;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .designer-main__canvas {
+    order: -1;
+    flex: none !important;
+    min-height: 280px;
+  }
+
+  /* The name takes the first row; the side switch and Save wrap under it
+     instead of running off the right edge. */
+  .designer-header {
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+  }
+
+  .designer-header > :first-child {
+    flex: 1 1 100%;
+  }
+
+  .designer-header > :first-child input {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  /* Like the ribbon, the tool groups scroll sideways on a narrow screen. */
+  .designer-toolbar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 12px !important;
+  }
+
+  .designer-toolbar > * {
+    flex-shrink: 0;
+  }
+
+  /* The canvas is drawn at the card's real size, so give it the width and let
+     it scroll on a phone too narrow for it rather than cut it off. */
+  .designer-canvas-container {
+    padding: 8px !important;
+    overflow: auto !important;
+    justify-content: safe center !important;
+    align-items: safe center !important;
+  }
+
+  /* On a tab that is for a list, such as Users, the list comes first and the
+     card preview follows it. */
+  .app-content--list-first .app-workspace {
+    order: 0;
+    min-height: 50vh;
+  }
+
   .dockable-panel {
     width: 100% !important;
     border-left: none;
@@ -714,6 +777,21 @@ input[type='range'] {
     padding: 8px 12px;
     justify-content: flex-start;
     gap: 8px;
+  }
+
+  /* Stacked, every panel folds up and down, whichever side it docks to on a
+     desktop: the title sits on the left and the chevron turns to point down
+     to open and up to close. */
+  .dockable-panel__toggle--header {
+    flex-direction: row-reverse;
+  }
+
+  .dockable-panel--left .dockable-panel__toggle svg {
+    transform: rotate(90deg);
+  }
+
+  .dockable-panel--right .dockable-panel__toggle svg {
+    transform: rotate(-90deg);
   }
 
   .dockable-panel__content {

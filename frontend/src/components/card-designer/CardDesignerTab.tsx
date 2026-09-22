@@ -221,6 +221,7 @@ export function CardDesignerTab({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0 }}>
       {/* Header Bar */}
       <div
+        className="designer-header"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -329,7 +330,7 @@ export function CardDesignerTab({
       />
 
       {/* Main Content */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div className="designer-main" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Elements Panel - Left */}
         <DockablePanel title="Elements" side="left" width={220}>
           <PanelSection title="Objects">
@@ -380,7 +381,7 @@ export function CardDesignerTab({
         </DockablePanel>
 
         {/* Canvas Area - Center */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div className="designer-main__canvas" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Show active side canvas */}
           <div style={{ display: activeSide === 'front' ? 'flex' : 'none', flex: 1 }}>
             <DesignerCanvas
