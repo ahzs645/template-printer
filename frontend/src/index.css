@@ -646,6 +646,12 @@ input[type='range'] {
   display: block;
 }
 
+/* A preview box sized from the card's proportions: the artwork fills it. */
+.canvas-preview-frame .canvas-preview--sized svg {
+  width: 100%;
+  height: 100%;
+}
+
 @media (max-width: 768px) {
   .app-content {
     flex-direction: column;

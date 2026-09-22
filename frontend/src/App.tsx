@@ -1044,6 +1044,8 @@ function App() {
       })
       designId = design.id
       setLinkedDesignId(design.id)
+      // Print the design as a whole, so the Export tab offers its back too.
+      setSelectedExportCardDesignId(design.id)
       setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })
       refreshCardDesigns()
     } else {
@@ -1093,6 +1095,7 @@ function App() {
         if (existing) {
           await reloadDesignTemplates()
           await handleTemplateSelect(existing)
+          if (seen.designId) setSelectedExportCardDesignId(seen.designId)
           const message = `Reopened "${seen.name}" — you already have this design.`
           setStatusMessage(message)
           setLinkResult({ ok: true, text: message })
