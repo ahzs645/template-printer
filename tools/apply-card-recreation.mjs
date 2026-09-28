@@ -1,85 +1,84 @@
-/** One-time idempotent integration on the review branch; never runs in the app. */
 import fs from 'node:fs'
-import ts from '../frontend/node_modules/typescript/lib/typescript.js'
-function edit(file,fn){const original=fs.readFileSync(file,'utf8'),result=fn(original);if(result!==original)fs.writeFileSync(file,result)}
-function once(source,oldText,newText){if(source.includes(newText))return source;if(!source.includes(oldText))throw new Error('Missing patch anchor: '+oldText.slice(0,160));return source.replace(oldText,newText)}
-function func(source,name,replacement){const ast=ts.createSourceFile('file.ts',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS),node=ast.statements.find(s=>ts.isFunctionDeclaration(s)&&s.name?.text===name);if(!node)throw new Error('Missing function '+name);return source.slice(0,node.getStart(ast))+replacement+source.slice(node.end)}
-edit('frontend/src/lib/types.ts',s=>{
- s=once(s,"export type ImageValue = {\n  src: string","export type ImageValue = {\n  fit?: 'cover' | 'contain' | 'fill'\n  src: string")
- return once(s,"export type FieldDefinition = {\n  id: string","export type FieldDefinition = {\n  dataSource?: string\n  required?: boolean\n  maxLines?: number\n  minFontSize?: number\n  letterSpacing?: number\n  id: string")
-})
-edit('frontend/src/lib/svgTemplate.ts',s=>{
- if(!s.includes("from './cardRecreation'"))s="import { parseAbsoluteSvgLength, coordinatePercent, normalizeCardFields, isBoundField, hasCardValue, validateProductionCard, replaceCardImage } from './cardRecreation'\n"+s
- s=func(s,'parseUnit',`export function parseUnit(value: string | null | undefined): { numeric?: number; unit?: 'mm' | 'px' } { return parseAbsoluteSvgLength(value) }`)
- s=func(s,'toPercent',`export function toPercent(value: number | undefined, total: number | undefined, fallback: number): number { return coordinatePercent(value,total,fallback) }`)
- s=func(s,'parseTemplateString',`export async function parseTemplateString(rawSvg: string, fileName = 'template.svg'): Promise<TemplateExtractionResult> {
-  const doc = new DOMParser().parseFromString(rawSvg, 'image/svg+xml')
-  const svgNode = doc.querySelector('svg')
-  if (!svgNode || doc.querySelector('parsererror')) throw new Error('Uploaded file does not contain valid SVG.')
-  const widthInfo = parseUnit(svgNode.getAttribute('width'))
-  const heightInfo = parseUnit(svgNode.getAttribute('height'))
-  const numbers = svgNode.getAttribute('viewBox')?.trim().split(/[\\s,]+/).map(Number)
-  if (numbers && (numbers.length !== 4 || numbers.some(n => !Number.isFinite(n)) || numbers[2] <= 0 || numbers[3] <= 0)) throw new Error('The SVG viewBox must have finite coordinates and positive dimensions.')
-  const viewBox = numbers ? {x:numbers[0],y:numbers[1],width:numbers[2],height:numbers[3]} : undefined
-  const unit: 'mm' | 'px' = widthInfo.unit === 'mm' || heightInfo.unit === 'mm' ? 'mm' : 'px'
-  const convert = (value: typeof widthInfo, fallback: number) => value.numeric !== undefined ? value.numeric * (unit === 'mm' && value.unit === 'px' ? 25.4 / 96 : 1) : fallback * (unit === 'mm' ? 25.4 / 96 : 1)
-  const width = convert(widthInfo, viewBox?.width ?? 85.6*96/25.4)
-  const height = convert(heightInfo, viewBox?.height ?? 53.98*96/25.4)
-  if (width <= 0 || height <= 0) throw new Error('The SVG must have a positive width and height.')
-  const fonts = extractFontFamilies(doc), warnings = collectTemplateWarnings(doc, fonts)
-  const canvasBox = viewBox ?? {x:0,y:0,width:width*(unit==='mm'?96/25.4:1),height:height*(unit==='mm'?96/25.4:1)}
-  const trimCandidates = detectTrimCandidates(doc,canvasBox).filter(candidate=>isWorthSuggesting(candidate,canvasBox))
-  const legacy = [...extractPlaceholders(doc,canvasBox),...extractTextFields(doc,canvasBox),...extractImagePlaceholders(doc,canvasBox)]
-  const autoFields = normalizeCardFields(doc,{width,height,unit,viewBox},legacy)
-  const normalizedSvg = new XMLSerializer().serializeToString(svgNode)
-  const objectUrl = URL.createObjectURL(new Blob([normalizedSvg],{type:'image/svg+xml'}))
-  return {metadata:{name:fileName,width,height,unit,rawSvg:normalizedSvg,objectUrl,viewBox,fonts,warnings:warnings.length?warnings:undefined,trimCandidates:trimCandidates.length?trimCandidates:undefined},autoFields}
-}`)
- s=func(s,'renderSvgWithData',`export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData, options: {mode?: 'preview' | 'production'} = {}): string {
-  const doc = new DOMParser().parseFromString(template.rawSvg, 'image/svg+xml')
-  const svgRoot = doc.documentElement, production = options.mode === 'production'
-  if (production) validateProductionCard(fields,cardData)
-  bakeCssTextStyles(doc)
-  for (const field of fields) {
-    if (!field.sourceId) continue
-    const target = doc.getElementById(field.sourceId)
-    if (!target) continue
-    const hasKey = Object.prototype.hasOwnProperty.call(cardData,field.id), supplied = cardData[field.id]
-    if (!hasCardValue(supplied) && (hasKey || (production && isBoundField(field))) && !(field.defaultValue?.trim() && !production)) {
-      if (field.type === 'image') {
-        target.querySelectorAll('image').forEach(image=>image.remove())
-        if (target.tagName.toLowerCase() === 'image') {target.removeAttribute('href');target.removeAttribute('xlink:href')}
-      } else target.textContent = ''
-      continue
-    }
-    if (field.type === 'image') {applySvgImageField(doc,target,asImageValue(supplied));continue}
-    if (field.type === 'barcode') {
-      applySvgBarcodeField(doc,target,field,resolveFieldText(field,supplied),{width:template.viewBox?.width??template.width,height:template.viewBox?.height??template.height})
-      continue
-    }
-    if (field.type === 'text' || field.type === 'date') {
-      applySvgTextField(doc,target,field,resolveFieldText(field,supplied))
-      if (production && field.maxLines && (target.querySelectorAll('tspan').length||1)>field.maxLines) throw new Error('Card export blocked. '+field.label+': text exceeds '+field.maxLines+' lines')
-    }
+function edit(file,fn){const old=fs.readFileSync(file,'utf8'),next=fn(old);if(old!==next)fs.writeFileSync(file,next)}
+function once(source,oldText,newText){if(source.includes(newText))return source;if(!source.includes(oldText))throw new Error('Missing patch anchor: '+oldText.slice(0,150));return source.replace(oldText,newText)}
+edit('frontend/src/lib/templatePackage.ts',s=>{
+ if(!s.includes("from './editorDocument'"))s="import { portableEditorJson, readEditorDocument, type PackagedEditor } from './editorDocument'\n"+s
+ s=once(s,'export type TemplatePackageManifest = {','export type TemplatePackageManifest = {\n  editor?: PackagedEditor')
+ s=once(s,'export type CreatePackageInput = {','export type CreatePackageInput = {\n  editor?: PackagedEditor')
+ s=once(s,'export type LoadedPackage = {','export type LoadedPackage = {\n  editor?: PackagedEditor')
+ s=once(s,'  const manifest: TemplatePackageManifest = {',`  let editor: PackagedEditor | undefined
+  if (input.editor) {
+    if (input.editor.version !== 1 || !Number.isFinite(input.editor.widthMm) || !Number.isFinite(input.editor.heightMm) || input.editor.widthMm <= 0 || input.editor.heightMm <= 0) throw new Error('Invalid editable card dimensions.')
+    zip.file('editor/front.json', portableEditorJson(input.editor.front))
+    if (input.editor.back) zip.file('editor/back.json', portableEditorJson(input.editor.back))
+    editor = {...input.editor, front: 'editor/front.json', back: input.editor.back ? 'editor/back.json' : undefined}
   }
-  svgRoot.querySelectorAll('[data-editor-only="true"]').forEach(node=>node.remove())
-  return new XMLSerializer().serializeToString(svgRoot)
-}`)
- s=func(s,'applySvgImageField',`function applySvgImageField(doc: Document, element: Element, value: ImageValue | undefined) { replaceCardImage(doc,element,value) }`)
- s=once(s,'const effectiveFontSize = originalFontSize ?? field.fontSize ?? 16','const effectiveFontSize = field.fontSize ?? originalFontSize ?? 16')
- s=once(s,'const scale = Math.max(field.wrapWidth / widest, MIN_AUTO_SHRINK_SCALE)','const scale = Math.min(1, Math.max(field.wrapWidth / widest, field.minFontSize ? field.minFontSize / effectiveFontSize : MIN_AUTO_SHRINK_SCALE))')
- s=once(s,"  const anchor = field.align === 'center' ? 'middle' : field.align === 'right' ? 'end' : 'start'","  if (field.letterSpacing !== undefined) element.setAttribute('letter-spacing', String(field.letterSpacing))\n  const anchor = field.align === 'center' ? 'middle' : field.align === 'right' ? 'end' : 'start'")
+  const manifest: TemplatePackageManifest = {`)
+ s=once(s,'    format: PACKAGE_FORMAT,','    editor,\n    format: PACKAGE_FORMAT,')
+ s=once(s,'  return { manifest, front, back: await readSide(manifest.sides.back), fonts }',`  let editor: PackagedEditor | undefined
+  if (manifest.editor) {
+    const meta = manifest.editor
+    if (meta.version !== 1 || !Number.isFinite(meta.widthMm) || !Number.isFinite(meta.heightMm) || meta.widthMm <= 0 || meta.heightMm <= 0) throw new Error('Invalid editable card dimensions.')
+    const readScene = async (path: string) => {
+      const entry = zip.file(path)
+      if (!entry) throw new Error('The editable package is missing '+path)
+      const json = await entry.async('string')
+      readEditorDocument(json)
+      return json
+    }
+    editor = {...meta, front: await readScene(meta.front), back: meta.back ? await readScene(meta.back) : undefined}
+  }
+  return { manifest, front, back: await readSide(manifest.sides.back), fonts, editor }`)
  return s
 })
-edit('frontend/src/lib/autoMapping.ts',s=>{s=once(s,'const standardFieldName = resolveStandardFieldName(fieldId)','const standardFieldName = resolveStandardFieldName(field.dataSource || fieldId)');return once(s,'return resolveStandardFieldName(sourceId) !== null','return resolveStandardFieldName(field.dataSource || sourceId) !== null')})
-edit('frontend/src/lib/exporter.ts',s=>once(s,'const svgMarkup = renderSvgWithData(template, fields, cardData)',"const svgMarkup = renderSvgWithData(template, fields, cardData, { mode: 'production' })"))
-edit('frontend/src/components/FieldEditorPanel.tsx',s=>once(s,"        {field.type === 'barcode' && (",`        <label style={{display:'flex',gap:8,alignItems:'center'}}>
-          <input type="checkbox" checked={field.required ?? false} onChange={event=>onChange(field.id,'required',event.target.checked)} />
-          Required for production export
-        </label>
-        {field.type === 'barcode' && (`))
-const pkg=JSON.parse(fs.readFileSync('frontend/package.json','utf8'))
-if(!pkg.scripts.test.includes('test:card-recreation'))pkg.scripts.test+=' && pnpm run test:card-recreation'
-pkg.scripts['test:card-recreation']='node scripts/test-card-recreation.mjs'
-fs.writeFileSync('frontend/package.json',JSON.stringify(pkg,null,2)+'\n')
-console.log('Card-recreation source integration applied.')
+edit('frontend/src/App.tsx',s=>{
+ s=once(s,'              <CardDesignerTab\n','              <CardDesignerTab\n                fontOptions={fontOptions}\n                missingFonts={missingFonts}\n                getFonts={() => storage.listFonts()}\n                onLoadFont={loadFontFile}\n')
+ s=once(s,'    if (backTemplate) {\n      const design = await createCardDesign({','    if (backTemplate || loaded.editor) {\n      const design = await createCardDesign({')
+ s=once(s,'        backTemplateId: backTemplate.id,\n      })',`        backTemplateId: backTemplate?.id ?? null,
+        ...(loaded.editor ? {designerMode: 'canvas' as const, frontCanvasData: loaded.editor.front, backCanvasData: loaded.editor.back ?? null, cardWidth: loaded.editor.widthMm, cardHeight: loaded.editor.heightMm} : {}),
+      })`)
+ s=once(s,'      setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })','      setOtherSidePreview(backTemplate && loaded.back ? { name: backTemplate.name, svg: loaded.back.svg } : null)')
+ return s
+})
+edit('frontend/src/components/card-designer/CardDesignerTab.tsx',s=>{
+ if(!s.includes("from './utils/svgToScene'"))s="import { importPackageSide } from './utils/svgToScene'\n"+s
+ s=once(s,'<InlineSvg svg={previewSvg}/>','<InlineSvg markup={previewSvg} name="designer-data-preview"/>')
+ s=once(s,"    if(!loaded.editor)throw new Error('This is an SVG template package, not an editable canvas package. Open it in Import mode to edit its fields, or import its SVG as vector artwork here.')",`    if (!loaded.editor) {
+      for (const font of loaded.fonts) await onLoadFont?.(font.name, font.file)
+      const size = await importPackageSide(sessions.front, loaded.front)
+      if (loaded.back) await importPackageSide(sessions.back, loaded.back)
+      else await sessions.back.load(null)
+      setName(loaded.manifest.name); setWidth(size.widthMm); setHeight(size.heightMm); setSide('front')
+      setMessage('SVG package converted to editable vector objects. Declared fields are preserved. Compare complex masks and typography against the original before printing.')
+      return
+    }`)
+ return s
+})
+edit('frontend/src/components/card-designer/utils/sceneSession.ts',s=>once(s,'layout?: {maxLines?: number; minFontSize?: number}','layout?: {maxLines?: number; minFontSize?: number; wrapWidth?: number}'))
+edit('frontend/src/components/card-designer/utils/fabricToSvg.ts',s=>once(s,"target.setAttribute('data-field-width',String(object.width))","target.setAttribute('data-field-width',String(data.layout?.wrapWidth??object.width))"))
+edit('frontend/src/components/card-designer/SceneInspector.tsx',s=>{
+ s=once(s,'value={fontSize*72/96} min={1} onChange={value=>set(\'fontSize\',value*96/72)}','value={fontSize*Math.abs(object.scaleY)*72/96} min={1} onChange={value=>set(\'fontSize\',value*96/72/Math.abs(object.scaleY))}')
+ return s
+})
+edit('frontend/src/lib/svgTemplate.ts',s=>{
+ s=once(s,'function applySvgImageField(doc: Document, element: Element, value: ImageValue | undefined) { replaceCardImage(doc,element,value) }',`function applySvgImageField(doc: Document, element: Element, value: ImageValue | undefined) {
+  if (!value) return
+  const fit = element.getAttribute('data-photo-fit')
+  replaceCardImage(doc,element,{
+    scale: Number(element.getAttribute('data-photo-scale')) || 1,
+    offsetX: Number(element.getAttribute('data-photo-x')) || 0,
+    offsetY: Number(element.getAttribute('data-photo-y')) || 0,
+    fit: fit === 'contain' || fit === 'fill' ? fit : 'cover',
+    ...Object.fromEntries(Object.entries(value).filter(([,value]) => value !== undefined)),
+    src: value.src,
+  })
+}`)
+ s=once(s,'  const heightScale = (explicitHeight ?? targetHeight) / barcode.height\n  const scaleX = targetWidth !== undefined ? targetWidth / barcode.width : heightScale\n  const scaleY = heightScale',`  const localWidth = readNumeric(element.getAttribute('data-barcode-width')) ?? targetWidth
+  const localHeight = readNumeric(element.getAttribute('data-barcode-height')) ?? explicitHeight ?? targetHeight
+  const heightScale = localHeight / barcode.height
+  const widthScale = localWidth !== undefined ? localWidth / barcode.width : heightScale
+  const scaleX = symbology === 'qrcode' ? Math.min(widthScale, heightScale) : widthScale
+  const scaleY = symbology === 'qrcode' ? Math.min(widthScale, heightScale) : heightScale`)
+ return s
+})
+console.log('Integrated editor sessions, controls, SVG conversion and portable editable packages.')

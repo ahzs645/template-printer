@@ -1,186 +1,79 @@
-import type { Canvas, FabricObject, Textbox, Rect } from 'fabric'
-import type { DesignerObjectData } from '../types'
+import { Canvas, FabricObject, Group } from 'fabric'
+import { readEditorDocument } from '../../../lib/editorDocument'
+import { normalizeSymbology } from '../../../lib/barcode'
+import { assignObjectIds, nodeData, SCENE_PROPERTIES } from './sceneSession'
 
-// Pixels per mm at 96 DPI
-const PX_PER_MM = 96 / 25.4
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const PX_PER_MM = 96/25.4
 
-/**
- * Convert Fabric.js canvas to SVG with field placeholders
- * The output SVG is compatible with the existing renderSvgWithData() function
- */
-export function fabricCanvasToSvg(
-  canvas: Canvas,
-  cardWidthMm: number,
-  cardHeightMm: number
-): string {
-  // Get base SVG from Fabric.js
-  const canvasWidthPx = cardWidthMm * PX_PER_MM
-  const canvasHeightPx = cardHeightMm * PX_PER_MM
+/** SVG is derived from canonical Fabric state; binding IDs survive groups and roundtrips. */
+export function fabricCanvasToSvg(canvas: Canvas, cardWidthMm: number, cardHeightMm: number): string {
+  canvas.getObjects().forEach(object=>assignObjectIds(object))
+  const raw = canvas.toSVG({width:cardWidthMm+'mm',height:cardHeightMm+'mm',viewBox:{x:0,y:0,width:cardWidthMm*PX_PER_MM,height:cardHeightMm*PX_PER_MM}})
+  const doc = new DOMParser().parseFromString(raw,'image/svg+xml')
+  const visit = (object: FabricObject): void => {
+    if (object.excludeFromExport) return
+    const node = doc.getElementById(object.get('id') as string)
+    const data = nodeData(object)
+    if (node && data.fieldId && ['dynamic-text','image-placeholder','barcode'].includes(data.elementType)) {
+      let target = node
+      let type = 'text'
+      if (data.elementType === 'dynamic-text') {
+        target = node.tagName.toLowerCase()==='text'?node:node.querySelector('text')??node
+        if(target!==node)target.setAttribute('id',(object.get('id') as string)+'-field')
+      } else if (data.elementType === 'image-placeholder') {
+        type='image'
+        const config=data.imagePlaceholderConfig
+        if(config){target.setAttribute('data-photo-fit',config.fitMode);target.setAttribute('data-photo-scale',String(config.scale??1));target.setAttribute('data-photo-x',String(config.offsetX??0));target.setAttribute('data-photo-y',String(config.offsetY??0))}
+      } else {
+        type='barcode'
+        const sample=doc.createElementNS(SVG_NS,'text')
+        sample.setAttribute('x',String(-object.width/2));sample.setAttribute('y',String(object.height/2));sample.setAttribute('font-size',String(object.height))
+        sample.setAttribute('data-barcode-width',String(object.width));sample.setAttribute('data-barcode-height',String(object.height))
+        sample.setAttribute('id',(object.get('id') as string)+'-field');sample.textContent='123456789012'
+        // Fabric places the object's own transform on its wrapping group.
+        while(node.firstChild)node.removeChild(node.firstChild)
+        node.appendChild(sample);target=sample
+        target.setAttribute('data-barcode-type',normalizeSymbology(data.barcodeConfig?.barcodeType??'code128')??'code128')
+      }
+      target.setAttribute('data-field-id',data.fieldId)
+      target.setAttribute('data-field-source',data.fieldId)
+      target.setAttribute('data-field-type',type)
+      target.setAttribute('data-field-required',String(data.required??false))
+      if(type==='text'){
+        target.setAttribute('data-field-width',String(object.width))
+        const text=object as FabricObject & {fontSize?:number;lineHeight?:number;charSpacing?:number}
+        if(text.fontSize)target.setAttribute('data-field-line-height',String(text.fontSize*(text.lineHeight??1.2)))
+        if(text.charSpacing&&text.fontSize)target.setAttribute('data-field-letter-spacing',String(text.charSpacing*text.fontSize/1000))
+        if(data.layout?.maxLines)target.setAttribute('data-field-max-lines',String(data.layout.maxLines))
+        if(data.layout?.minFontSize)target.setAttribute('data-field-min-size',String(data.layout.minFontSize))
+      }
+      return
+    }
+    if(node && (data.elementType==='asset' || !(object instanceof Group))) node.setAttribute('data-static','true')
+    if(object instanceof Group && data.elementType!=='asset')object.getObjects().forEach(visit)
+  }
+  canvas.getObjects().forEach(visit)
+  return new XMLSerializer().serializeToString(doc.documentElement)
+}
 
-  let svg = canvas.toSVG({
-    width: `${cardWidthMm}mm`,
-    height: `${cardHeightMm}mm`,
-    viewBox: {
-      x: 0,
-      y: 0,
-      width: canvasWidthPx,
-      height: canvasHeightPx,
-    },
+export function extractFieldsFromCanvasSvg(svg: string): Array<{fieldId:string;fieldType:'text'|'image'|'barcode';barcodeType?:string}> {
+  const doc=new DOMParser().parseFromString(svg,'image/svg+xml')
+  return Array.from(doc.querySelectorAll('[data-field-id][data-field-type]')).flatMap(node=>{
+    const fieldId=node.getAttribute('data-field-id'),type=node.getAttribute('data-field-type')
+    if(!fieldId||(type!=='text'&&type!=='image'&&type!=='barcode'))return []
+    return [{fieldId,fieldType:type,barcodeType:node.getAttribute('data-barcode-type')??undefined}]
   })
-
-  // Process dynamic elements to add field placeholders
-  const objects = canvas.getObjects()
-
-  for (const obj of objects) {
-    const data = obj.get('data') as DesignerObjectData | undefined
-    if (!data) continue
-
-    const objId = obj.get('id') as string
-
-    if (data.elementType === 'dynamic-text' && data.fieldId) {
-      // Replace text content with placeholder pattern
-      svg = replaceDynamicTextInSvg(svg, objId, data.fieldId)
-    }
-
-    if (data.elementType === 'image-placeholder' && data.fieldId) {
-      // Add image placeholder group with the field pattern
-      svg = addImagePlaceholderToSvg(svg, objId, data.fieldId)
-    }
-
-    if (data.elementType === 'barcode' && data.fieldId && data.barcodeConfig) {
-      // Add barcode placeholder
-      svg = addBarcodePlaceholderToSvg(svg, objId, data.fieldId, data.barcodeConfig.barcodeType)
-    }
-  }
-
-  return svg
 }
 
-/**
- * Replace dynamic text element content with field placeholder pattern
- */
-function replaceDynamicTextInSvg(svg: string, objId: string, fieldId: string): string {
-  // Fabric.js generates text elements with data-id attribute
-  // We need to find the text content and wrap it with the placeholder pattern
-
-  // The placeholder pattern used by the existing system
-  const placeholder = `{{field:${fieldId}}}`
-
-  // Try to find and update the text element
-  // Fabric generates tspan elements for text
-  const idPattern = new RegExp(`id="${objId}"`, 'g')
-  if (idPattern.test(svg)) {
-    // Add a data attribute to mark this as a dynamic field
-    svg = svg.replace(
-      new RegExp(`(id="${objId}")`, 'g'),
-      `$1 data-field-id="${fieldId}" data-field-type="text"`
-    )
-  }
-
-  return svg
+export async function generateSvgFromCanvasData(canvasJson:string,cardWidthMm:number,cardHeightMm:number):Promise<string>{
+  const parsed=readEditorDocument(canvasJson)
+  delete parsed.overlayImage;delete parsed.cardEditor
+  const canvas=new Canvas(document.createElement('canvas'),{width:cardWidthMm*PX_PER_MM,height:cardHeightMm*PX_PER_MM})
+  try{
+    await document.fonts?.ready
+    await canvas.loadFromJSON(parsed)
+    return fabricCanvasToSvg(canvas,cardWidthMm,cardHeightMm)
+  }finally{await canvas.dispose()}
 }
-
-/**
- * Add image placeholder group to SVG
- */
-function addImagePlaceholderToSvg(svg: string, objId: string, fieldId: string): string {
-  // Mark the rect element as an image placeholder
-  const idPattern = new RegExp(`id="${objId}"`, 'g')
-  if (idPattern.test(svg)) {
-    svg = svg.replace(
-      new RegExp(`(id="${objId}")`, 'g'),
-      `$1 data-field-id="${fieldId}" data-field-type="image"`
-    )
-  }
-
-  return svg
-}
-
-/**
- * Add barcode placeholder to SVG
- */
-function addBarcodePlaceholderToSvg(
-  svg: string,
-  objId: string,
-  fieldId: string,
-  barcodeType: string
-): string {
-  const idPattern = new RegExp(`id="${objId}"`, 'g')
-  if (idPattern.test(svg)) {
-    svg = svg.replace(
-      new RegExp(`(id="${objId}")`, 'g'),
-      `$1 data-field-id="${fieldId}" data-field-type="barcode" data-barcode-type="${barcodeType}"`
-    )
-  }
-
-  return svg
-}
-
-/**
- * Extract field definitions from a canvas-generated SVG
- * This is used when loading a canvas design for export
- */
-export function extractFieldsFromCanvasSvg(svg: string): Array<{
-  fieldId: string
-  fieldType: 'text' | 'image' | 'barcode'
-  barcodeType?: string
-}> {
-  const fields: Array<{
-    fieldId: string
-    fieldType: 'text' | 'image' | 'barcode'
-    barcodeType?: string
-  }> = []
-
-  // Parse data-field attributes
-  const fieldPattern = /data-field-id="([^"]+)"\s+data-field-type="([^"]+)"(?:\s+data-barcode-type="([^"]+)")?/g
-  let match
-
-  while ((match = fieldPattern.exec(svg)) !== null) {
-    fields.push({
-      fieldId: match[1],
-      fieldType: match[2] as 'text' | 'image' | 'barcode',
-      barcodeType: match[3],
-    })
-  }
-
-  return fields
-}
-
-/**
- * Generate SVG template from canvas data (JSON string)
- * This creates an SVG that can be used with the existing export system
- */
-export async function generateSvgFromCanvasData(
-  canvasJson: string,
-  cardWidthMm: number,
-  cardHeightMm: number
-): Promise<string> {
-  // Dynamically import fabric to avoid loading it when not needed
-  const { Canvas } = await import('fabric')
-
-  // Create a temporary canvas
-  const canvasWidthPx = cardWidthMm * PX_PER_MM
-  const canvasHeightPx = cardHeightMm * PX_PER_MM
-
-  // Create an offscreen canvas element
-  const canvasElement = document.createElement('canvas')
-  canvasElement.width = canvasWidthPx
-  canvasElement.height = canvasHeightPx
-
-  const fabricCanvas = new Canvas(canvasElement, {
-    width: canvasWidthPx,
-    height: canvasHeightPx,
-  })
-
-  // Load the canvas data
-  const parsed = JSON.parse(canvasJson)
-  await fabricCanvas.loadFromJSON(parsed)
-
-  // Generate SVG
-  const svg = fabricCanvasToSvg(fabricCanvas, cardWidthMm, cardHeightMm)
-
-  // Clean up
-  fabricCanvas.dispose()
-
-  return svg
-}
+export { SCENE_PROPERTIES }
