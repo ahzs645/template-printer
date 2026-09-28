@@ -62,6 +62,10 @@ export function FieldEditorPanel({ field, onChange, fontOptions, missingFonts }:
           </Select>
         </div>
 
+        <label style={{display:'flex',gap:8,alignItems:'center'}}>
+          <input type="checkbox" checked={field.required ?? false} onChange={event=>onChange(field.id,'required',event.target.checked)} />
+          Required for production export
+        </label>
         {field.type === 'barcode' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <Label htmlFor="field-barcode-type">Barcode type</Label>

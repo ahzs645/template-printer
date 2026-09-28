@@ -15,14 +15,15 @@
     "build:convex-local": "tsc -b && VITE_STORAGE_MODE=convex-local vite build",
     "build:gh-pages": "tsc -b && VITE_STORAGE_MODE=local GITHUB_PAGES=true vite build",
     "lint": "eslint .",
-    "test": "pnpm run test:template-import && pnpm run test:share-link && pnpm run test:package && pnpm run test:package-url",
+    "test": "pnpm run test:template-import && pnpm run test:share-link && pnpm run test:package && pnpm run test:package-url && pnpm run test:card-recreation",
     "test:template-import": "node scripts/test-template-import.mjs",
     "test:share-link": "node scripts/test-share-link.mjs",
     "test:package": "node scripts/test-template-package.mjs",
     "test:package-url": "node scripts/test-package-url.mjs",
     "test:calibration": "node scripts/test-calibration-roundtrip.mjs",
     "preview": "vite preview",
-    "deploy": "pnpm build:gh-pages && gh-pages -d dist"
+    "deploy": "pnpm build:gh-pages && gh-pages -d dist",
+    "test:card-recreation": "node scripts/test-card-recreation.mjs"
   },
   "dependencies": {
     "@radix-ui/react-select": "^2.2.6",

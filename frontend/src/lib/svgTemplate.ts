@@ -1,3 +1,4 @@
+import { parseAbsoluteSvgLength, coordinatePercent, normalizeCardFields, isBoundField, hasCardValue, validateProductionCard, replaceCardImage } from './cardRecreation'
 import opentype from 'opentype.js'
 
 import { generateBarcodeSvg, isBarcodeFontFamily } from './barcode'
@@ -25,14 +26,7 @@ export function readNumeric(value: string | null | undefined): number | undefine
   return Number.isFinite(numeric) ? numeric : undefined
 }
 
-export function parseUnit(value: string | null | undefined): { numeric?: number; unit?: 'mm' | 'px' } {
-  if (!value) return {}
-  const match = value.match(/([0-9.]+)\s*(mm|px)?/i)
-  if (!match) return {}
-  const numeric = parseFloat(match[1])
-  const unit = (match[2]?.toLowerCase() as 'mm' | 'px') ?? undefined
-  return { numeric: Number.isFinite(numeric) ? numeric : undefined, unit }
-}
+export function parseUnit(value: string | null | undefined): { numeric?: number; unit?: 'mm' | 'px' } { return parseAbsoluteSvgLength(value) }
 
 function detectFieldType(rawType: string): FieldType {
   switch (rawType) {
@@ -47,11 +41,7 @@ function detectFieldType(rawType: string): FieldType {
   }
 }
 
-export function toPercent(value: number | undefined, total: number | undefined, fallback: number): number {
-  if (!value || !total) return fallback
-  if (total === 0) return fallback
-  return clamp((value / total) * 100, 0, 100)
-}
+export function toPercent(value: number | undefined, total: number | undefined, fallback: number): number { return coordinatePercent(value,total,fallback) }
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -712,74 +702,29 @@ export async function parseTemplate(file: File): Promise<TemplateExtractionResul
 }
 
 export async function parseTemplateString(rawSvg: string, fileName = 'template.svg'): Promise<TemplateExtractionResult> {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(rawSvg, 'image/svg+xml')
+  const doc = new DOMParser().parseFromString(rawSvg, 'image/svg+xml')
   const svgNode = doc.querySelector('svg')
-  if (!svgNode) {
-    throw new Error('Uploaded file does not contain a valid <svg> root element.')
-  }
-
+  if (!svgNode || doc.querySelector('parsererror')) throw new Error('Uploaded file does not contain valid SVG.')
   const widthInfo = parseUnit(svgNode.getAttribute('width'))
   const heightInfo = parseUnit(svgNode.getAttribute('height'))
-  const viewBoxAttr = svgNode.getAttribute('viewBox')
-
-  let width = widthInfo.numeric
-  let height = heightInfo.numeric
-  let unit: 'mm' | 'px' = widthInfo.unit ?? heightInfo.unit ?? 'px'
-
-  if ((!width || !height) && viewBoxAttr) {
-    const [, , viewWidth, viewHeight] = viewBoxAttr.split(/\s+/).map(parseFloat)
-    if (Number.isFinite(viewWidth) && !width) width = viewWidth
-    if (Number.isFinite(viewHeight) && !height) height = viewHeight
-    unit = 'px'
-  }
-
-  if (!width || !height) {
-    width = 86
-    height = 54
-    unit = 'mm'
-  }
-
-  const viewBoxNumbers = viewBoxAttr?.split(/\s+/).map(parseFloat)
-  const viewBox =
-    viewBoxNumbers && viewBoxNumbers.length === 4
-      ? {
-          x: viewBoxNumbers[0],
-          y: viewBoxNumbers[1],
-          width: viewBoxNumbers[2],
-          height: viewBoxNumbers[3],
-        }
-      : undefined
-
-  const fonts = extractFontFamilies(doc)
-  const warnings = collectTemplateWarnings(doc, fonts)
-
-  const canvasBox = viewBox ?? { x: 0, y: 0, width, height }
-  const trimCandidates = detectTrimCandidates(doc, canvasBox).filter((candidate) =>
-    isWorthSuggesting(candidate, canvasBox),
-  )
-  const placeholderFields = extractPlaceholders(doc, { width, height })
-  const textFields = placeholderFields.length > 0 ? [] : extractTextFields(doc, { width, height })
-  const imageFields = placeholderFields.length > 0 ? [] : extractImagePlaceholders(doc, { width, height })
-  const serializer = new XMLSerializer()
-  const normalizedSvg = serializer.serializeToString(svgNode)
-  const objectUrl = URL.createObjectURL(new Blob([normalizedSvg], { type: 'image/svg+xml' }))
-  const metadata: TemplateMeta = {
-    name: fileName,
-    width,
-    height,
-    unit,
-    rawSvg: normalizedSvg,
-    objectUrl,
-    viewBox,
-    fonts,
-    warnings: warnings.length > 0 ? warnings : undefined,
-    trimCandidates: trimCandidates.length > 0 ? trimCandidates : undefined,
-  }
-
-  const autoFields = placeholderFields.length > 0 ? placeholderFields : [...textFields, ...imageFields]
-
-  return { metadata, autoFields }
+  const numbers = svgNode.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
+  if (numbers && (numbers.length !== 4 || numbers.some(n => !Number.isFinite(n)) || numbers[2] <= 0 || numbers[3] <= 0)) throw new Error('The SVG viewBox must have finite coordinates and positive dimensions.')
+  const viewBox = numbers ? {x:numbers[0],y:numbers[1],width:numbers[2],height:numbers[3]} : undefined
+  const unit: 'mm' | 'px' = widthInfo.unit === 'mm' || heightInfo.unit === 'mm' ? 'mm' : 'px'
+  const convert = (value: typeof widthInfo, fallback: number) => value.numeric !== undefined ? value.numeric * (unit === 'mm' && value.unit === 'px' ? 25.4 / 96 : 1) : fallback * (unit === 'mm' ? 25.4 / 96 : 1)
+  const width = convert(widthInfo, viewBox?.width ?? 85.6*96/25.4)
+  const height = convert(heightInfo, viewBox?.height ?? 53.98*96/25.4)
+  if (width <= 0 || height <= 0) throw new Error('The SVG must have a positive width and height.')
+  const fonts = extractFontFamilies(doc), warnings = collectTemplateWarnings(doc, fonts)
+  const canvasBox = viewBox ?? {x:0,y:0,width:width*(unit==='mm'?96/25.4:1),height:height*(unit==='mm'?96/25.4:1)}
+  const trimCandidates = detectTrimCandidates(doc,canvasBox).filter(candidate=>isWorthSuggesting(candidate,canvasBox))
+  // Placeholder templates name their text fields explicitly, so their other text stays artwork.
+  const placeholders = extractPlaceholders(doc,canvasBox)
+  const legacy = [...placeholders,...(placeholders.length > 0 ? [] : extractTextFields(doc,canvasBox)),...extractImagePlaceholders(doc,canvasBox)]
+  const autoFields = normalizeCardFields(doc,{width,height,unit,viewBox},legacy)
+  const normalizedSvg = new XMLSerializer().serializeToString(svgNode)
+  const objectUrl = URL.createObjectURL(new Blob([normalizedSvg],{type:'image/svg+xml'}))
+  return {metadata:{name:fileName,width,height,unit,rawSvg:normalizedSvg,objectUrl,viewBox,fonts,warnings:warnings.length?warnings:undefined,trimCandidates:trimCandidates.length?trimCandidates:undefined},autoFields}
 }
 
 /**
@@ -928,39 +873,58 @@ function collectTemplateWarnings(doc: Document, fonts: string[]): string[] {
   return warnings
 }
 
-export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData): string {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(template.rawSvg, 'image/svg+xml')
-  const svgRoot = doc.documentElement
-
-  // Bake CSS text styling into inline attributes for all text elements and tspans
-  // This ensures font and colour styling survive the tspan structure changes below
+export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData, options: {mode?: 'preview' | 'production'} = {}): string {
+  const doc = new DOMParser().parseFromString(template.rawSvg, 'image/svg+xml')
+  const svgRoot = doc.documentElement, production = options.mode === 'production'
+  if (production) validateProductionCard(fields,cardData)
   bakeCssTextStyles(doc)
-
   for (const field of fields) {
     if (!field.sourceId) continue
     const target = doc.getElementById(field.sourceId)
     if (!target) continue
-
-    if (field.type === 'image') {
-      const value = cardData[field.id]
-      applySvgImageField(doc, target, asImageValue(value))
+    const hasKey = Object.prototype.hasOwnProperty.call(cardData,field.id), supplied = cardData[field.id]
+    if (!hasCardValue(supplied) && (hasKey || (production && isBoundField(field))) && !field.defaultValue?.trim()) {
+      if (field.type === 'image') {
+        target.querySelectorAll('image').forEach(image=>image.remove())
+        if (target.tagName.toLowerCase() === 'image') {target.removeAttribute('href');target.removeAttribute('xlink:href')}
+      } else target.textContent = ''
       continue
     }
-
+    if (field.type === 'image') {applySvgImageField(doc,target,asImageValue(supplied));continue}
     if (field.type === 'barcode') {
-      applySvgBarcodeField(doc, target, field, resolveFieldText(field, cardData[field.id]), {
-        width: template.viewBox?.width ?? template.width,
-        height: template.viewBox?.height ?? template.height,
-      })
+      applySvgBarcodeField(doc,target,field,resolveFieldText(field,supplied),{width:template.viewBox?.width??template.width,height:template.viewBox?.height??template.height})
       continue
     }
-
-    if (field.type !== 'text') continue
-    applySvgTextField(doc, target, field, resolveFieldText(field, cardData[field.id]))
+    if (field.type === 'text' || field.type === 'date') {
+      applySvgTextField(doc,target,field,resolveFieldText(field,supplied))
+      if (production && field.maxLines && (target.querySelectorAll('tspan').length||1)>field.maxLines) throw new Error('Card export blocked. '+field.label+': text exceeds '+field.maxLines+' lines')
+    }
   }
-
+  svgRoot.querySelectorAll('[data-editor-only="true"]').forEach(node=>node.remove())
   return new XMLSerializer().serializeToString(svgRoot)
+}
+
+/**
+ * The values a design already shows for its fields, read from its own artwork.
+ * Printing a design without a person uses these, so production mode draws the
+ * design as laid out instead of blanking every bound layer.
+ */
+export function readDesignedCardData(template: TemplateMeta, fields: FieldDefinition[]): CardData {
+  const doc = new DOMParser().parseFromString(template.rawSvg, 'image/svg+xml')
+  const data: CardData = {}
+  for (const field of fields) {
+    const target = field.sourceId ? doc.getElementById(field.sourceId) : null
+    if (!target) continue
+    if (field.type === 'image') {
+      const image = target.tagName.toLowerCase() === 'image' ? target : target.querySelector('image')
+      const src = image?.getAttribute('href') || image?.getAttribute('xlink:href')
+      if (src) data[field.id] = { src }
+      continue
+    }
+    const text = target.textContent?.trim()
+    if (text) data[field.id] = text
+  }
+  return data
 }
 
 /**
@@ -1069,9 +1033,12 @@ function applySvgBarcodeField(
   const barcodeRoot = barcodeDoc.documentElement
   if (!barcodeRoot || barcodeRoot.querySelector('parsererror')) return
 
-  const heightScale = (explicitHeight ?? targetHeight) / barcode.height
-  const scaleX = targetWidth !== undefined ? targetWidth / barcode.width : heightScale
-  const scaleY = heightScale
+  const localWidth = readNumeric(element.getAttribute('data-barcode-width')) ?? targetWidth
+  const localHeight = readNumeric(element.getAttribute('data-barcode-height')) ?? explicitHeight ?? targetHeight
+  const heightScale = localHeight / barcode.height
+  const widthScale = localWidth !== undefined ? localWidth / barcode.width : heightScale
+  const scaleX = symbology === 'qrcode' ? Math.min(widthScale, heightScale) : widthScale
+  const scaleY = symbology === 'qrcode' ? Math.min(widthScale, heightScale) : heightScale
   const scaledWidth = barcode.width * scaleX
 
   // Match the placeholder's alignment.
@@ -1151,7 +1118,7 @@ function applySvgTextField(
   }
 
   // Use the original CSS font-size if available, otherwise fall back to field.fontSize
-  const effectiveFontSize = originalFontSize ?? field.fontSize ?? 16
+  const effectiveFontSize = field.fontSize ?? originalFontSize ?? 16
 
   // Determine lines: use word wrapping if a wrapWidth was detected, otherwise split on newlines
   let lines: string[]
@@ -1164,7 +1131,7 @@ function applySvgTextField(
     // text down to the width the artwork allows for, within reason.
     const widest = measureWidestLine(lines, field.fontFamily, renderedFontSize, field.fontWeight)
     if (widest && widest > field.wrapWidth) {
-      const scale = Math.max(field.wrapWidth / widest, MIN_AUTO_SHRINK_SCALE)
+      const scale = Math.min(1, Math.max(field.wrapWidth / widest, field.minFontSize ? field.minFontSize / effectiveFontSize : MIN_AUTO_SHRINK_SCALE))
       renderedFontSize = renderedFontSize * scale
       lines = wrapTextToLines(value, field.wrapWidth, field.fontFamily, field.fontWeight, renderedFontSize)
     }
@@ -1204,6 +1171,7 @@ function applySvgTextField(
     setOrRemoveAttribute(element, 'fill', field.color)
   }
 
+  if (field.letterSpacing !== undefined) element.setAttribute('letter-spacing', String(field.letterSpacing))
   const anchor = field.align === 'center' ? 'middle' : field.align === 'right' ? 'end' : 'start'
   if (anchor === 'start') {
     element.removeAttribute('text-anchor')
@@ -1278,53 +1246,17 @@ export async function loadSvgAsImage(svgMarkup: string): Promise<HTMLImageElemen
   }
 }
 
-function applySvgImageField(
-  doc: Document,
-  element: Element,
-  value: ImageValue | undefined,
-) {
-  Array.from(element.querySelectorAll('image[data-idcard-generated="true"]')).forEach((node) => node.remove())
-
-  const imageValue = asImageValue(value)
-  if (!imageValue) {
-    return
-  }
-
-  const { src, scale = 1, offsetX = 0, offsetY = 0 } = imageValue
-
-  const rect = element.querySelector('rect')
-  const x = readNumeric(rect?.getAttribute('x')) ?? 0
-  const y = readNumeric(rect?.getAttribute('y')) ?? 0
-  const width = readNumeric(rect?.getAttribute('width')) ?? 0
-  const height = readNumeric(rect?.getAttribute('height')) ?? 0
-
-  if (width <= 0 || height <= 0) {
-    return
-  }
-
-  if (rect) {
-    rect.setAttribute('fill', 'none')
-  }
-
-  const scaleFactor = Math.max(0.1, scale)
-  const drawWidth = width * scaleFactor
-  const drawHeight = height * scaleFactor
-  const offsetXPx = offsetX * width
-  const offsetYPx = offsetY * height
-  const drawX = x + offsetXPx - (drawWidth - width) / 2
-  const drawY = y + offsetYPx - (drawHeight - height) / 2
-
-  const image = doc.createElementNS(SVG_NS, 'image')
-  image.setAttribute('x', String(drawX))
-  image.setAttribute('y', String(drawY))
-  image.setAttribute('width', String(drawWidth))
-  image.setAttribute('height', String(drawHeight))
-  image.setAttribute('preserveAspectRatio', 'xMidYMid slice')
-  image.setAttributeNS('http://www.w3.org/1999/xlink', 'href', src)
-  image.setAttribute('href', src)
-  image.setAttribute('data-idcard-generated', 'true')
-
-  element.appendChild(image)
+function applySvgImageField(doc: Document, element: Element, value: ImageValue | undefined) {
+  if (!value) return
+  const fit = element.getAttribute('data-photo-fit')
+  replaceCardImage(doc,element,{
+    scale: Number(element.getAttribute('data-photo-scale')) || 1,
+    offsetX: Number(element.getAttribute('data-photo-x')) || 0,
+    offsetY: Number(element.getAttribute('data-photo-y')) || 0,
+    fit: fit === 'contain' || fit === 'fill' ? fit : 'cover',
+    ...Object.fromEntries(Object.entries(value).filter(([,value]) => value !== undefined)),
+    src: value.src,
+  })
 }
 
 /**
