@@ -1,18 +1,30 @@
-name: Card recreation implementation
+name: Card recreation verification
+
 on:
   push:
     branches: [codex/card-recreation-workflow]
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'docs/card-recreation.md'
+      - '.github/workflows/card-recreation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 concurrency:
-  group: card-recreation-implementation
-  cancel-in-progress: false
+  group: card-recreation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
+  browser-and-pdf:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -22,13 +34,9 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: Install locked dependencies
+      - name: Install locked frontend dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
-      - name: Apply reviewed source changes
-        run: |
-          if [ -f tools/apply-card-recreation.mjs ]; then node tools/apply-card-recreation.mjs; fi
-          if [ -f tools/apply-card-recreation-fixes.mjs ]; then node tools/apply-card-recreation-fixes.mjs; fi
       - name: Typecheck
         working-directory: frontend
         run: pnpm exec tsc -b
@@ -38,29 +46,20 @@ jobs:
       - name: Regression tests
         working-directory: frontend
         run: pnpm test
-      - name: Build
+      - name: Build local-storage application
         working-directory: frontend
         run: pnpm build:local
-      - name: Install browser verification tools
+      - name: Install browser verification dependencies
         run: |
           python -m pip install --quiet playwright==1.55.0 pypdfium2==4.30.0 pillow==11.3.0 pypdf==6.0.0
           python -m playwright install --with-deps chromium >/tmp/card-browser-install.log 2>&1 || { tail -80 /tmp/card-browser-install.log; exit 1; }
-      - name: Real browser and PDF regression checks
+      - name: Real app, Fabric and PDF regression checks
         run: python frontend/scripts/test-card-browser.py
-      - name: Browser evidence
+      - name: Upload screenshots, test results and exported PDFs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: card-recreation-verification
           path: frontend/test-artifacts/card-recreation
           if-no-files-found: ignore
-      - name: Persist verified source changes to this branch only
-        if: success() && github.ref == 'refs/heads/codex/card-recreation-workflow'
-        run: |
-          if [ ! -f tools/apply-card-recreation.mjs ]; then exit 0; fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A -- frontend/src frontend/scripts frontend/package.json docs
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'feat: integrate browser-verified card recreation workflow'
-          git push origin HEAD:refs/heads/codex/card-recreation-workflow
+          retention-days: 14
