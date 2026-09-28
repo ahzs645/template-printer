@@ -108,7 +108,7 @@ function renderCardSvgMarkup(
   cardData: CardData,
   colorProfile?: ColorProfile | null,
 ): string {
-  const svgMarkup = renderSvgWithData(template, fields, cardData)
+  const svgMarkup = renderSvgWithData(template, fields, cardData, { mode: 'production' })
   return colorProfile ? applyColorCorrection(svgMarkup, colorProfile) : svgMarkup
 }
 

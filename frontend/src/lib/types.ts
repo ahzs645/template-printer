@@ -39,6 +39,7 @@ export type TemplateMeta = {
 }
 
 export type ImageValue = {
+  fit?: 'cover' | 'contain' | 'fill'
   src: string
   offsetX?: number
   offsetY?: number
@@ -48,6 +49,11 @@ export type ImageValue = {
 export type CardDataValue = string | ImageValue
 
 export type FieldDefinition = {
+  dataSource?: string
+  required?: boolean
+  maxLines?: number
+  minFontSize?: number
+  letterSpacing?: number
   id: string
   label: string
   type: FieldType
