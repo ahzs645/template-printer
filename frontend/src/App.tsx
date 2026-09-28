@@ -1040,18 +1040,19 @@ function App() {
     setActiveSide('front')
 
     let designId: string | null = null
-    if (backTemplate) {
+    if (backTemplate || loaded.editor) {
       const design = await createCardDesign({
         name: loaded.manifest.name,
         description: null,
         frontTemplateId: frontTemplate.id,
-        backTemplateId: backTemplate.id,
+        backTemplateId: backTemplate?.id ?? null,
+        ...(loaded.editor ? {designerMode: 'canvas' as const, frontCanvasData: loaded.editor.front, backCanvasData: loaded.editor.back ?? null, cardWidth: loaded.editor.widthMm, cardHeight: loaded.editor.heightMm} : {}),
       })
       designId = design.id
       setLinkedDesignId(design.id)
       // Print the design as a whole, so the Export tab offers its back too.
       setSelectedExportCardDesignId(design.id)
-      setOtherSidePreview({ name: backTemplate.name, svg: loaded.back!.svg })
+      setOtherSidePreview(backTemplate && loaded.back ? { name: backTemplate.name, svg: loaded.back.svg } : null)
       refreshCardDesigns()
     } else {
       setLinkedDesignId(null)
@@ -2119,6 +2120,10 @@ function App() {
               : null
             return (
               <CardDesignerTab
+                fontOptions={fontOptions}
+                missingFonts={missingFonts}
+                getFonts={() => storage.listFonts()}
+                onLoadFont={loadFontFile}
                 key={editingCanvasDesignId ?? 'new'}
                 designId={editingCanvasDesignId ?? undefined}
                 initialName={editingDesignData?.name}

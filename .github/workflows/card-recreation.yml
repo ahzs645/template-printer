@@ -1,0 +1,65 @@
+name: Card recreation verification
+
+on:
+  push:
+    branches: [codex/card-recreation-workflow]
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'docs/card-recreation.md'
+      - '.github/workflows/card-recreation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: card-recreation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-and-pdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        working-directory: frontend
+        run: pnpm exec tsc -b
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+      - name: Regression tests
+        working-directory: frontend
+        run: pnpm test
+      - name: Build local-storage application
+        working-directory: frontend
+        run: pnpm build:local
+      - name: Install browser verification dependencies
+        run: |
+          python -m pip install --quiet playwright==1.55.0 pypdfium2==4.30.0 pillow==11.3.0 pypdf==6.0.0
+          python -m playwright install --with-deps chromium >/tmp/card-browser-install.log 2>&1 || { tail -80 /tmp/card-browser-install.log; exit 1; }
+      - name: Real app, Fabric and PDF regression checks
+        run: python frontend/scripts/test-card-browser.py
+      - name: Upload screenshots, test results and exported PDFs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: card-recreation-verification
+          path: frontend/test-artifacts/card-recreation
+          if-no-files-found: ignore
+          retention-days: 14

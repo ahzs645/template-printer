@@ -38,7 +38,7 @@ export function generateAutoMappings(fields: FieldDefinition[]): FieldMapping[] 
 
   fields.forEach(field => {
     const fieldId = field.sourceId || field.id
-    const standardFieldName = resolveStandardFieldName(fieldId)
+    const standardFieldName = resolveStandardFieldName(field.dataSource || fieldId)
 
     if (standardFieldName) {
       mappings.push({ svgLayerId: fieldId, standardFieldName })
@@ -64,5 +64,5 @@ export function generateAutoMappings(fields: FieldDefinition[]): FieldMapping[] 
  */
 export function isAutoMappable(field: FieldDefinition): boolean {
   const sourceId = field.sourceId || field.id
-  return resolveStandardFieldName(sourceId) !== null || sourceId.toLowerCase().startsWith('custom')
+  return resolveStandardFieldName(field.dataSource || sourceId) !== null || sourceId.toLowerCase().startsWith('custom')
 }
