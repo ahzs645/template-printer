@@ -45,7 +45,7 @@ try:
         try:
             page.goto('http://127.0.0.1:5173', wait_until='networkidle')
             # Engine verification is independent of navigation: collect its results even if a UI check later fails.
-            response = page.evaluate("async () => { const checks = await import('/scripts/card-browser-checks.mjs'); return await checks.runChecks(); }")
+            response = page.evaluate("async () => { const checks = await import('/template-printer/scripts/card-browser-checks.mjs'); return await checks.runChecks(); }")
             results['engine'] = response['checks']
             print(json.dumps({'engine': response['checks']}, indent=2), flush=True)
             for pdf in response['pdfs']:

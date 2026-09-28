@@ -89,7 +89,7 @@ export function normalizeCardFields(doc:Document,meta:Pick<TemplateMeta,'width'|
     claimed.add(node);claimed.add(container)
   }
   const seenNodes=new Set<string>(),seenIds=new Map<string,number>()
-  return [...explicit,...legacy.filter(field=>{const node=field.sourceId?doc.getElementById(field.sourceId):null;return !node||!Array.from(claimed).some(owner=>owner===node||owner.contains(node))})].filter(field=>{
+  return [...explicit,...legacy.filter(field=>{const node=field.sourceId?doc.getElementById(field.sourceId):null;return !node||!Array.from(claimed).some(owner=>owner===node||owner.contains(node)||(node.contains(owner)&&/\{\{(?:field|image|barcode|date):/.test(node.id)))})].filter(field=>{
     if(!field.sourceId||seenNodes.has(field.sourceId)) return false
     const node=doc.getElementById(field.sourceId)
     if(!node||node.closest('defs,[data-static="true"],[data-editor-only="true"]')) return false

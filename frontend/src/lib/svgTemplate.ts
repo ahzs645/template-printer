@@ -1008,9 +1008,12 @@ function applySvgBarcodeField(
   const barcodeRoot = barcodeDoc.documentElement
   if (!barcodeRoot || barcodeRoot.querySelector('parsererror')) return
 
-  const heightScale = (explicitHeight ?? targetHeight) / barcode.height
-  const scaleX = targetWidth !== undefined ? targetWidth / barcode.width : heightScale
-  const scaleY = heightScale
+  const localWidth = readNumeric(element.getAttribute('data-barcode-width')) ?? targetWidth
+  const localHeight = readNumeric(element.getAttribute('data-barcode-height')) ?? explicitHeight ?? targetHeight
+  const heightScale = localHeight / barcode.height
+  const widthScale = localWidth !== undefined ? localWidth / barcode.width : heightScale
+  const scaleX = symbology === 'qrcode' ? Math.min(widthScale, heightScale) : widthScale
+  const scaleY = symbology === 'qrcode' ? Math.min(widthScale, heightScale) : heightScale
   const scaledWidth = barcode.width * scaleX
 
   // Match the placeholder's alignment.
@@ -1218,7 +1221,18 @@ export async function loadSvgAsImage(svgMarkup: string): Promise<HTMLImageElemen
   }
 }
 
-function applySvgImageField(doc: Document, element: Element, value: ImageValue | undefined) { replaceCardImage(doc,element,value) }
+function applySvgImageField(doc: Document, element: Element, value: ImageValue | undefined) {
+  if (!value) return
+  const fit = element.getAttribute('data-photo-fit')
+  replaceCardImage(doc,element,{
+    scale: Number(element.getAttribute('data-photo-scale')) || 1,
+    offsetX: Number(element.getAttribute('data-photo-x')) || 0,
+    offsetY: Number(element.getAttribute('data-photo-y')) || 0,
+    fit: fit === 'contain' || fit === 'fill' ? fit : 'cover',
+    ...Object.fromEntries(Object.entries(value).filter(([,value]) => value !== undefined)),
+    src: value.src,
+  })
+}
 
 /**
  * Convert all <text> elements in SVG markup to <path> outlines using opentype.js.

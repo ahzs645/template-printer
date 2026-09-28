@@ -1,3 +1,4 @@
+import { portableEditorJson, readEditorDocument, type PackagedEditor } from './editorDocument'
 /**
  * A card design packaged as a single file.
  *
@@ -41,6 +42,7 @@ export type PackagedFont = {
 }
 
 export type TemplatePackageManifest = {
+  editor?: PackagedEditor
   format: typeof PACKAGE_FORMAT
   version: number
   createdAt: string
@@ -61,6 +63,7 @@ export type PackageSideInput = {
 }
 
 export type CreatePackageInput = {
+  editor?: PackagedEditor
   name: string
   front: PackageSideInput
   back?: PackageSideInput | null
@@ -177,7 +180,15 @@ export async function createTemplatePackage(input: CreatePackageInput): Promise<
     })
   }
 
+  let editor: PackagedEditor | undefined
+  if (input.editor) {
+    if (input.editor.version !== 1 || !Number.isFinite(input.editor.widthMm) || !Number.isFinite(input.editor.heightMm) || input.editor.widthMm <= 0 || input.editor.heightMm <= 0) throw new Error('Invalid editable card dimensions.')
+    zip.file('editor/front.json', portableEditorJson(input.editor.front))
+    if (input.editor.back) zip.file('editor/back.json', portableEditorJson(input.editor.back))
+    editor = {...input.editor, front: 'editor/front.json', back: input.editor.back ? 'editor/back.json' : undefined}
+  }
   const manifest: TemplatePackageManifest = {
+    editor,
     format: PACKAGE_FORMAT,
     version: PACKAGE_VERSION,
     createdAt: new Date().toISOString(),
@@ -202,6 +213,7 @@ export async function createTemplatePackage(input: CreatePackageInput): Promise<
 export type LoadedPackageSide = PackagedSide & { svg: string }
 
 export type LoadedPackage = {
+  editor?: PackagedEditor
   manifest: TemplatePackageManifest
   front: LoadedPackageSide
   back?: LoadedPackageSide
@@ -276,7 +288,20 @@ export async function readTemplatePackage(file: Blob): Promise<LoadedPackage> {
     })
   }
 
-  return { manifest, front, back: await readSide(manifest.sides.back), fonts }
+  let editor: PackagedEditor | undefined
+  if (manifest.editor) {
+    const meta = manifest.editor
+    if (meta.version !== 1 || !Number.isFinite(meta.widthMm) || !Number.isFinite(meta.heightMm) || meta.widthMm <= 0 || meta.heightMm <= 0) throw new Error('Invalid editable card dimensions.')
+    const readScene = async (path: string) => {
+      const entry = zip.file(path)
+      if (!entry) throw new Error('The editable package is missing '+path)
+      const json = await entry.async('string')
+      readEditorDocument(json)
+      return json
+    }
+    editor = {...meta, front: await readScene(meta.front), back: meta.back ? await readScene(meta.back) : undefined}
+  }
+  return { manifest, front, back: await readSide(manifest.sides.back), fonts, editor }
 }
 
 /** A file name for a package. */

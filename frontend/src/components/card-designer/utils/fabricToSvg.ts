@@ -16,7 +16,7 @@ export function fabricCanvasToSvg(canvas: Canvas, cardWidthMm: number, cardHeigh
     const node = doc.getElementById(object.get('id') as string)
     const data = nodeData(object)
     if (node && data.fieldId && ['dynamic-text','image-placeholder','barcode'].includes(data.elementType)) {
-      let target = node
+      let target: Element = node
       let type = 'text'
       if (data.elementType === 'dynamic-text') {
         target = node.tagName.toLowerCase()==='text'?node:node.querySelector('text')??node
@@ -41,7 +41,7 @@ export function fabricCanvasToSvg(canvas: Canvas, cardWidthMm: number, cardHeigh
       target.setAttribute('data-field-type',type)
       target.setAttribute('data-field-required',String(data.required??false))
       if(type==='text'){
-        target.setAttribute('data-field-width',String(object.width))
+        target.setAttribute('data-field-width',String(data.layout?.wrapWidth??object.width))
         const text=object as FabricObject & {fontSize?:number;lineHeight?:number;charSpacing?:number}
         if(text.fontSize)target.setAttribute('data-field-line-height',String(text.fontSize*(text.lineHeight??1.2)))
         if(text.charSpacing&&text.fontSize)target.setAttribute('data-field-letter-spacing',String(text.charSpacing*text.fontSize/1000))

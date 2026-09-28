@@ -47,7 +47,7 @@ export function SceneInspector({session,object,fontOptions,missingFonts,onError}
       </select></label>
       {missingFonts.includes(fontFamily)&&<p role="status" className="scene-warning">This font is not loaded. Load it in the app’s font manager before checking print fidelity.</p>}
       <div className="scene-two-columns">
-        <NumberControl label="Font size (pt)" value={fontSize*72/96} min={1} onChange={value=>set('fontSize',value*96/72)}/>
+        <NumberControl label="Font size (pt)" value={fontSize*Math.abs(object.scaleY)*72/96} min={1} onChange={value=>set('fontSize',value*96/72/Math.abs(object.scaleY))}/>
         <label className="scene-control"><span>Weight</span><select aria-label="Font weight" value={String(object.get('fontWeight')??'normal')} onChange={event=>set('fontWeight',event.target.value)}>{['normal','bold','100','200','300','400','500','600','700','800','900'].map(weight=><option key={weight}>{weight}</option>)}</select></label>
         <NumberControl label="Line spacing" value={Number(object.get('lineHeight'))||1.2} min={0.5} max={4} onChange={value=>set('lineHeight',value)}/>
         <NumberControl label="Letter spacing (px)" value={(Number(object.get('charSpacing'))||0)*fontSize/1000} onChange={value=>set('charSpacing',value/fontSize*1000)}/>

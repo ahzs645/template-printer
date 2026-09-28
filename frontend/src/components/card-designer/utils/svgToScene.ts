@@ -29,7 +29,7 @@ export async function importPackageSide(session: SceneSession, side: LoadedPacka
   for(const object of objects){
     if(claimed.has(object))continue
     const sourceId=owners.get(object),field=sourceId?bySource.get(sourceId):undefined
-    if(!field){object.set('data',{elementType:typeof object.get('text')==='string'?'text':'asset',name:object.type});assignObjectIds(object);result.push(object);continue}
+    if(!field){object.set('data',{elementType:typeof object.get('text')==='string'?'text':'asset',name:object.type});assignObjectIds(object,true);result.push(object);continue}
     const members=objects.filter(item=>owners.get(item)===sourceId)
     members.forEach(item=>claimed.add(item))
     if((field.type==='text'||field.type==='date')&&members.length>1)throw new Error('The field '+field.label+' consists of separate text objects. Give those text objects separate field IDs before converting it.')
@@ -44,7 +44,7 @@ export async function importPackageSide(session: SceneSession, side: LoadedPacka
     }
     data.layout={maxLines:field.maxLines,minFontSize:field.minFontSize}
     if(field.wrapWidth)data.layout={...data.layout,wrapWidth:field.wrapWidth}
-    item.set('data',data);assignObjectIds(item);result.push(item)
+    item.set('data',data);assignObjectIds(item,true);result.push(item)
   }
   const json=JSON.stringify({version:'7.1.0',objects:result.map(object=>object.toObject()),background:'#ffffff',cardEditor:{version:1}})
   await session.load(json)

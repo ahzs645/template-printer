@@ -14,7 +14,7 @@ export type SceneNode = {
   dynamicConfig?: {fieldId: string; defaultText: string}
   barcodeConfig?: {fieldId: string; barcodeType: BarcodeSymbology | 'qr'}
   imagePlaceholderConfig?: {fieldId: string; fitMode: 'cover' | 'contain' | 'fill'; scale?: number; offsetX?: number; offsetY?: number; sampleSrc?: string}
-  layout?: {maxLines?: number; minFontSize?: number}
+  layout?: {maxLines?: number; minFontSize?: number; wrapWidth?: number}
 }
 export const SCENE_PROPERTIES = ['id', 'data', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation']
 FabricObject.customProperties = Array.from(new Set([...FabricObject.customProperties, ...SCENE_PROPERTIES]))
@@ -260,7 +260,8 @@ export class SceneSession {
   private async applyReference(reference?: ReferenceImage): Promise<void> {
     if (!reference) { this.reference = undefined; this.canvas.overlayImage = undefined; return }
     if (!isEmbeddedRaster(reference.src)) throw new Error('The reference must be an embedded raster image.')
-    const image = this.canvas.overlayImage?.getSrc() === reference.src ? this.canvas.overlayImage : await FabricImage.fromURL(reference.src)
+    const previous = this.canvas.overlayImage
+    const image = previous instanceof FabricImage && previous.getSrc() === reference.src ? previous : await FabricImage.fromURL(reference.src)
     if (this.disposed) return
     const next = {...reference, opacity: Math.max(0, Math.min(1, reference.opacity))}
     image.set({left: next.x, top: next.y, originX: 'left', originY: 'top', scaleX: next.width/image.width, scaleY: next.height/image.height, angle: next.angle, opacity: next.visible ? next.opacity : 0, selectable: false, evented: false, excludeFromExport: true})

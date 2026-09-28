@@ -1,3 +1,4 @@
+import { importPackageSide } from './utils/svgToScene'
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, Circle, Line, Rect, FabricObject, Group } from 'fabric'
 import { SceneSession, isEditingText, nodeData, objectId } from './utils/sceneSession'
@@ -97,7 +98,15 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
   const openPackage=async(file:File)=>{
     if(!sessions)return
     const loaded=await readTemplatePackage(file)
-    if(!loaded.editor)throw new Error('This is an SVG template package, not an editable canvas package. Open it in Import mode to edit its fields, or import its SVG as vector artwork here.')
+    if (!loaded.editor) {
+      for (const font of loaded.fonts) await onLoadFont?.(font.name, font.file)
+      const size = await importPackageSide(sessions.front, loaded.front)
+      if (loaded.back) await importPackageSide(sessions.back, loaded.back)
+      else await sessions.back.load(null)
+      setName(loaded.manifest.name); setWidth(size.widthMm); setHeight(size.heightMm); setSide('front')
+      setMessage('SVG package converted to editable vector objects. Declared fields are preserved. Compare complex masks and typography against the original before printing.')
+      return
+    }
     for(const font of loaded.fonts)await onLoadFont?.(font.name,font.file)
     setName(loaded.manifest.name);setWidth(loaded.editor.widthMm);setHeight(loaded.editor.heightMm)
     await sessions.front.load(loaded.editor.front);await sessions.back.load(loaded.editor.back)
@@ -109,6 +118,23 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
     const common={left:24,top:24,originX:'left' as const,originY:'top' as const,fill:'#a6b3bd',strokeWidth:0}
     const shape=kind==='circle'?new Circle({...common,radius:28}):kind==='line'?new Line([0,0,100,0],{...common,stroke:'#111827',strokeWidth:2}):new Rect({...common,width:100,height:45})
     session.add(shape,{elementType:kind})
+  }
+  const [snap,setSnap]=useState(false)
+  useEffect(()=>{
+    if(!session||!snap)return
+    const moving=(event:{target:FabricObject})=>{
+      const item=event.target
+      if(nodeData(item).locked)return
+      item.set({left:Math.round(item.left/PX_PER_MM)*PX_PER_MM,top:Math.round(item.top/PX_PER_MM)*PX_PER_MM})
+    }
+    session.canvas.on('object:moving',moving)
+    return()=>{session.canvas.off('object:moving',moving)}
+  },[session,snap])
+  const openSpecimen=async(kind:string)=>{
+    if(session?.canvas.getObjects().length&&!window.confirm('Replace the open canvas with this specimen? Save the current design first to keep it.'))return
+    const response=await fetch(import.meta.env.BASE_URL+'card-specimens/'+kind+'-specimen.template-printer.zip')
+    if(!response.ok)throw new Error('The bundled specimen could not be loaded.')
+    await openPackage(new File([await response.blob()],kind+'.zip',{type:'application/zip'}))
   }
   const reference=session?.reference
   const modifyReference=(patch:Partial<NonNullable<typeof reference>>)=>{if(session&&reference)run(()=>session.setReference({...reference,...patch}))}
@@ -137,6 +163,7 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
     {message&&<div role="status" className="scene-notice">{message}</div>}
     <div className="scene-workspace">
       <aside className="scene-layers">
+        <fieldset><legend>Recreation specimens</legend><div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{['mit','stanford','harvard'].map(kind=><button type="button" key={kind} disabled={!sessions||session?.busy} onClick={()=>run(()=>openSpecimen(kind))}>{kind==='mit'?'MIT':kind[0].toUpperCase()+kind.slice(1)} specimen</button>)}</div><p className="scene-muted">Anonymous, labelled test layouts. Logos and hidden reference regions are schematic, not official credentials.</p></fieldset>
         <h2>Layers</h2><p className="scene-muted">Top of this list prints on top. Shift-click on the canvas to select multiple objects.</p>
         <div className="scene-layer-list">{session&&[...session.canvas.getObjects()].reverse().map(layer=><div className="scene-layer" key={objectId(layer)} data-selected={selected.includes(layer)}>
           <button type="button" className="scene-layer-title" disabled={nodeData(layer).locked} onClick={()=>{session.canvas.setActiveObject(layer);session.canvas.requestRenderAll();setRevision(value=>value+1)}}>{nodeData(layer).name??nodeData(layer).fieldId??nodeData(layer).elementType}</button>
@@ -151,14 +178,14 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
             <NumberControl label="Reference angle" value={reference.angle} step={1} onChange={value=>modifyReference({angle:value})}/>
             <button type="button" onClick={()=>run(()=>session?.setReference(undefined))}>Remove reference</button>
           </>}
-          <p className="scene-muted">Saved locally with the design; excluded from SVG, PDF and shareable packages. Four-corner perspective correction is not applied.</p>
+          <p className="scene-muted">Saved with this design in the configured library; excluded from SVG, PDF and shareable packages. Four-corner perspective correction is not applied.</p>
         </fieldset>
       </aside>
       <main className="scene-main">
-        <div className="scene-view-tools"><label className="scene-check"><input type="checkbox" checked={grid} onChange={event=>setGrid(event.target.checked)}/>Grid</label><label className="scene-check"><input aria-label="Data preview" type="checkbox" checked={preview} onChange={event=>setPreview(event.target.checked)}/>Data preview</label><NumberControl label="Zoom (%)" value={zoom*100} min={50} max={300} step={10} onChange={value=>setZoom(value/100)}/></div>
+        <div className="scene-view-tools"><label className="scene-check"><input type="checkbox" checked={grid} onChange={event=>setGrid(event.target.checked)}/>Grid</label><label className="scene-check"><input type="checkbox" checked={snap} onChange={event=>setSnap(event.target.checked)}/>Snap (1 mm)</label><label className="scene-check"><input aria-label="Data preview" type="checkbox" checked={preview} onChange={event=>setPreview(event.target.checked)}/>Data preview</label><NumberControl label="Zoom (%)" value={zoom*100} min={50} max={300} step={10} onChange={value=>setZoom(value/100)}/></div>
         <div className="scene-canvas-scroll" style={grid?{backgroundImage:'linear-gradient(to right,rgba(127,127,127,.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(127,127,127,.12) 1px,transparent 1px)',backgroundSize:'20px 20px'}:{}}>
           {(['front','back'] as const).map(value=><div key={value} className="scene-card-slot" style={{display:side===value&&!preview?'block':'none',width:width*PX_PER_MM*zoom,height:height*PX_PER_MM*zoom}}><div style={{transform:`scale(${zoom})`,transformOrigin:'0 0',width:width*PX_PER_MM,height:height*PX_PER_MM}}><canvas aria-label={value+' design canvas'} ref={value==='front'?frontElement:backElement}/></div></div>)}
-          {preview&&<div className="scene-data-preview" style={{width:width*PX_PER_MM*zoom}}><InlineSvg svg={previewSvg}/><p className="scene-muted">Sample-data preview. Reference overlays and grid lines are excluded.</p></div>}
+          {preview&&<div className="scene-data-preview" style={{width:width*PX_PER_MM*zoom}}><InlineSvg markup={previewSvg} name="designer-data-preview"/><p className="scene-muted">Sample-data preview. Reference overlays and grid lines are excluded.</p></div>}
         </div>
         <div className="scene-align-tools"><span>Align:</span>{(['left','center','right','top','middle','bottom','distribute-x','distribute-y'] as const).map(mode=><button key={mode} type="button" disabled={!selected.length||session?.busy} onClick={()=>session?.align(mode)}>{mode.replace('distribute-','Space ')}</button>)}</div>
         <div className="scene-dimensions"><NumberControl label="Card width (mm)" value={width} min={10} max={400} onChange={setWidth}/><NumberControl label="Card height (mm)" value={height} min={10} max={400} onChange={setHeight}/><button type="button" onClick={()=>{setWidth(height);setHeight(width)}}>Swap orientation</button></div>
