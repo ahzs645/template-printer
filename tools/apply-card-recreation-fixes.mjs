@@ -30,4 +30,14 @@ edit('frontend/src/components/card-designer/CardDesignerTab.tsx',s=>{
 })
 edit('frontend/scripts/test-card-browser.py',s=>s.replace("import('/scripts/card-browser-checks.mjs')","import('/template-printer/scripts/card-browser-checks.mjs')"))
 edit('frontend/scripts/card-browser-checks.mjs',s=>s.replace("fetch('/card-specimens/'+name", "fetch(import.meta.env.BASE_URL+'card-specimens/'+name"))
-console.log('Applied SVG DOM types, safe Fabric image narrowing, snapping, specimens and test base paths.')
+// Logical bindings live in data, never in a newly imported Fabric object ID.
+edit('frontend/src/components/card-designer/utils/svgToScene.ts',s=>s.replace('assignObjectIds(object);result.push(object)','assignObjectIds(object,true);result.push(object)').replace("item.set('data',data);assignObjectIds(item);result.push(item)","item.set('data',data);assignObjectIds(item,true);result.push(item)"))
+// Backward-compatible deduplication for already-saved scenes with a legacy wrapper ID.
+edit('frontend/src/lib/cardRecreation.ts',s=>once(s,'owner===node||owner.contains(node)','owner===node||owner.contains(node)||(node.contains(owner)&&/\\{\\{(?:field|image|barcode|date):/.test(node.id))'))
+edit('frontend/scripts/test-card-recreation.mjs',s=>{
+ const name='explicit text metadata supersedes its legacy placeholder wrapper'
+ if(!s.includes(name))s=s.replace('console.log(`\\n${count} card-recreation integration checks passed.`)',`await check('${name}',async()=>{const r=await parse('<g id="{{field:firstName}}"><text id="name-object" data-field-id="firstName" data-field-type="text" data-field-source="firstName" x="10" y="20">Sample</text></g>');assert.equal(r.autoFields.length,1);assert.equal(r.autoFields[0].sourceId,'name-object')})
+console.log(\`\\n\${count} card-recreation integration checks passed.\`)`)
+ return s
+})
+console.log('Applied DOM type fixes, snapping, specimens, base paths and legacy wrapper deduplication.')
