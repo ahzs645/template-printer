@@ -25,6 +25,9 @@ edit('frontend/src/components/card-designer/CardDesignerTab.tsx',s=>{
  s=once(s,'<h2>Layers</h2><p className="scene-muted">',`<fieldset><legend>Recreation specimens</legend><div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{['mit','stanford','harvard'].map(kind=><button type="button" key={kind} disabled={!sessions||session?.busy} onClick={()=>run(()=>openSpecimen(kind))}>{kind==='mit'?'MIT':kind[0].toUpperCase()+kind.slice(1)} specimen</button>)}</div><p className="scene-muted">Anonymous, labelled test layouts. Logos and hidden reference regions are schematic, not official credentials.</p></fieldset>
         <h2>Layers</h2><p className="scene-muted">`)
  s=once(s,'/>Grid</label><label className="scene-check">','/>Grid</label><label className="scene-check"><input type="checkbox" checked={snap} onChange={event=>setSnap(event.target.checked)}/>Snap (1 mm)</label><label className="scene-check">')
+ s=s.replace('Saved locally with the design; excluded from SVG, PDF and shareable packages.','Saved with this design in the configured library; excluded from SVG, PDF and shareable packages.')
  return s
 })
-console.log('Applied SVG DOM type fixes, safe Fabric image narrowing, snapping and bundled specimens.')
+edit('frontend/scripts/test-card-browser.py',s=>s.replace("import('/scripts/card-browser-checks.mjs')","import('/template-printer/scripts/card-browser-checks.mjs')"))
+edit('frontend/scripts/card-browser-checks.mjs',s=>s.replace("fetch('/card-specimens/'+name", "fetch(import.meta.env.BASE_URL+'card-specimens/'+name"))
+console.log('Applied SVG DOM types, safe Fabric image narrowing, snapping, specimens and test base paths.')
