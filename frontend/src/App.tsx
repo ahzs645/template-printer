@@ -109,6 +109,7 @@ import {
   nextFieldId,
   parseTemplate,
   parseTemplateString,
+  readDesignedCardData,
   renderSvgWithData,
 } from './lib/svgTemplate'
 import type { TemplateSummary } from './lib/templates'
@@ -485,7 +486,10 @@ function App() {
 
   const activeExportTemplate = exportCanvasDesign?.meta ?? template
   const activeExportFields = exportCanvasDesign?.fields ?? fields
-  const activeExportCardData = exportCanvasDesign ? {} : cardData
+  const activeExportCardData = useMemo(
+    () => (exportCanvasDesign ? readDesignedCardData(exportCanvasDesign.meta, exportCanvasDesign.fields) : cardData),
+    [exportCanvasDesign, cardData],
+  )
   const activeExportRenderedSvg = exportCanvasDesign?.svg ?? renderedSvg
 
   // Check if a field is mapped

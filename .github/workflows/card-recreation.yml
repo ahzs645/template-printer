@@ -2,7 +2,7 @@ name: Card recreation verification
 
 on:
   push:
-    branches: [codex/card-recreation-workflow]
+    branches: [main]
   pull_request:
     paths:
       - 'frontend/**'

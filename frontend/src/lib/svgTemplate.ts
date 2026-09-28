@@ -718,7 +718,9 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
   const fonts = extractFontFamilies(doc), warnings = collectTemplateWarnings(doc, fonts)
   const canvasBox = viewBox ?? {x:0,y:0,width:width*(unit==='mm'?96/25.4:1),height:height*(unit==='mm'?96/25.4:1)}
   const trimCandidates = detectTrimCandidates(doc,canvasBox).filter(candidate=>isWorthSuggesting(candidate,canvasBox))
-  const legacy = [...extractPlaceholders(doc,canvasBox),...extractTextFields(doc,canvasBox),...extractImagePlaceholders(doc,canvasBox)]
+  // Placeholder templates name their text fields explicitly, so their other text stays artwork.
+  const placeholders = extractPlaceholders(doc,canvasBox)
+  const legacy = [...placeholders,...(placeholders.length > 0 ? [] : extractTextFields(doc,canvasBox)),...extractImagePlaceholders(doc,canvasBox)]
   const autoFields = normalizeCardFields(doc,{width,height,unit,viewBox},legacy)
   const normalizedSvg = new XMLSerializer().serializeToString(svgNode)
   const objectUrl = URL.createObjectURL(new Blob([normalizedSvg],{type:'image/svg+xml'}))
@@ -881,7 +883,7 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
     const target = doc.getElementById(field.sourceId)
     if (!target) continue
     const hasKey = Object.prototype.hasOwnProperty.call(cardData,field.id), supplied = cardData[field.id]
-    if (!hasCardValue(supplied) && (hasKey || (production && isBoundField(field))) && !(field.defaultValue?.trim() && !production)) {
+    if (!hasCardValue(supplied) && (hasKey || (production && isBoundField(field))) && !field.defaultValue?.trim()) {
       if (field.type === 'image') {
         target.querySelectorAll('image').forEach(image=>image.remove())
         if (target.tagName.toLowerCase() === 'image') {target.removeAttribute('href');target.removeAttribute('xlink:href')}
@@ -900,6 +902,29 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
   }
   svgRoot.querySelectorAll('[data-editor-only="true"]').forEach(node=>node.remove())
   return new XMLSerializer().serializeToString(svgRoot)
+}
+
+/**
+ * The values a design already shows for its fields, read from its own artwork.
+ * Printing a design without a person uses these, so production mode draws the
+ * design as laid out instead of blanking every bound layer.
+ */
+export function readDesignedCardData(template: TemplateMeta, fields: FieldDefinition[]): CardData {
+  const doc = new DOMParser().parseFromString(template.rawSvg, 'image/svg+xml')
+  const data: CardData = {}
+  for (const field of fields) {
+    const target = field.sourceId ? doc.getElementById(field.sourceId) : null
+    if (!target) continue
+    if (field.type === 'image') {
+      const image = target.tagName.toLowerCase() === 'image' ? target : target.querySelector('image')
+      const src = image?.getAttribute('href') || image?.getAttribute('xlink:href')
+      if (src) data[field.id] = { src }
+      continue
+    }
+    const text = target.textContent?.trim()
+    if (text) data[field.id] = text
+  }
+  return data
 }
 
 /**

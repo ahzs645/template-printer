@@ -8,7 +8,7 @@ globalThis.DOMParser=DOMParser
 globalThis.XMLSerializer=class{serializeToString(node){return node.toString()}}
 globalThis.SVGElement=class{static [Symbol.hasInstance](v){return Boolean(v&&typeof v.closest==='function')}}
 globalThis.document={createElement(tag){if(tag!=='canvas')return html.createElement(tag);const context={font:'16px Arial',measureText(text){return {width:text.length*parseFloat(this.font.match(/([\d.]+)px/)?.[1]||'16')*0.55}}};return {getContext:()=>context}}}
-const {parseTemplateString,renderSvgWithData,parseUnit,toPercent}=await import('../src/lib/svgTemplate.ts')
+const {parseTemplateString,renderSvgWithData,readDesignedCardData,parseUnit,toPercent}=await import('../src/lib/svgTemplate.ts')
 const {generateAutoMappings}=await import('../src/lib/autoMapping.ts')
 const {svgTransform,multiply}=await import('../src/lib/cardRecreation.ts')
 let count=0
@@ -39,4 +39,7 @@ await check('rect photo replacement has clipped image',async()=>{const r=await p
 await check('invalid viewBox rejected',()=>assert.rejects(()=>parseTemplateString('<svg viewBox="0 0 0 200"/>'),/viewBox/))
 await check('reference excluded from rendered SVG',async()=>{const r=await parse('<image data-editor-only="true" href="reference.png"/><text id="firstName">SAMPLE</text>');assert.doesNotMatch(renderSvgWithData(r.metadata,r.autoFields,{}),/reference.png/)})
 await check('explicit text metadata supersedes its legacy placeholder wrapper',async()=>{const r=await parse('<g id="{{field:firstName}}"><text id="name-object" data-field-id="firstName" data-field-type="text" data-field-source="firstName" x="10" y="20">Sample</text></g>');assert.equal(r.autoFields.length,1);assert.equal(r.autoFields[0].sourceId,'name-object')})
+await check('production draws a field default instead of blanking it',async()=>{const r=await parse('<text id="firstName" x="0" y="20">SAMPLE</text>');const fields=r.autoFields.map(f=>({...f,defaultValue:'Springfield High'}));assert.equal(doc(renderSvgWithData(r.metadata,fields,{firstName:''},{mode:'production'})).getElementById('firstName').textContent,'Springfield High')})
+await check('printing a design without a person keeps its designed values',async()=>{const r=await parse('<text id="name" data-field-id="firstName" data-field-type="text" data-field-required="true" x="0" y="20">ALEX</text>');const data=readDesignedCardData(r.metadata,r.autoFields);assert.match(renderSvgWithData(r.metadata,r.autoFields,data,{mode:'production'}),/ALEX/)})
+await check('placeholder templates keep static text as artwork',async()=>{const r=await parse('<text id="{{field:firstName}}" x="10" y="20">Sample</text><text id="label" x="10" y="60">STUDENT CARD</text>');assert.equal(r.autoFields.filter(f=>f.type==='text').length,1)})
 console.log(`\n${count} card-recreation integration checks passed.`)
