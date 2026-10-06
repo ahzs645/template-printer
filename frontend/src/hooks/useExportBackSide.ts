@@ -116,7 +116,7 @@ export function useExportBackSide(
 
       let svg = metadata.rawSvg
       try {
-        svg = renderSvgWithData(metadata, autoFields, {})
+        svg = renderSvgWithData(metadata, autoFields, {}, { guides: false })
       } catch (renderError) {
         console.error('Failed to render the back of the card:', renderError)
       }

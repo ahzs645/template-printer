@@ -1,6 +1,8 @@
 import type { BarcodeSymbology } from './barcode'
 import type { TrimCandidate } from './cardTrim'
 import type { TemplateSummary } from './templates'
+import type { TemplatePunch } from './layerRoles'
+import type { CardDesignVariant } from './designVariants'
 
 export type FieldType = 'text' | 'image' | 'barcode' | 'date'
 
@@ -25,6 +27,11 @@ export type TemplateMeta = {
    * applied — what counts as the card changes what gets printed.
    */
   trimCandidates?: TrimCandidate[]
+  /**
+   * Where the card is punched for a lanyard, when the artwork says so with a
+   * `punch` layer. Drives the Punch guide; the layer itself is never printed.
+   */
+  punch?: TemplatePunch
   /** The card area currently in force, once one has been chosen. */
   cardArea?: {
     formatId: string
@@ -129,6 +136,13 @@ export type CardDesign = {
   backCanvasData?: string | null    // Fabric.js JSON
   cardWidth?: number                // mm (default: 86)
   cardHeight?: number               // mm (default: 54)
+  /**
+   * Alternative fronts that share this design's fields and back. The first is
+   * the default and mirrors `frontTemplateId`. See lib/designVariants.ts.
+   */
+  variants?: CardDesignVariant[] | null
+  /** Record field (position, department, grade) that picks each person's variant. */
+  variantField?: string | null
   // Timestamps
   createdAt?: string | null
   updatedAt?: string | null

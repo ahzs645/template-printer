@@ -74,6 +74,8 @@ import { CardAreaDialog } from './components/CardAreaDialog'
 import { trimRectInMm, type AppliedCardArea } from './lib/cardTrim'
 import {
   createTemplatePackage,
+  type PackageSideInput,
+  type PackageVariantInput,
   isTemplatePackage,
   packageFileName,
   readTemplatePackage,
@@ -97,12 +99,12 @@ import {
   readShareTarget,
   type SharedTemplatePayload,
 } from './lib/shareLink'
-import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments, setOutlineFontBuffers, clearOutlineFontBuffers } from './lib/exporter'
+import { exportSingleCard, exportWithPrintLayout, exportBatchCards, exportBatchCardsWithPrintLayout, exportWithJsonLayout, exportBatchCardsWithJsonLayout, exportWithSlotAssignments, setOutlineFontBuffers, clearOutlineFontBuffers, setVariantResolver } from './lib/exporter'
 import type { SlotBackSide } from './lib/exporter'
 import { usePrintLayouts } from './hooks/usePrintLayouts'
 import { generateAutoMappings } from './lib/autoMapping'
 import { isAutoMappable } from './lib/autoMapping'
-import type { CardData, CardDataValue, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
+import type { CardData, CardDataValue, CardDesign, FieldDefinition, ImageValue, TemplateMeta } from './lib/types'
 import { renderCanvasDesignSide, type CanvasDesignRenderResult } from './lib/canvasDesign'
 import {
   getDefaultField,
@@ -111,11 +113,30 @@ import {
   parseTemplateString,
   readDesignedCardData,
   renderSvgWithData,
+  renderTemplatePreview,
 } from './lib/svgTemplate'
 import type { TemplateSummary } from './lib/templates'
 import { setImageFieldValue, updateImageFieldValue, renameFieldInCardData } from './lib/cardData'
 import { labelFromId } from './lib/fields'
 import { assignCardSides, suggestDesignName, type CardSide } from './lib/cardSides'
+import {
+  addVariant,
+  findDesignForTemplate,
+  getDesignVariants,
+  hasVariants,
+  makeDefaultVariant,
+  parseMatchList,
+  removeVariant,
+  renameVariant,
+  setVariantMatch,
+  variantForUser,
+  variantSides,
+  variantsPatch,
+  type CardDesignVariant,
+} from './lib/designVariants'
+import { VariantsPanel } from './components/VariantsPanel'
+import { useVariantArtwork } from './hooks/useVariantArtwork'
+import { orientLike } from './lib/slotPlacement'
 import { cn } from './lib/utils'
 
 /**
@@ -163,6 +184,10 @@ function App() {
   // and switched between while editing.
   const [linkedDesignId, setLinkedDesignId] = useState<string | null>(null)
   const [activeSide, setActiveSide] = useState<CardSide>('front')
+  // Which variant of the linked design is open, kept while the back is edited
+  // so switching back to the front returns to the same variant.
+  const [activeVariantId, setActiveVariantId] = useState<string | null>(null)
+  const [variantBusy, setVariantBusy] = useState(false)
   const [otherSidePreview, setOtherSidePreview] = useState<{ name: string; svg: string } | null>(null)
   const [blankDialogOpen, setBlankDialogOpen] = useState(false)
   const [scanDialogOpen, setScanDialogOpen] = useState(false)
@@ -174,6 +199,14 @@ function App() {
   const [showSafeAreaGuide, setShowSafeAreaGuide] = useState(false)
   const [punchGuide, setPunchGuide] = useState<PunchPosition>('none')
   const [punchShapeGuide, setPunchShapeGuide] = useState<PunchShape>('slot')
+  // A template with a punch layer says where it is punched; show that rather
+  // than leaving the designer to find it with the Punch button.
+  const templatePunch = template?.punch
+  useEffect(() => {
+    if (!templatePunch) return
+    setPunchGuide(templatePunch.position)
+    setPunchShapeGuide(templatePunch.shape)
+  }, [templatePunch])
   const [linkLoading, setLinkLoading] = useState<string | null>(null)
   // The result of a ?url= load, reported outside the side panels so it is
   // readable when those are collapsed (which is the default on a phone).
@@ -367,7 +400,7 @@ function App() {
         }))
 
         try {
-          const svgText = await loadTemplateSvgContent(templateSummary)
+          const svgText = await renderTemplatePreview(await loadTemplateSvgContent(templateSummary), templateSummary.name)
           if (cancelled) return
 
           setDesignPreview(prev => ({
@@ -479,10 +512,18 @@ function App() {
   const exportDesign = useMemo(() => {
     if (exportCardDesign) return exportCardDesign
     if (!selectedTemplateId) return null
-    return cardDesigns.find((design) => design.frontTemplateId === selectedTemplateId) ?? null
+    // Any variant's front counts: the open template may not be the default.
+    return cardDesigns.find((design) => getDesignVariants(design).some((variant) => variant.frontTemplateId === selectedTemplateId)) ?? null
   }, [exportCardDesign, selectedTemplateId, cardDesigns])
 
   const { backSide: exportBackSide } = useExportBackSide(exportDesign, designTemplates)
+  // Each person's own variant, so the Export preview shows what will print.
+  const exportResolveFront = useVariantArtwork(
+    exportCanvasDesign ? null : exportDesign,
+    selectedTemplateId,
+    template,
+    designTemplates,
+  )
 
   const activeExportTemplate = exportCanvasDesign?.meta ?? template
   const activeExportFields = exportCanvasDesign?.fields ?? fields
@@ -556,7 +597,10 @@ function App() {
       backTemplateId: backResult.savedTemplate.id,
     })
     setLinkedDesignId(design.id)
-    setOtherSidePreview({ name: backResult.savedTemplate.name, svg: backResult.metadata.rawSvg })
+    setOtherSidePreview({
+      name: backResult.savedTemplate.name,
+      svg: await renderTemplatePreview(backResult.metadata.rawSvg, backResult.savedTemplate.name, backResult.fields),
+    })
     refreshCardDesigns()
 
     setFieldMappingsVersion((v) => v + 1)
@@ -661,7 +705,17 @@ function App() {
 
   const handleTemplateSelect = async (
     templateSummary: TemplateSummary,
-    { keepExportDesign = false }: { keepExportDesign?: boolean } = {},
+    {
+      keepExportDesign = false,
+      carryFrom,
+    }: {
+      keepExportDesign?: boolean
+      /**
+       * Values to keep across the switch, matched by layer id. Variants name
+       * their layers the same, so the sample typed into one shows in the next.
+       */
+      carryFrom?: { fields: FieldDefinition[]; cardData: CardData }
+    } = {},
   ) => {
     try {
       setErrorMessage(null)
@@ -672,7 +726,21 @@ function App() {
       registerTemplateFonts(metadata.fonts)
       const nextFields = autoFields.length > 0 ? autoFields : []
       setFields(nextFields)
-      setCardData(() => ({}))
+      if (carryFrom) {
+        const byLayer = new Map<string, CardDataValue>()
+        for (const field of carryFrom.fields) {
+          const value = carryFrom.cardData[field.id]
+          if (value !== undefined) byLayer.set(field.sourceId ?? field.id, value)
+        }
+        const carried: CardData = {}
+        for (const field of nextFields) {
+          const value = byLayer.get(field.sourceId ?? field.id)
+          if (value !== undefined) carried[field.id] = value
+        }
+        setCardData(() => carried)
+      } else {
+        setCardData(() => ({}))
+      }
       setSelectedFieldId(autoFields[0]?.id ?? null)
       setSelectedTemplateId(templateSummary.id)
       if (!keepExportDesign) {
@@ -748,27 +816,41 @@ function App() {
    * Note which card design (if any) the open template belongs to, and load the
    * other side so both can be shown together.
    */
-  const syncLinkedDesign = async (templateId: string | null) => {
+  const syncLinkedDesign = async (templateId: string | null, designs: CardDesign[] = cardDesigns) => {
     if (!templateId) {
       setLinkedDesignId(null)
+      setActiveVariantId(null)
       setOtherSidePreview(null)
       return
     }
 
-    const design = cardDesigns.find(
-      (candidate) => candidate.frontTemplateId === templateId || candidate.backTemplateId === templateId,
-    )
+    // A template belongs to a design as the front of one of its variants, or
+    // as a back (the shared one, or a variant's own).
+    const design = findDesignForTemplate(designs, templateId)
     if (!design) {
       setLinkedDesignId(null)
+      setActiveVariantId(null)
       setOtherSidePreview(null)
       return
     }
 
     setLinkedDesignId(design.id)
-    const side: CardSide = design.frontTemplateId === templateId ? 'front' : 'back'
+    const variants = getDesignVariants(design)
+    const frontVariant = variants.find((variant) => variant.frontTemplateId === templateId) ?? null
+    const side: CardSide = frontVariant || design.frontTemplateId === templateId ? 'front' : 'back'
     setActiveSide(side)
 
-    const otherId = side === 'front' ? design.backTemplateId : design.frontTemplateId
+    // On the back, stay with whichever variant was open; on a front, that variant.
+    const variant =
+      frontVariant ??
+      variants.find((candidate) => candidate.id === activeVariantId && (candidate.backTemplateId ?? design.backTemplateId) === templateId) ??
+      variants.find((candidate) => (candidate.backTemplateId ?? design.backTemplateId) === templateId) ??
+      variants[0] ??
+      null
+    setActiveVariantId(variant?.id ?? null)
+
+    const sides = variantSides(design, variant)
+    const otherId = side === 'front' ? sides.backTemplateId : sides.frontTemplateId
     if (!otherId) {
       setOtherSidePreview(null)
       return
@@ -781,7 +863,7 @@ function App() {
     }
 
     try {
-      const svg = await loadTemplateSvgContent(otherSummary)
+      const svg = await renderTemplatePreview(await loadTemplateSvgContent(otherSummary), otherSummary.name)
       setOtherSidePreview({ name: otherSummary.name, svg })
     } catch (error) {
       console.error('Failed to load the other side of the card', error)
@@ -814,15 +896,57 @@ function App() {
    */
   const cardOriginMm = useMemo(() => {
     if (!template?.cardArea) return { x: 0, y: 0 }
+    const { trimBox, trimWidthMm, trimHeightMm } = template.cardArea
     const artwork = template.viewBox ?? { x: 0, y: 0, width: template.width, height: template.height }
-    const rect = trimRectInMm(template.cardArea.trimBox, artwork, template.width, template.height)
+    // Millimetres per unit come from the card itself, which is right whether
+    // the file is drawn in millimetres, pixels or points.
+    const rect = trimRectInMm(
+      trimBox,
+      artwork,
+      (artwork.width * trimWidthMm) / trimBox.width,
+      (artwork.height * trimHeightMm) / trimBox.height,
+    )
     return { x: rect.x, y: rect.y }
   }, [template])
+
+  /**
+   * The other side's preview box, at the same scale as this one. It can be the
+   * other way round — a landscape back on a portrait badge — so it takes its
+   * own proportions rather than this side's.
+   */
+  const otherSideBox = useMemo(() => {
+    const viewBox = otherSidePreview ? /viewBox="([^"]+)"/.exec(otherSidePreview.svg) : null
+    const [, , w, h] = viewBox ? viewBox[1].trim().split(/[\s,]+/).map(Number) : []
+    if (!w || !h) return { width: previewWidth, height: previewHeight }
+    const aspect = w / h
+    const thisAspect = previewWidth / previewHeight
+    if (aspect >= 1 === thisAspect >= 1) return { width: previewWidth, height: previewWidth / aspect }
+    const longEdge = Math.max(previewWidth, previewHeight)
+    return aspect >= 1 ? { width: longEdge, height: longEdge / aspect } : { width: longEdge * aspect, height: longEdge }
+  }, [otherSidePreview, previewWidth, previewHeight])
+
+  /** Both sides for the lanyard view, the back turned to the front's shape. */
+  const lanyardSides = useMemo(() => {
+    const front = activeSide === 'back' ? otherSidePreview?.svg ?? renderedSvg : renderedSvg
+    const back = activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null
+    const frontBox = front ? /viewBox="([^"]+)"/.exec(front)?.[1].trim().split(/[\s,]+/).map(Number) : null
+    if (!front || !back || !frontBox || frontBox.length !== 4) return { front, back }
+    return { front, back: orientLike(back, { width: frontBox[2], height: frontBox[3] }) }
+  }, [activeSide, otherSidePreview, renderedSvg])
 
   /** The artwork's full physical size, bleed included. */
   const artworkSizeMm = useMemo(() => {
     if (template?.unit === 'mm' && template.width && template.height) {
       return { width: template.width, height: template.height }
+    }
+    // Drawn in pixels or points (as Illustrator exports), but the card area says
+    // how big the card is — so the artwork around it scales by the same amount.
+    if (template?.cardArea && template.viewBox) {
+      const { trimBox, trimWidthMm, trimHeightMm } = template.cardArea
+      return {
+        width: (template.viewBox.width * trimWidthMm) / trimBox.width,
+        height: (template.viewBox.height * trimHeightMm) / trimBox.height,
+      }
     }
     return cardSizeMm
   }, [template, cardSizeMm])
@@ -832,7 +956,9 @@ function App() {
    */
   const handleSwitchSide = async (side: CardSide) => {
     if (!linkedDesign || side === activeSide) return
-    const targetId = side === 'front' ? linkedDesign.frontTemplateId : linkedDesign.backTemplateId
+    const variant = getDesignVariants(linkedDesign).find((candidate) => candidate.id === activeVariantId) ?? null
+    const sides = variantSides(linkedDesign, variant)
+    const targetId = side === 'front' ? sides.frontTemplateId : sides.backTemplateId
     if (!targetId) return
     const summary = designTemplates.find((candidate) => candidate.id === targetId)
     if (!summary) {
@@ -840,6 +966,118 @@ function App() {
       return
     }
     await handleTemplateSelect(summary)
+  }
+
+  const activeVariant: CardDesignVariant | null = linkedDesign
+    ? getDesignVariants(linkedDesign).find((variant) => variant.id === activeVariantId) ?? null
+    : null
+
+  /** Store a design's variant list (and keep its front pointing at the default). */
+  const saveVariants = async (design: CardDesign, variants: CardDesignVariant[]) => {
+    return updateCardDesign(design.id, variantsPatch(variants))
+  }
+
+  /**
+   * The mappings the open variant uses, copied onto another template so a new
+   * variant starts out meaning exactly what the others mean.
+   */
+  const shareMappingsWith = async (templateIds: string[]) => {
+    const sourceId = activeVariant?.frontTemplateId ?? linkedDesign?.frontTemplateId
+    if (!sourceId) return
+    const mappings = await storage.getFieldMappings(sourceId)
+    if (mappings.length === 0) return
+    for (const templateId of templateIds) {
+      if (templateId !== sourceId) await storage.saveFieldMappings(templateId, mappings)
+    }
+  }
+
+  const handleSelectVariant = async (variant: CardDesignVariant) => {
+    if (!linkedDesign || !variant.frontTemplateId) return
+    const summary = designTemplates.find((candidate) => candidate.id === variant.frontTemplateId)
+    if (!summary) {
+      setErrorMessage(`The artwork for "${variant.name}" is no longer in your library.`)
+      return
+    }
+    setActiveVariantId(variant.id)
+    // Only carry data between fronts: the back has different fields.
+    const carryFrom = activeSide === 'front' ? { fields, cardData } : undefined
+    await handleTemplateSelect(summary, { keepExportDesign: true, carryFrom })
+    setStatusMessage(`Showing the "${variant.name}" variant of ${linkedDesign.name}.`)
+  }
+
+  const handleAddVariantFiles = async (files: File[]) => {
+    if (!linkedDesign) return
+    setVariantBusy(true)
+    setErrorMessage(null)
+    try {
+      let design = linkedDesign
+      const added: string[] = []
+      for (const file of files) {
+        const { savedTemplate } = await importTemplateFile(file, { activate: false })
+        added.push(savedTemplate.id)
+        const name = file.name.replace(/\.svg$/i, '').replace(/[-_]+/g, ' ').trim() || 'Variant'
+        design = await saveVariants(design, addVariant(design, { name, frontTemplateId: savedTemplate.id }))
+      }
+      await shareMappingsWith(added)
+      await reloadDesignTemplates()
+      setFieldMappingsVersion((v) => v + 1)
+      setStatusMessage(`Added ${files.length} variant${files.length === 1 ? '' : 's'} to ${design.name}. They share its fields and back.`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Could not add the variant.')
+    } finally {
+      setVariantBusy(false)
+    }
+  }
+
+  const handleAddVariantFromLibrary = async (templateId: string) => {
+    if (!linkedDesign) return
+    const summary = designTemplates.find((candidate) => candidate.id === templateId)
+    setVariantBusy(true)
+    try {
+      const name = summary?.name.replace(/\.svg$/i, '') ?? 'Variant'
+      await saveVariants(linkedDesign, addVariant(linkedDesign, { name, frontTemplateId: templateId }))
+      await shareMappingsWith([templateId])
+      setStatusMessage(`Added "${name}" as a variant of ${linkedDesign.name}.`)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Could not add the variant.')
+    } finally {
+      setVariantBusy(false)
+    }
+  }
+
+  const handleRenameVariant = async (variant: CardDesignVariant, name: string) => {
+    if (!linkedDesign) return
+    await saveVariants(linkedDesign, renameVariant(linkedDesign, variant.id, name))
+  }
+
+  const handleRemoveVariant = async (variant: CardDesignVariant) => {
+    if (!linkedDesign) return
+    if (!window.confirm(`Remove "${variant.name}" from ${linkedDesign.name}? Its artwork stays in the template library.`)) return
+    const remaining = removeVariant(linkedDesign, variant.id)
+    // A design down to one look goes back to having no variant list at all.
+    await updateCardDesign(linkedDesign.id, remaining.length > 1 ? variantsPatch(remaining) : { variants: null, frontTemplateId: remaining[0]?.frontTemplateId ?? null })
+    if (variant.id === activeVariantId && remaining[0]) await handleSelectVariant(remaining[0])
+  }
+
+  const handleMakeDefaultVariant = async (variant: CardDesignVariant) => {
+    if (!linkedDesign) return
+    await saveVariants(linkedDesign, makeDefaultVariant(linkedDesign, variant.id))
+    setStatusMessage(`"${variant.name}" is now the default for ${linkedDesign.name}.`)
+  }
+
+  const handleVariantFieldChange = async (field: string | null) => {
+    if (!linkedDesign) return
+    // Saving the list as well turns an implicit single variant into a real one.
+    await updateCardDesign(linkedDesign.id, { ...variantsPatch(getDesignVariants(linkedDesign)), variantField: field })
+  }
+
+  const handleVariantMatchChange = async (variant: CardDesignVariant, value: string) => {
+    if (!linkedDesign) return
+    const match = parseMatchList(value)
+    if (match.join('|') === (variant.match ?? []).join('|')) return
+    await saveVariants(linkedDesign, setVariantMatch(linkedDesign, variant.id, match))
   }
 
   /**
@@ -958,10 +1196,11 @@ function App() {
 
     // A linked pair is packaged whole, so the other side comes along with it.
     let back: { template: TemplateMeta; fields: FieldDefinition[]; mappings: FieldMapping[] } | null = null
-    const otherId = linkedDesign
+    const openSides = linkedDesign ? variantSides(linkedDesign, activeVariant) : null
+    const otherId = openSides
       ? activeSide === 'front'
-        ? linkedDesign.backTemplateId
-        : linkedDesign.frontTemplateId
+        ? openSides.backTemplateId
+        : openSides.frontTemplateId
       : null
     if (otherId) {
       const summary = designTemplates.find((candidate) => candidate.id === otherId)
@@ -982,11 +1221,42 @@ function App() {
       if (typeof value === 'string' && value.trim()) sampleData[key] = value
     }
 
-    const front = { template, fields, mappings: mappingsFor(fieldMappings, fieldCustomValues) }
+    const open = { template, fields, mappings: mappingsFor(fieldMappings, fieldCustomValues) }
+    let front = activeSide === 'back' && back ? back : open
+    const packagedBack = activeSide === 'back' && back ? open : back
+
+    // Every variant goes into the one package, the default first. The side that
+    // is open is packaged as it stands (card area and all); the rest are read
+    // from the library.
+    let variants: PackageVariantInput[] | undefined
+    if (linkedDesign && hasVariants(linkedDesign)) {
+      variants = []
+      for (const variant of getDesignVariants(linkedDesign)) {
+        let variantFront: PackageSideInput | null = null
+        if (variant.id === activeVariant?.id) variantFront = front
+        else if (variant.frontTemplateId) {
+          const summary = designTemplates.find((candidate) => candidate.id === variant.frontTemplateId)
+          if (summary) {
+            const parsed = await parseTemplateString(await loadTemplateSvgContent(summary), summary.name)
+            URL.revokeObjectURL(parsed.metadata.objectUrl)
+            variantFront = { template: parsed.metadata, fields: parsed.autoFields, mappings: await storage.getFieldMappings(summary.id) }
+          }
+        }
+        if (!variantFront) {
+          console.warn(`Variant "${variant.name}" has no artwork in the library; left out of the package.`)
+          continue
+        }
+        variants.push({ id: variant.id, name: variant.name, front: variantFront, ...(variant.match?.length ? { match: variant.match } : {}) })
+      }
+      if (variants[0]) front = variants[0].front
+    }
+
     const { blob, manifest } = await createTemplatePackage({
       name: linkedDesign?.name ?? template.name,
-      front: activeSide === 'back' && back ? back : front,
-      back: activeSide === 'back' && back ? front : back,
+      front,
+      back: packagedBack,
+      variants,
+      variantField: linkedDesign?.variantField ?? null,
       availableFonts,
       sampleData,
     })
@@ -1039,24 +1309,51 @@ function App() {
 
     const frontTemplate = await importSide(loaded.front, true)
     const backTemplate = loaded.back ? await importSide(loaded.back, false) : null
+
+    // Every other variant is imported as its own template. One packaged without
+    // mappings of its own takes the default's: variants mean the same thing.
+    let variants: CardDesignVariant[] | null = null
+    if (loaded.variants) {
+      variants = []
+      for (const [index, variant] of loaded.variants.entries()) {
+        const front = index === 0 && variant.front.file === loaded.front.file
+          ? frontTemplate
+          : await importSide({ ...variant.front, mappings: variant.front.mappings.length ? variant.front.mappings : loaded.front.mappings }, false)
+        const back = variant.back ? await importSide(variant.back, false) : null
+        variants.push({
+          id: variant.id,
+          name: variant.name,
+          frontTemplateId: front.id,
+          ...(back ? { backTemplateId: back.id } : {}),
+          ...(variant.match?.length ? { match: variant.match } : {}),
+        })
+      }
+    }
+
     await reloadDesignTemplates()
     setSelectedTemplateId(frontTemplate.id)
     setActiveSide('front')
+    setActiveVariantId(variants?.find((variant) => variant.frontTemplateId === frontTemplate.id)?.id ?? null)
 
     let designId: string | null = null
-    if (backTemplate || loaded.editor) {
+    if (backTemplate || loaded.editor || variants) {
       const design = await createCardDesign({
         name: loaded.manifest.name,
         description: null,
         frontTemplateId: frontTemplate.id,
         backTemplateId: backTemplate?.id ?? null,
+        ...(variants ? { variants, variantField: loaded.manifest.variantField ?? null } : {}),
         ...(loaded.editor ? {designerMode: 'canvas' as const, frontCanvasData: loaded.editor.front, backCanvasData: loaded.editor.back ?? null, cardWidth: loaded.editor.widthMm, cardHeight: loaded.editor.heightMm} : {}),
       })
       designId = design.id
       setLinkedDesignId(design.id)
       // Print the design as a whole, so the Export tab offers its back too.
       setSelectedExportCardDesignId(design.id)
-      setOtherSidePreview(backTemplate && loaded.back ? { name: backTemplate.name, svg: loaded.back.svg } : null)
+      setOtherSidePreview(
+        backTemplate && loaded.back
+          ? { name: backTemplate.name, svg: await renderTemplatePreview(loaded.back.svg, backTemplate.name, loaded.back.fields) }
+          : null,
+      )
       refreshCardDesigns()
     } else {
       setLinkedDesignId(null)
@@ -1067,7 +1364,8 @@ function App() {
     setFieldMappingsVersion((v) => v + 1)
     setStatusMessage(
       `Opened "${loaded.manifest.name}" with ${loaded.fonts.length} font${loaded.fonts.length === 1 ? '' : 's'}` +
-        `${loaded.back ? ' and both sides' : ''}.`,
+        `${loaded.back ? ' and both sides' : ''}` +
+        `${variants ? `, in ${variants.length} variants` : ''}.`,
     )
 
     return {
@@ -1389,6 +1687,28 @@ function App() {
 
     try {
       if (options.mode === 'database') {
+        // A design whose variants are chosen per person: load every variant's
+        // artwork up front, and let the exporter pick one for each record.
+        const variantDesign = exportCanvasDesign ? null : exportDesign
+        if (variantDesign?.variantField && hasVariants(variantDesign) && exportTemplate) {
+          const artwork = new Map<string, TemplateMeta>()
+          for (const variant of getDesignVariants(variantDesign)) {
+            if (!variant.frontTemplateId) continue
+            if (variant.frontTemplateId === exportTemplateId) {
+              artwork.set(variant.id, exportTemplate)
+              continue
+            }
+            const summary = designTemplates.find((candidate) => candidate.id === variant.frontTemplateId)
+            if (!summary) continue
+            const parsed = await parseTemplateString(await loadTemplateSvgContent(summary), summary.name)
+            artwork.set(variant.id, parsed.metadata)
+          }
+          setVariantResolver((user) => {
+            const variant = variantForUser(variantDesign, user, null)
+            return variant ? artwork.get(variant.id) ?? null : null
+          })
+        }
+
         if (options.selectedUserIds.length === 0) {
           throw new Error('Select at least one user to export')
         }
@@ -1666,6 +1986,7 @@ function App() {
       )
     } finally {
       clearOutlineFontBuffers()
+      setVariantResolver(null)
       setIsExporting(false)
     }
   }
@@ -1737,7 +2058,17 @@ function App() {
 
     try {
       await storage.saveFieldMappings(selectedTemplateId, mappings)
-      setStatusMessage(`Saved ${mappings.length} field mapping${mappings.length !== 1 ? 's' : ''}.`)
+      // Variants mean the same thing layer for layer, so they share mappings.
+      const siblings = linkedDesign && activeSide === 'front' && hasVariants(linkedDesign)
+        ? getDesignVariants(linkedDesign)
+            .map((variant) => variant.frontTemplateId)
+            .filter((id): id is string => Boolean(id) && id !== selectedTemplateId)
+        : []
+      for (const templateId of siblings) await storage.saveFieldMappings(templateId, mappings)
+      setStatusMessage(
+        `Saved ${mappings.length} field mapping${mappings.length !== 1 ? 's' : ''}` +
+          (siblings.length ? `, shared with ${siblings.length} other variant${siblings.length === 1 ? '' : 's'}.` : '.'),
+      )
       setFieldMappingsVersion(v => v + 1)
       setTimeout(() => {
         setStatusMessage(null)
@@ -2197,6 +2528,25 @@ function App() {
                   />
                 </PanelSection>
 
+                {linkedDesign && linkedDesign.designerMode !== 'canvas' && (
+                  <PanelSection title={`Variants (${getDesignVariants(linkedDesign).length})`} defaultOpen={hasVariants(linkedDesign)}>
+                    <VariantsPanel
+                      design={linkedDesign}
+                      activeVariantId={activeSide === 'front' ? activeVariantId : null}
+                      templates={designTemplates}
+                      busy={variantBusy}
+                      onSelect={handleSelectVariant}
+                      onAddFromFiles={handleAddVariantFiles}
+                      onAddFromLibrary={handleAddVariantFromLibrary}
+                      onRename={handleRenameVariant}
+                      onRemove={handleRemoveVariant}
+                      onMakeDefault={handleMakeDefaultVariant}
+                      onVariantFieldChange={handleVariantFieldChange}
+                      onMatchChange={handleVariantMatchChange}
+                    />
+                  </PanelSection>
+                )}
+
                 <PanelSection title={`Fonts (${fontList.length})`} defaultOpen={missingFonts.length > 0}>
                   {fontList.length === 0 ? (
                     <p className="empty-state__text">Load a template to detect fonts</p>
@@ -2395,7 +2745,7 @@ function App() {
                           >
                             <InlineSvg
                               className="canvas-preview"
-                              style={{ width: previewWidth, height: previewHeight }}
+                              style={{ width: otherSideBox.width, height: otherSideBox.height }}
                               markup={otherSidePreview.svg}
                               name="editor-other-side"
                             />
@@ -2763,6 +3113,7 @@ function App() {
                 cardDesigns={cardDesigns}
                 selectedCardDesignId={selectedExportCardDesignId}
                 backSide={exportBackSide}
+                resolveFront={exportResolveFront}
                 onCardDesignSelect={handleExportCardDesignSelect}
                 onTemplateSelect={(templateSummary) => {
                   setSelectedExportCardDesignId(null)
@@ -2856,8 +3207,8 @@ function App() {
       <LanyardDialog
         open={lanyardOpen}
         onOpenChange={setLanyardOpen}
-        frontSvg={activeSide === 'back' ? otherSidePreview?.svg ?? renderedSvg : renderedSvg}
-        backSvg={activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null}
+        frontSvg={lanyardSides.front}
+        backSvg={lanyardSides.back}
         widthMm={cardSizeMm.width}
         heightMm={cardSizeMm.height}
         artworkWidthMm={artworkSizeMm.width}
@@ -2960,7 +3311,13 @@ function App() {
               setDesignFormSaving(true)
               try {
                 if (editingDesign) {
-                  await updateCardDesign(editingDesign.id, payload)
+                  // The front chosen here is the default variant's front.
+                  const variants = editingDesign.variants?.length
+                    ? editingDesign.variants.map((variant, index) =>
+                        index === 0 ? { ...variant, frontTemplateId: payload.frontTemplateId } : variant,
+                      )
+                    : undefined
+                  await updateCardDesign(editingDesign.id, variants ? { ...payload, variants } : payload)
                 } else {
                   await createCardDesign(payload)
                 }

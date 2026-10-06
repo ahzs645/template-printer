@@ -20,6 +20,20 @@ function getPurifier(): Purifier | null {
   if (purifier) return purifier
   if (typeof window === 'undefined') return null
   purifier = createDOMPurify(window)
+  // <use> is how Illustrator places a symbol or an image it embeds once and
+  // draws several times — watermarks, logos. DOMPurify drops it outright
+  // because it can pull in another document. It is kept here only when it
+  // points inside the same file; anything else loses its reference.
+  purifier.addHook('uponSanitizeAttribute', (node, data) => {
+    if (node.nodeName.toLowerCase() !== 'use') return
+    if (data.attrName !== 'href' && data.attrName !== 'xlink:href') return
+    if (!data.attrValue.trim().startsWith('#')) data.keepAttr = false
+  })
+  purifier.addHook('afterSanitizeAttributes', (node) => {
+    if (node.nodeName.toLowerCase() !== 'use') return
+    const element = node as Element
+    if (!element.getAttribute('href') && !element.getAttribute('xlink:href')) element.remove()
+  })
   return purifier
 }
 
@@ -37,7 +51,9 @@ export function isSanitizerAvailable(): boolean {
 
 const SANITIZE_OPTIONS = {
   USE_PROFILES: { svg: true, svgFilters: true },
-} as const
+  // Internal references only; see the hooks in getPurifier().
+  ADD_TAGS: ['use'],
+}
 
 /**
  * Strip anything executable out of SVG markup.

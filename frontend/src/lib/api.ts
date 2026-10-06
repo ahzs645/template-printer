@@ -1,4 +1,5 @@
 import type { CardDesign, TemplateMeta } from './types'
+import type { CardDesignVariant } from './designVariants'
 import type { TemplateSummary, TemplateType } from './templates'
 
 export async function uploadTemplateToLibrary(
@@ -128,6 +129,8 @@ export interface CardDesignPayload {
   backCanvasData?: string | null
   cardWidth?: number
   cardHeight?: number
+  variants?: CardDesignVariant[] | null
+  variantField?: string | null
 }
 
 export async function listCardDesigns(): Promise<CardDesign[]> {

@@ -221,6 +221,49 @@ function createSchema(db) {
       throw error
     }
   }
+
+  // Migration: card design variants (JSON) and the record field that picks one
+  for (const column of ['variants TEXT', 'variantField TEXT']) {
+    try {
+      db.exec(`ALTER TABLE card_designs ADD COLUMN ${column}`)
+    } catch (error) {
+      if (!error.message.includes('duplicate column name')) {
+        throw error
+      }
+    }
+  }
+}
+
+/**
+ * Keep only well-formed variants: an id, a name and template ids. Stored as
+ * JSON, so anything else a client sends is dropped rather than persisted.
+ */
+export function normalizeVariants(value) {
+  if (value === null || value === undefined) return null
+  if (!Array.isArray(value)) {
+    throw Object.assign(new Error('Card design variants must be a list.'), { status: 400 })
+  }
+  const variants = value
+    .filter((variant) => variant && typeof variant === 'object' && typeof variant.id === 'string')
+    .map((variant) => ({
+      id: variant.id.slice(0, 100),
+      name: typeof variant.name === 'string' && variant.name.trim() ? variant.name.trim().slice(0, 200) : 'Variant',
+      frontTemplateId: typeof variant.frontTemplateId === 'string' ? variant.frontTemplateId : null,
+      ...(typeof variant.backTemplateId === 'string' ? { backTemplateId: variant.backTemplateId } : {}),
+      ...(Array.isArray(variant.match)
+        ? { match: variant.match.filter((entry) => typeof entry === 'string').map((entry) => entry.slice(0, 200)) }
+        : {}),
+    }))
+  return variants.length > 0 ? variants : null
+}
+
+function parseVariants(value) {
+  if (!value) return null
+  try {
+    return normalizeVariants(JSON.parse(value))
+  } catch {
+    return null
+  }
 }
 
 function seedTemplates(db) {
@@ -548,6 +591,8 @@ export function listCardDesigns() {
       cd.description,
       cd.frontTemplateId,
       cd.backTemplateId,
+      cd.variants,
+      cd.variantField,
       cd.createdAt,
       cd.updatedAt,
       ft.name AS frontTemplateName,
@@ -580,6 +625,8 @@ export function getCardDesignById(id) {
       cd.description,
       cd.frontTemplateId,
       cd.backTemplateId,
+      cd.variants,
+      cd.variantField,
       cd.createdAt,
       cd.updatedAt,
       ft.name AS frontTemplateName,
@@ -604,7 +651,7 @@ export function getCardDesignById(id) {
   return row ? mapCardDesignRow(row) : null
 }
 
-export function createCardDesign({ name, description, frontTemplateId, backTemplateId }) {
+export function createCardDesign({ name, description, frontTemplateId, backTemplateId, variants, variantField }) {
   const db = getDatabase()
 
   const cleanedName = (name ?? '').trim()
@@ -619,11 +666,20 @@ export function createCardDesign({ name, description, frontTemplateId, backTempl
   const id = `card-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
   const stmt = db.prepare(`
-    INSERT INTO card_designs (id, name, description, frontTemplateId, backTemplateId)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO card_designs (id, name, description, frontTemplateId, backTemplateId, variants, variantField)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `)
 
-  stmt.run(id, cleanedName, cleanedDescription, frontId, backId)
+  const cleanedVariants = normalizeVariants(variants)
+  stmt.run(
+    id,
+    cleanedName,
+    cleanedDescription,
+    frontId,
+    backId,
+    cleanedVariants ? JSON.stringify(cleanedVariants) : null,
+    typeof variantField === 'string' && variantField.trim() ? variantField.trim() : null,
+  )
 
   return getCardDesignById(id)
 }
@@ -653,14 +709,29 @@ export function updateCardDesign(id, updates) {
 
   const nextFront = hasFrontUpdate ? (updates.frontTemplateId || null) : existing.frontTemplateId
   const nextBack = hasBackUpdate ? (updates.backTemplateId || null) : existing.backTemplateId
+  const nextVariants = Object.prototype.hasOwnProperty.call(updates, 'variants')
+    ? normalizeVariants(updates.variants)
+    : existing.variants ?? null
+  const nextVariantField = Object.prototype.hasOwnProperty.call(updates, 'variantField')
+    ? (typeof updates.variantField === 'string' && updates.variantField.trim() ? updates.variantField.trim() : null)
+    : existing.variantField ?? null
 
   const stmt = db.prepare(`
     UPDATE card_designs
-    SET name = ?, description = ?, frontTemplateId = ?, backTemplateId = ?, updatedAt = CURRENT_TIMESTAMP
+    SET name = ?, description = ?, frontTemplateId = ?, backTemplateId = ?, variants = ?, variantField = ?,
+        updatedAt = CURRENT_TIMESTAMP
     WHERE id = ?
   `)
 
-  stmt.run(nextName, nextDescription, nextFront, nextBack, id)
+  stmt.run(
+    nextName,
+    nextDescription,
+    nextFront,
+    nextBack,
+    nextVariants ? JSON.stringify(nextVariants) : null,
+    nextVariantField,
+    id,
+  )
 
   return getCardDesignById(id)
 }
@@ -687,6 +758,8 @@ function mapCardDesignRow(row) {
     description: row.description ?? null,
     frontTemplateId: row.frontTemplateId ?? null,
     backTemplateId: row.backTemplateId ?? null,
+    variants: parseVariants(row.variants),
+    variantField: row.variantField ?? null,
     createdAt: row.createdAt ?? null,
     updatedAt: row.updatedAt ?? null,
   }

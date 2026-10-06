@@ -2,6 +2,7 @@
 import type { CardData, FieldDefinition, ImageValue, TemplateMeta } from './types'
 import { normalizeStandardFieldName, parseBarcodeLayerId } from './standardFields'
 import { normalizeSymbology, validateBarcodeText } from './barcode'
+import { isInNonFieldLayer } from './layerRoles'
 export type Matrix = [number, number, number, number, number, number]
 const IDENTITY: Matrix = [1,0,0,1,0,0]
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -70,7 +71,7 @@ export function normalizeCardFields(doc:Document,meta:Pick<TemplateMeta,'width'|
   const root=meta.viewBox??{x:0,y:0,width:meta.width*(meta.unit==='mm'?96/25.4:1),height:meta.height*(meta.unit==='mm'?96/25.4:1)}
   const explicit:FieldDefinition[]=[],claimed=new Set<Element>()
   for(const container of Array.from(doc.querySelectorAll('[data-field-id][data-field-type]'))) {
-    if(container.closest('defs,[data-static="true"],[data-editor-only="true"]')) continue
+    if(container.closest('defs,[data-static="true"],[data-editor-only="true"]')||isInNonFieldLayer(container)) continue
     const type=container.getAttribute('data-field-type')
     if(type!=='text'&&type!=='image'&&type!=='barcode'&&type!=='date') continue
     const node=(type==='text'||type==='date')&&container.tagName.toLowerCase()!=='text'?container.querySelector('text')??container:container
@@ -92,7 +93,7 @@ export function normalizeCardFields(doc:Document,meta:Pick<TemplateMeta,'width'|
   return [...explicit,...legacy.filter(field=>{const node=field.sourceId?doc.getElementById(field.sourceId):null;return !node||!Array.from(claimed).some(owner=>owner===node||owner.contains(node)||(node.contains(owner)&&/\{\{(?:field|image|barcode|date):/.test(node.id)))})].filter(field=>{
     if(!field.sourceId||seenNodes.has(field.sourceId)) return false
     const node=doc.getElementById(field.sourceId)
-    if(!node||node.closest('defs,[data-static="true"],[data-editor-only="true"]')) return false
+    if(!node||node.closest('defs,[data-static="true"],[data-editor-only="true"]')||isInNonFieldLayer(node)) return false
     seenNodes.add(field.sourceId);return true
   }).map(field=>{
     const node=doc.getElementById(field.sourceId!)!

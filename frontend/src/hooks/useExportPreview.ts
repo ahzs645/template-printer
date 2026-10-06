@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import type { CardData, FieldDefinition } from '../lib/types'
+import type { CardData, FieldDefinition, TemplateMeta } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import { parseField } from '../lib/fieldParser'
 import { renderSvgWithData } from '../lib/svgTemplate'
@@ -20,6 +20,8 @@ type UseExportPreviewParams = {
   renderedSvg: string | null
   /** The other side of the card design, for slots set to print the back. */
   backSide?: ExportBackSide | null
+  /** Each person's own front, for designs whose variants are chosen per record. */
+  resolveFront?: ((user: UserData) => TemplateMeta | null) | null
 }
 
 export function useExportPreview({
@@ -31,6 +33,7 @@ export function useExportPreview({
   fields,
   renderedSvg,
   backSide = null,
+  resolveFront = null,
 }: UseExportPreviewParams) {
   const storage = useStorage()
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>({})
@@ -103,6 +106,8 @@ export function useExportPreview({
       if (!user || Object.keys(sideMappings).length === 0) {
         return sideFallback
       }
+      // Same layers, different artwork: the person's variant, when they have one.
+      const artwork = (!useBack && resolveFront?.(user)) || sideMeta
 
       try {
         const cardData: CardData = {}
@@ -116,13 +121,13 @@ export function useExportPreview({
           }
         })
 
-        return renderSvgWithData(sideMeta, sideFields, cardData)
+        return renderSvgWithData(artwork, sideFields, cardData, { guides: false })
       } catch (error) {
         console.error('Failed to render card for user:', error)
         return sideFallback
       }
     },
-    [templateMeta, users, fieldMappings, customValues, fields, renderedSvg, backSide],
+    [templateMeta, users, fieldMappings, customValues, fields, renderedSvg, backSide, resolveFront],
   )
 
   /**
@@ -142,7 +147,7 @@ export function useExportPreview({
       }
 
       try {
-        return renderSvgWithData(sideMeta, sideFields, cardData)
+        return renderSvgWithData(sideMeta, sideFields, cardData, { guides: false })
       } catch (error) {
         console.error('Failed to render card with slot data:', error)
         return sideFallback

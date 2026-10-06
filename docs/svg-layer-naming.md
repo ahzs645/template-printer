@@ -59,6 +59,11 @@ fullName_First_Middle_Last_AllCaps
 - `fullName_First_Last_AllCaps` → "JOHN SMITH"
 - `fullName_First_MiddleInitial_Last_AllCaps` → "JOHN A. SMITH"
 - `fullName_First_Middle_Last_AllCaps` → "JOHN ALLEN SMITH"
+- `fullName_First_LastInitial` → "John S", the short form badges use
+
+`FirstInitial` and `LastInitial` give the bare letter with no full stop, since on
+a badge nothing comes after it. `MiddleInitial` keeps its full stop ("J.")
+because it sits in the middle of a name.
 
 ### Stacked Names (over two lines)
 
@@ -205,6 +210,30 @@ Generated barcodes are used instead because a font-drawn one:
   actually measures;
 - has to be embedded or outlined in every export.
 
+## Guides, Punches and Fixed Artwork
+
+Some layers belong in the file but should not print, and some text is part of the
+design rather than a field. The app recognises them by **layer name**. A layer
+name becomes the SVG `id` on export from Illustrator, Affinity, Inkscape and
+Figma, so it survives the round trip. `data-*` attributes do not survive it.
+
+| Layer name | What it is |
+|---|---|
+| `guides`, `guide_…` (e.g. `guide_bleed`, `guide_safe`) | Shown while editing; never printed. |
+| `guide_trim` | A plain rectangle marking where the card is cut. The app reads the card's size and position from it, so a file in pixels or points still prints at the right size, with no Card Area step. |
+| `guide_magnetic_stripe` | Where the stripe on the card stock sits. A guide only; ink on a stripe can stop it reading. |
+| `punch`, `punch_slot_top_center`, `punch_round_left_center`, … | Where the card is punched. Never printed. The name turns on the **Punch** guide, at that position and shape, when the template opens. A bare `punch` means a slot at the top centre. |
+| `artwork`, `static`, `static_…` | Fixed artwork. Text inside it ("NAME", an address) is never offered as a field. |
+
+Files written by hand, or by this app, can use `data-guide="true"` and
+`data-static="true"` for the same effect. They can also declare the card with
+`data-card-format="id-1"` and `data-trim-box="x y width height"` on the root
+`<svg>`. Setting a card area in the app writes both attributes.
+
+**New Blank → Designer starter kit** downloads a front and a back already laid
+out like this, at full size with bleed. See [Variants and the starter
+kit](./README.md#variants).
+
 ## Auto-Mapping Rules
 
 The auto-mapping system follows these rules in order:
@@ -275,6 +304,10 @@ that differ from hand-written SVG:
 - **Line spacing.** The spacing between the tspan lines in the artwork is reused
   for the replacement text, so generated lines land where the placeholder lines
   were.
+- **Symbols and repeated images.** Illustrator places a symbol, or an image
+  drawn more than once, with `<use href="#…">`. These are kept when they point
+  inside the same file. A `<use>` pointing at another document is removed when
+  the file is opened from a link or a package.
 - **Layer ids.** Illustrator uses the Layers panel name as the SVG `id`, and
   replaces characters it does not allow. Stick to the exact field names above —
   spaces and punctuation get mangled.

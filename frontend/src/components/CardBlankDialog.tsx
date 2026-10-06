@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Download, FilePlus } from 'lucide-react'
+import { Download, FilePlus, PackageOpen } from 'lucide-react'
 
 import {
   Dialog,
@@ -29,6 +29,7 @@ import {
   type PunchShape,
 } from '../lib/cardBlanks'
 import { BARCODE_SYMBOLOGIES, BARCODE_SYMBOLOGY_LABELS, type BarcodeSymbology } from '../lib/barcode'
+import { createStarterKitZip, starterKitFileName, type StarterOrientation } from '../lib/starterKit'
 
 export type CardBlankDialogProps = {
   open: boolean
@@ -53,11 +54,19 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
   const [punchShape, setPunchShape] = useState<PunchShape>('slot')
   const [barcode, setBarcode] = useState<BarcodeSymbology | typeof NO_BARCODE>(NO_BARCODE)
   const [guides, setGuides] = useState(true)
+  // Portrait is the same card turned: the blank, the starter kit and every
+  // guide follow the shape.
+  const [orientation, setOrientation] = useState<StarterOrientation>('landscape')
+  const [kitBusy, setKitBusy] = useState(false)
 
   const options: CardBlankOptions = useMemo(
     () => ({
       side,
-      magneticStripe: side === 'back' && magneticStripe,
+      widthMm: orientation === 'portrait' ? ID1_HEIGHT_MM : ID1_WIDTH_MM,
+      heightMm: orientation === 'portrait' ? ID1_WIDTH_MM : ID1_HEIGHT_MM,
+      // A stripe runs along the long edge, which a portrait blank has at its
+      // side; drawn across the top it would be in the wrong place.
+      magneticStripe: side === 'back' && orientation === 'landscape' && magneticStripe,
       showMagneticTracks,
       signaturePanel: side === 'back' && signaturePanel,
       punch,
@@ -65,11 +74,11 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
       barcode: barcode === NO_BARCODE ? null : barcode,
       guides,
     }),
-    [side, magneticStripe, showMagneticTracks, signaturePanel, punch, punchShape, barcode, guides],
+    [side, orientation, magneticStripe, showMagneticTracks, signaturePanel, punch, punchShape, barcode, guides],
   )
 
   const svg = useMemo(() => createCardBlankSvg(options), [options])
-  const fileName = cardBlankFileName(options)
+  const fileName = cardBlankFileName(options).replace(/\.svg$/, orientation === 'portrait' ? '-portrait.svg' : '.svg')
 
   const punchHitsStripe =
     Boolean(options.magneticStripe) && punchConflictsWithStripe({ punch, punchShape })
@@ -84,6 +93,25 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
+  }
+
+  // Both sides as artboards with bleed, for designing in Illustrator & co.
+  const handleDownloadKit = async () => {
+    setKitBusy(true)
+    try {
+      const kitOptions = { orientation, punch, punchShape, magneticStripe }
+      const blob = await createStarterKitZip(kitOptions)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = starterKitFileName(kitOptions)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setKitBusy(false)
+    }
   }
 
   const row = (label: string, control: React.ReactNode, helper?: string) => (
@@ -128,6 +156,20 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
                   <SelectItem value="back">Back</SelectItem>
                 </SelectContent>
               </Select>,
+            )}
+
+            {row(
+              'Orientation',
+              <Select value={orientation} onValueChange={(value) => setOrientation(value as StarterOrientation)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="landscape">Landscape ({ID1_WIDTH_MM} × {ID1_HEIGHT_MM} mm)</SelectItem>
+                  <SelectItem value="portrait">Portrait ({ID1_HEIGHT_MM} × {ID1_WIDTH_MM} mm)</SelectItem>
+                </SelectContent>
+              </Select>,
+              'A portrait badge is the same card turned. The tray layouts turn it back to print.',
             )}
 
             {row(
@@ -177,10 +219,34 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
               </Select>,
               barcode === NO_BARCODE ? undefined : `Added as a layer named barcode_${barcode}_studentId.`,
             )}
+
+            <div
+              style={{
+                borderTop: '1px solid var(--border-default)',
+                paddingTop: '0.75rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+              }}
+            >
+              <Label>Designer starter kit</Label>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                Front and back as artboards at full size with {'1/16"'} bleed, the trim line, safe area and the
+                punch above as guides, and the layers already named — for designing in Illustrator, Affinity,
+                Inkscape or Figma. What comes back imports ready to print. Includes a README of layer names.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <Button type="button" variant="outline" onClick={handleDownloadKit} disabled={kitBusy}>
+                  <PackageOpen size={16} style={{ marginRight: 6 }} />
+                  Download {orientation} kit (.zip)
+                </Button>
+              </div>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {side === 'back' &&
+              orientation === 'landscape' &&
               toggle(
                 'Magnetic stripe',
                 magneticStripe,
@@ -189,6 +255,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
               )}
 
             {side === 'back' &&
+              orientation === 'landscape' &&
               magneticStripe &&
               toggle('Track guides', showMagneticTracks, setShowMagneticTracks, 'Marks tracks 1–3 inside the stripe.')}
 
