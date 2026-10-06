@@ -163,7 +163,7 @@
           </g>
         </g>
         <g id="photo"><rect x="802.319" y="3589.072" width="189.103" height="225.962" fill="#ffffff"/></g><path class="cls-28" d="M990.43,3590.07v223.97h-187.11v-223.97h187.11ZM991.43,3589.07h-189.11v225.97h189.11v-225.97h0Z"/>
-        <text class="cls-12" transform="translate(817.3645 3957.8191)" data-static="true"><tspan class="cls-75" x="0" y="0">V</tspan><tspan x="11.12" y="0">ALID: </tspan></text><text id="customValidYears" class="cls-12" transform="translate(817.3645 3957.8191)"><tspan x="-16.68" y="24">202X-202X</tspan></text>
+        <text class="cls-12" transform="translate(817.3645 3957.8191)" data-static="true"><tspan class="cls-75" x="0" y="0">V</tspan><tspan x="11.12" y="0">ALID: </tspan></text><text id="customValidYears" class="cls-12" transform="translate(817.3645 3957.8191) translate(-16.68 24)"><tspan x="0" y="0">202X-202X</tspan></text>
         <g>
           <line class="cls-14" x1="802.62" y1="3848.25" x2="991.1" y2="3848.25"/>
           <text class="cls-16" transform="translate(804.4377 3842.209)" id="fullName_Last_Comma_First_MiddleInitial_AllCaps"><tspan x="0" y="0">WO</tspan><tspan class="cls-81" x="25.56" y="0">L</tspan><tspan x="32.79" y="0">VES, TIMBER J.</tspan></text>

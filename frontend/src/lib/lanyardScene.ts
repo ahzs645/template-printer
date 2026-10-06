@@ -14,6 +14,7 @@
 import type * as THREE_NS from 'three'
 
 import { getPunchRect, type PunchPosition, type PunchShape } from './cardBlanks'
+import { buildHardware, resolveAttachment, type Hardware, type LanyardAttachment } from './lanyardHardware'
 
 type THREE = typeof THREE_NS
 
@@ -35,6 +36,10 @@ export type LanyardOptions = {
   punchShape: PunchShape
   strapColor: string
   strapText: string
+  /** What joins the strap to the card; 'auto' picks one to suit the punch. */
+  attachment?: LanyardAttachment
+  /** Follow the punch from close up, to see the hardware go through it. */
+  closeUp?: boolean
   /** Higher swings faster and settles harder. */
   gravity: number
   strapWidth: number
@@ -239,6 +244,13 @@ export async function createLanyardScene(
     back: new THREE.MeshStandardMaterial({ transparent: true, alphaTest: 0.35, roughness: 0.75, metalness: 0.05, side: THREE.FrontSide }),
   }
 
+  // Metal needs something to reflect, or it renders flat grey.
+  const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js')
+  const pmrem = new THREE.PMREMGenerator(renderer)
+  const roomScene = new RoomEnvironment()
+  const environment = pmrem.fromScene(roomScene, 0.04).texture
+  roomScene.dispose?.()
+
   const cardGroup = new THREE.Group()
   let plane = new THREE.PlaneGeometry(planeW, planeH)
   const frontMesh = new THREE.Mesh(plane, cardMaterial.front)
@@ -275,12 +287,40 @@ export async function createLanyardScene(
   let hang = getHangGeometry(options, cardW, cardH)
   let nodes: Node[] = []
 
+  // The hook, ring or clip, carried by the card at its punch. The strap ends
+  // where the hardware begins, so the card hangs that much lower.
+  let hardware: Hardware | null = null
+  let hardwareLength = 0
+
+  function rebuildHardware() {
+    if (hardware) {
+      cardGroup.remove(hardware.group)
+      hardware.dispose()
+      hardware = null
+    }
+    const punchRect = getPunchRect({ punch: options.punch, punchShape: options.punchShape, widthMm: options.widthMm, heightMm: options.heightMm })
+    const kind = resolveAttachment(options.attachment ?? 'auto', Boolean(punchRect), options.punchShape)
+    const mm = cardW / options.widthMm
+    // Hardware hangs along the line from the punch away from the card's centre.
+    const up = new THREE.Vector3(hang.offsetX, hang.offsetY, 0)
+    if (up.lengthSq() < 1e-9) up.set(0, 1, 0)
+    up.normalize()
+    const along = punchRect ? Math.abs(up.y) * punchRect.height + Math.abs(up.x) * punchRect.width : 0
+    const across = punchRect ? Math.abs(up.y) * punchRect.width + Math.abs(up.x) * punchRect.height : 0
+    hardware = buildHardware(THREE, kind, mm, { height: along, width: across || 12 }, environment)
+    hardware.group.position.set(hang.offsetX, hang.offsetY, 0)
+    hardware.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up)
+    cardGroup.add(hardware.group)
+    hardwareLength = hardware.length
+  }
+  rebuildHardware()
+
   function resetChain() {
     nodes = []
     for (let i = 0; i < CHAIN_LENGTH + 1; i += 1) {
       // Start off to one side so the card swings in rather than appearing still.
       const x = anchor.x + Math.min(i, CHAIN_LENGTH - 1) * SEGMENT
-      const y = i === CHAIN_LENGTH ? anchor.y - hang.distance : anchor.y
+      const y = i === CHAIN_LENGTH ? anchor.y - hang.distance - hardwareLength : anchor.y
       nodes.push({ x, y, px: x, py: y, pinned: i === 0 })
     }
   }
@@ -298,8 +338,9 @@ export async function createLanyardScene(
 
     const constraints: Array<[number, number, number]> = []
     for (let i = 0; i < CHAIN_LENGTH - 1; i += 1) constraints.push([i, i + 1, SEGMENT])
-    // The last link is the card itself: punch point to centre of mass.
-    constraints.push([CHAIN_LENGTH - 1, CHAIN_LENGTH, hang.distance])
+    // The last link is the hardware and the card, rigid together: from where
+    // the strap ends, through the punch, to the card's centre of mass.
+    constraints.push([CHAIN_LENGTH - 1, CHAIN_LENGTH, hang.distance + hardwareLength])
 
     for (let iteration = 0; iteration < 32; iteration += 1) {
       for (const [a, b, length] of constraints) {
@@ -335,6 +376,10 @@ export async function createLanyardScene(
   const Z = new THREE.Vector3(0, 0, 1)
   const Y = new THREE.Vector3(0, 1, 0)
   const hangVector = new THREE.Vector3()
+  const closeUpTarget = new THREE.Vector3()
+  const cameraGoal = new THREE.Vector3(0, 0.4, 9.5)
+  const defaultLook = new THREE.Vector3(0, 0.4, 0)
+  const lookGoal = defaultLook.clone()
   const yawQuaternion = new THREE.Quaternion()
   let yaw = 0
 
@@ -353,6 +398,18 @@ export async function createLanyardScene(
     yaw += (Math.max(-0.6, Math.min(0.6, -vx * 10)) - yaw) * 0.1
     yawQuaternion.setFromAxisAngle(Y, yaw)
     cardGroup.quaternion.multiply(yawQuaternion)
+
+    // Close up, the camera follows the punch; otherwise it frames the whole lanyard.
+    cardGroup.updateMatrixWorld()
+    const punchWorld = closeUpTarget.set(hang.offsetX, hang.offsetY, 0).applyMatrix4(cardGroup.matrixWorld)
+    // Frame the whole piece of hardware: halfway between the punch and where
+    // the strap ends, from far enough back to fit it.
+    punchWorld.set((punchWorld.x + attach.x) / 2, (punchWorld.y + attach.y) / 2, 0)
+    if (options.closeUp) cameraGoal.set(punchWorld.x + 0.15, punchWorld.y - 0.1, 1.9 + hardwareLength * 2.2)
+    else cameraGoal.set(0, 0.4, 9.5)
+    camera.position.lerp(cameraGoal, 0.08)
+    lookGoal.lerp(options.closeUp ? punchWorld : defaultLook, 0.08)
+    camera.lookAt(lookGoal)
 
     for (let i = 0; i < CHAIN_LENGTH; i += 1) curve.points[i].set(nodes[i].x, nodes[i].y, 0)
     const points = curve.getPoints(RIBBON_POINTS - 1)
@@ -529,7 +586,8 @@ export async function createLanyardScene(
         next.cardOriginXMm !== undefined ||
         next.cardOriginYMm !== undefined ||
         next.punch !== undefined ||
-        next.punchShape !== undefined
+        next.punchShape !== undefined ||
+        next.attachment !== undefined
 
       if (next.widthMm !== undefined || next.heightMm !== undefined || next.artworkWidthMm !== undefined || next.artworkHeightMm !== undefined) {
         const nextAspect = options.widthMm / options.heightMm
@@ -545,6 +603,7 @@ export async function createLanyardScene(
 
       if (geometryChanged) {
         hang = getHangGeometry(options, cardW, cardH)
+        rebuildHardware()
         resetChain()
       }
 
@@ -573,6 +632,9 @@ export async function createLanyardScene(
       cardMaterial.front.map?.dispose()
       cardMaterial.back.map?.dispose()
       strapMaterial.map?.dispose()
+      hardware?.dispose()
+      environment.dispose()
+      pmrem.dispose()
       plane.dispose()
       ribbonGeometry.dispose()
       renderer.dispose()

@@ -54,13 +54,19 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
   const [punchShape, setPunchShape] = useState<PunchShape>('slot')
   const [barcode, setBarcode] = useState<BarcodeSymbology | typeof NO_BARCODE>(NO_BARCODE)
   const [guides, setGuides] = useState(true)
-  const [kitOrientation, setKitOrientation] = useState<StarterOrientation>('landscape')
+  // Portrait is the same card turned: the blank, the starter kit and every
+  // guide follow the shape.
+  const [orientation, setOrientation] = useState<StarterOrientation>('landscape')
   const [kitBusy, setKitBusy] = useState(false)
 
   const options: CardBlankOptions = useMemo(
     () => ({
       side,
-      magneticStripe: side === 'back' && magneticStripe,
+      widthMm: orientation === 'portrait' ? ID1_HEIGHT_MM : ID1_WIDTH_MM,
+      heightMm: orientation === 'portrait' ? ID1_WIDTH_MM : ID1_HEIGHT_MM,
+      // A stripe runs along the long edge, which a portrait blank has at its
+      // side; drawn across the top it would be in the wrong place.
+      magneticStripe: side === 'back' && orientation === 'landscape' && magneticStripe,
       showMagneticTracks,
       signaturePanel: side === 'back' && signaturePanel,
       punch,
@@ -68,11 +74,11 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
       barcode: barcode === NO_BARCODE ? null : barcode,
       guides,
     }),
-    [side, magneticStripe, showMagneticTracks, signaturePanel, punch, punchShape, barcode, guides],
+    [side, orientation, magneticStripe, showMagneticTracks, signaturePanel, punch, punchShape, barcode, guides],
   )
 
   const svg = useMemo(() => createCardBlankSvg(options), [options])
-  const fileName = cardBlankFileName(options)
+  const fileName = cardBlankFileName(options).replace(/\.svg$/, orientation === 'portrait' ? '-portrait.svg' : '.svg')
 
   const punchHitsStripe =
     Boolean(options.magneticStripe) && punchConflictsWithStripe({ punch, punchShape })
@@ -93,7 +99,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
   const handleDownloadKit = async () => {
     setKitBusy(true)
     try {
-      const kitOptions = { orientation: kitOrientation, punch, punchShape, magneticStripe }
+      const kitOptions = { orientation, punch, punchShape, magneticStripe }
       const blob = await createStarterKitZip(kitOptions)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -150,6 +156,20 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
                   <SelectItem value="back">Back</SelectItem>
                 </SelectContent>
               </Select>,
+            )}
+
+            {row(
+              'Orientation',
+              <Select value={orientation} onValueChange={(value) => setOrientation(value as StarterOrientation)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="landscape">Landscape ({ID1_WIDTH_MM} × {ID1_HEIGHT_MM} mm)</SelectItem>
+                  <SelectItem value="portrait">Portrait ({ID1_HEIGHT_MM} × {ID1_WIDTH_MM} mm)</SelectItem>
+                </SelectContent>
+              </Select>,
+              'A portrait badge is the same card turned. The tray layouts turn it back to print.',
             )}
 
             {row(
@@ -216,18 +236,9 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
                 Inkscape or Figma. What comes back imports ready to print. Includes a README of layer names.
               </p>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Select value={kitOrientation} onValueChange={(value) => setKitOrientation(value as StarterOrientation)}>
-                  <SelectTrigger aria-label="Starter kit orientation">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="landscape">Landscape</SelectItem>
-                    <SelectItem value="portrait">Portrait</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Button type="button" variant="outline" onClick={handleDownloadKit} disabled={kitBusy}>
                   <PackageOpen size={16} style={{ marginRight: 6 }} />
-                  Download kit (.zip)
+                  Download {orientation} kit (.zip)
                 </Button>
               </div>
             </div>
@@ -235,6 +246,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {side === 'back' &&
+              orientation === 'landscape' &&
               toggle(
                 'Magnetic stripe',
                 magneticStripe,
@@ -243,6 +255,7 @@ export function CardBlankDialog({ open, onOpenChange, onOpenInEditor }: CardBlan
               )}
 
             {side === 'back' &&
+              orientation === 'landscape' &&
               magneticStripe &&
               toggle('Track guides', showMagneticTracks, setShowMagneticTracks, 'Marks tracks 1–3 inside the stripe.')}
 

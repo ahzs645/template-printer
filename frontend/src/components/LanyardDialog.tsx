@@ -14,6 +14,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Slider } from './ui/slider'
+import { Switch } from './ui/switch'
 import {
   ID1_HEIGHT_MM,
   ID1_WIDTH_MM,
@@ -24,6 +25,12 @@ import {
   type PunchShape,
 } from '../lib/cardBlanks'
 import type { LanyardHandle } from '../lib/lanyardScene'
+import {
+  LANYARD_ATTACHMENTS,
+  LANYARD_ATTACHMENT_LABELS,
+  resolveAttachment,
+  type LanyardAttachment,
+} from '../lib/lanyardHardware'
 
 export type LanyardDialogProps = {
   open: boolean
@@ -77,6 +84,8 @@ export function LanyardDialog({
   const [strapText, setStrapText] = useState('')
   const [gravity, setGravity] = useState(32)
   const [strapWidth, setStrapWidth] = useState(0.24)
+  const [attachment, setAttachment] = useState<LanyardAttachment>('auto')
+  const [closeUp, setCloseUp] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -108,6 +117,8 @@ export function LanyardDialog({
           strapText,
           gravity,
           strapWidth,
+          attachment,
+          closeUp,
         }),
       )
       .then((handle) => {
@@ -141,6 +152,16 @@ export function LanyardDialog({
   useEffect(() => {
     handleRef.current?.update({ strapColor, strapText, gravity, strapWidth })
   }, [strapColor, strapText, gravity, strapWidth])
+
+  useEffect(() => {
+    handleRef.current?.update({ attachment })
+  }, [attachment])
+
+  useEffect(() => {
+    handleRef.current?.update({ closeUp })
+  }, [closeUp])
+
+  const shownAttachment = resolveAttachment(attachment, punch !== 'none', punchShape)
 
   const punchHitsStripe = hasMagneticStripe && punchConflictsWithStripe({ punch, punchShape })
 
@@ -228,6 +249,32 @@ export function LanyardDialog({
                 This punch cuts through the magnetic stripe on the back.
               </p>
             )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+              <Label>Attachment</Label>
+              <Select value={attachment} onValueChange={(value) => setAttachment(value as LanyardAttachment)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANYARD_ATTACHMENTS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {LANYARD_ATTACHMENT_LABELS[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                <Switch checked={closeUp} onCheckedChange={setCloseUp} />
+                Close-up on the punch
+              </label>
+              {shownAttachment !== attachment && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Showing a {LANYARD_ATTACHMENT_LABELS[shownAttachment].toLowerCase()}
+                  {attachment === 'auto' ? ', the usual one for this punch.' : ', since that does not fit this punch.'}
+                </p>
+              )}
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               <Label htmlFor="strap-text">Strap text</Label>

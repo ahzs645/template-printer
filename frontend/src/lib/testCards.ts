@@ -157,9 +157,14 @@ function measureText(text: string, field: FieldDefinition, fontSize: number): nu
 
 function readTranslate(value: string | null): { x: number; y: number } {
   if (!value) return { x: 0, y: 0 }
-  const match = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)/.exec(value)
-  if (!match) return { x: 0, y: 0 }
-  return { x: Number(match[1]) || 0, y: Number(match[2]) || 0 }
+  // Chained translates add up ("translate(800 40) translate(-16 24)").
+  let x = 0
+  let y = 0
+  for (const match of value.matchAll(/translate\(\s*([-\d.e]+)(?:[\s,]+([-\d.e]+))?/g)) {
+    x += Number(match[1]) || 0
+    y += Number(match[2]) || 0
+  }
+  return { x, y }
 }
 
 /**
@@ -169,7 +174,12 @@ export function analyseRenderedCard(
   svg: string,
   fields: FieldDefinition[],
   cardData: CardData,
-  dimensions: { width: number; height: number },
+  /**
+   * The card's size in the template's units, and where its right edge is.
+   * The edge is not the width when the viewBox does not start at 0 or the
+   * card is smaller than the artwork (bleed).
+   */
+  dimensions: { width: number; height: number; right?: number },
 ): CardIssue[] {
   const issues: CardIssue[] = []
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
@@ -210,7 +220,7 @@ export function analyseRenderedCard(
       const bbox = element?.getAttribute('transform')
       if (bbox) {
         const { x } = readTranslate(bbox)
-        if (x > dimensions.width) {
+        if (x > (dimensions.right ?? dimensions.width)) {
           issues.push({
             severity: 'warning',
             fieldId: field.id,
@@ -264,12 +274,13 @@ export function analyseRenderedCard(
       if (width === undefined) continue
 
       const right = originX + baseX + width
-      if (right > dimensions.width) {
+      const edge = dimensions.right ?? dimensions.width
+      if (right > edge) {
         issues.push({
           severity: 'error',
           fieldId: field.id,
           fieldLabel: label,
-          message: `"${line}" runs ${Math.round(right - dimensions.width)} units past the edge of the card.`,
+          message: `"${line}" runs ${Math.round(right - edge)} units past the edge of the card.`,
         })
         break
       }
@@ -304,9 +315,13 @@ export function runTestCards(
   customValues: Record<string, string> = {},
   cases: TestCase[] = TEST_CASES,
 ): TestCardResult[] {
+  const trim = template.cardArea?.trimBox
   const dimensions = {
     width: template.viewBox?.width ?? template.width,
     height: template.viewBox?.height ?? template.height,
+    right: trim
+      ? trim.x + trim.width
+      : (template.viewBox?.x ?? 0) + (template.viewBox?.width ?? template.width),
   }
 
   return cases.map((testCase) => {

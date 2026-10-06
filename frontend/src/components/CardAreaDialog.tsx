@@ -68,6 +68,12 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
 
   const selected = candidates.find((candidate) => candidate.id === selectedId) ?? null
   const format = CARD_FORMATS.find((entry) => entry.id === formatId) ?? CARD_FORMATS[0]
+  // Formats are listed landscape; a tall box is the same card turned.
+  const box = selected?.box ?? canvas
+  const portrait = Boolean(box && box.height > box.width)
+  const cardSize = portrait
+    ? `${format.heightMm} × ${format.widthMm}`
+    : `${format.widthMm} × ${format.heightMm}`
 
   const applied = useMemo<AppliedCardArea | null>(() => {
     if (!template || !canvas || !selected) return null
@@ -225,7 +231,7 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
                   Keep the bleed
                   <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     On, the artwork is untouched and only its printed size is corrected, so the trim
-                    line lands at exactly {format.widthMm} × {format.heightMm} mm with the margin still
+                    line lands at exactly {cardSize} mm with the margin still
                     there to cut through. Off, the artwork is cropped to the trim line and the bleed is
                     discarded.
                   </span>
@@ -260,7 +266,7 @@ export function CardAreaDialog({ open, onOpenChange, template, onApply }: CardAr
                   </strong>
                   {keepBleed && (
                     <span style={{ color: 'var(--text-muted)' }}>
-                      (card {format.widthMm} × {format.heightMm} mm plus bleed)
+                      (card {cardSize} mm plus bleed)
                     </span>
                   )}
                 </div>

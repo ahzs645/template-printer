@@ -81,11 +81,12 @@ const { parseField } = await import('../src/lib/fieldParser.ts')
 const { normalizeStandardFieldName, parseBarcodeLayerId } = await import('../src/lib/standardFields.ts')
 const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await import('../src/lib/barcode.ts')
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
-const { TEST_CASES, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
+const { TEST_CASES, analyseRenderedCard, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
 const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } = await import('../src/lib/cardTrim.ts')
 const { calculateCardPositions, getSlotScale } = await import('../src/lib/exporter.ts')
 const { parsePunchLayerId, isInNonFieldLayer } = await import('../src/lib/layerRoles.ts')
 const { createStarterArtboard } = await import('../src/lib/starterKit.ts')
+const { cardBoxOf, orientLike } = await import('../src/lib/slotPlacement.ts')
 const {
   addVariant,
   getDesignVariants,
@@ -1060,6 +1061,51 @@ check('a blank prints none of its guides', async () => {
   const printed = renderSvgWithData(metadata, autoFields, {}, { mode: 'production' })
   assert.ok(!/id="guides"|id="punch_|id="guide_magnetic/.test(printed))
   assert.deepEqual(metadata.punch, { position: 'left-center', shape: 'slot' })
+})
+
+// --- portrait and landscape --------------------------------------------------
+
+console.log('\norientation')
+
+check('a portrait trim line is the same format turned', async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 162 252">
+    <rect x="4.5" y="4.5" width="153" height="243" fill="none" stroke="#000"/><text id="firstName" x="20" y="40">A</text></svg>`
+  const { metadata } = await parseTemplateString(svg, 'portrait.svg')
+  const [candidate] = metadata.trimCandidates
+  assert.equal(candidate?.bestFormat?.id, 'id-1', 'a tall trim line is recognised as ID-1')
+  const applied = applyCardArea(metadata.rawSvg, metadata.viewBox, { box: candidate.box, format: CARD_FORMATS[0], keepBleed: true })
+  assert.equal(applied.trimWidthMm, 53.975)
+  assert.equal(applied.trimHeightMm, 85.725)
+  assert.ok(Math.abs(applied.widthMm - 57.15) < 0.01, `canvas ${applied.widthMm} mm wide`)
+})
+
+check('a landscape back is turned to sit on a portrait card', () => {
+  const back = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 252 162" width="88.9mm" height="57.15mm"><rect x="10" y="20" width="252" height="162"/></svg>'
+  const turned = orientLike(back, { width: 57.15, height: 88.9 })
+  assert.match(turned, /viewBox="0 0 162 252"/)
+  assert.match(turned, /width="57.15mm"/)
+  assert.match(turned, /rotate\(90\)/)
+  assert.equal(orientLike(back, { width: 88.9, height: 57.15 }), back, 'same orientation is left alone')
+})
+
+check('the card box in a slot is the trim, not the bleed', () => {
+  const doc = new DOMParser().parseFromString(createStarterArtboard('front', { orientation: 'portrait' }), 'image/svg+xml')
+  assert.deepEqual(cardBoxOf(doc.documentElement), { x: 0, y: 0, width: 53.975, height: 85.725 })
+})
+
+check('test cards measure overflow from the card, wherever its viewBox starts', () => {
+  const rendered = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="1000 0 100 60"><text id="name" transform="translate(1010 20) translate(5 0)" font-size="4">Short</text></svg>'
+  const field = { id: 'name_1', sourceId: 'name', label: 'Name', type: 'text', x: 0, y: 0, fontSize: 4 }
+  const issues = analyseRenderedCard(rendered, [field], { name_1: 'Short' }, { width: 100, height: 60, right: 1100 })
+  assert.equal(issues.filter((issue) => issue.severity === 'error').length, 0)
+})
+
+check('replacing text keeps a position that lived on its tspan', async () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><text id="customValidYears" font-size="4"><tspan x="12" y="30">202X-202X</tspan></text></svg>'
+  const { metadata, autoFields } = await parseTemplateString(svg, 'valid.svg')
+  const field = autoFields.find((candidate) => candidate.sourceId === 'customValidYears')
+  const out = renderSvgWithData(metadata, autoFields, { [field.id]: '2025-2029' })
+  assert.match(out, /<text[^>]*x="12"[^>]*y="30"|<text[^>]*y="30"[^>]*x="12"/)
 })
 
 // --- result -----------------------------------------------------------------

@@ -60,7 +60,8 @@ function aspectOf(box: Box): number {
 }
 
 function closestFormat(box: Box): { format: CardFormat | null; errorPercent: number } {
-  const aspect = aspectOf(box)
+  // Formats are listed landscape; a portrait card is the same format turned.
+  const aspect = box.width >= box.height ? aspectOf(box) : aspectOf({ ...box, width: box.height, height: box.width })
   if (!aspect) return { format: null, errorPercent: Number.POSITIVE_INFINITY }
 
   let best: CardFormat | null = null
@@ -312,8 +313,12 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
     throw new Error('Could not read the template while setting its card area.')
   }
 
-  const unitsPerMmX = area.box.width / area.format.widthMm
-  const unitsPerMmY = area.box.height / area.format.heightMm
+  // A portrait card is the same format turned a quarter.
+  const portrait = area.box.height > area.box.width
+  const cardWidthMm = portrait ? area.format.heightMm : area.format.widthMm
+  const cardHeightMm = portrait ? area.format.widthMm : area.format.heightMm
+  const unitsPerMmX = area.box.width / cardWidthMm
+  const unitsPerMmY = area.box.height / cardHeightMm
 
   const trimLineRemoved = area.removeTrimLine ? removeTrimRectangle(root, area.box) : false
 
@@ -333,8 +338,8 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
       bottom: round((canvas.y + canvas.height - (area.box.y + area.box.height)) / unitsPerMmY),
     }
   } else {
-    widthMm = area.format.widthMm
-    heightMm = area.format.heightMm
+    widthMm = cardWidthMm
+    heightMm = cardHeightMm
     root.setAttribute('viewBox', `${round(area.box.x)} ${round(area.box.y)} ${round(area.box.width)} ${round(area.box.height)}`)
   }
 
@@ -355,8 +360,8 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
     heightMm: round(heightMm),
     bleedMm,
     trimBox,
-    trimWidthMm: area.format.widthMm,
-    trimHeightMm: area.format.heightMm,
+    trimWidthMm: cardWidthMm,
+    trimHeightMm: cardHeightMm,
     trimLineRemoved,
   }
 }

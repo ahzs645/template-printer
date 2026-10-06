@@ -1572,6 +1572,15 @@ export function getSlotScale(
 }
 
 function getTemplateSizeInMm(template: TemplateMeta): { widthMm: number; heightMm: number } {
+  // Drawn in pixels or points (as Illustrator exports), the card area is what
+  // says how big the card is; the artwork around it scales with it.
+  const area = template.cardArea
+  if (template.unit !== 'mm' && area && template.viewBox && area.trimBox.width > 0 && area.trimBox.height > 0) {
+    return {
+      widthMm: (template.viewBox.width * area.trimWidthMm) / area.trimBox.width,
+      heightMm: (template.viewBox.height * area.trimHeightMm) / area.trimBox.height,
+    }
+  }
   const widthMm = template.unit === 'mm' ? template.width : template.width / PX_PER_MM
   const heightMm = template.unit === 'mm' ? template.height : template.height / PX_PER_MM
   return { widthMm, heightMm }

@@ -184,8 +184,11 @@ function applyRecipeSteps(recipe) {
     const y = Number(host.getAttribute('y') || 0)
     const classes = [text.getAttribute('class'), host.getAttribute('class'), host.parentElement !== text ? host.parentElement.getAttribute('class') : null]
       .filter(Boolean).join(' ')
-    const value = svgEl('text', { id: rule.id, class: classes || undefined, transform: text.getAttribute('transform') || undefined })
-    value.appendChild(svgEl('tspan', { x: r3(x), y: r3(y) })).textContent = rule.sample ?? rule.value
+    // The offset goes into the transform, so the value's position does not
+    // depend on a tspan that is replaced when the field is filled in.
+    const transform = [text.getAttribute('transform'), `translate(${r3(x)} ${r3(y)})`].filter(Boolean).join(' ')
+    const value = svgEl('text', { id: rule.id, class: classes || undefined, transform })
+    value.appendChild(svgEl('tspan', { x: 0, y: 0 })).textContent = rule.sample ?? rule.value
     text.parentNode.insertBefore(value, text.nextSibling)
     host.textContent = host.textContent.slice(0, index).replace(/\s+$/, ' ')
     if (!host.textContent.trim()) host.remove()

@@ -76,28 +76,42 @@ export function CardGuideOverlay({
   const widthMm = cardWidthMm
   const heightMm = cardHeightMm
   const punchRect = getPunchRect({ punch, punchShape, widthMm, heightMm })
-  const punchHitsStripe =
+
+  // A stripe runs along the card's long edge. Its ISO position is measured
+  // from the top with the card landscape; on a portrait card that edge is the
+  // right-hand side (the card turned a quarter clockwise).
+  const portrait = heightMm > widthMm
+  const band = (offset: number, thickness: number) =>
+    portrait
+      ? { x: widthMm - offset - thickness, y: 0, width: thickness, height: heightMm }
+      : { x: 0, y: offset, width: widthMm, height: thickness }
+  const stripe = band(magneticStripeTopMm, magneticStripeHeightMm)
+  const punchHitsStripe = Boolean(
     magneticStripe &&
-    punchConflictsWithStripe({
-      punch,
-      punchShape,
-      widthMm,
-      heightMm,
-      magneticStripeTopMm,
-      magneticStripeHeightMm,
-    })
+      punchRect &&
+      (portrait
+        ? punchRect.x < stripe.x + stripe.width && punchRect.x + punchRect.width > stripe.x
+        : punchConflictsWithStripe({
+            punch,
+            punchShape,
+            widthMm,
+            heightMm,
+            magneticStripeTopMm,
+            magneticStripeHeightMm,
+          })),
+  )
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
       {magneticStripe && (
         <div
           style={{
-            ...box(0, magneticStripeTopMm, widthMm, magneticStripeHeightMm),
+            ...box(stripe.x, stripe.y, stripe.width, stripe.height),
             background: 'rgba(24, 24, 27, 0.82)',
-            borderTop: '1px solid rgba(255,255,255,0.35)',
-            borderBottom: '1px solid rgba(255,255,255,0.35)',
+            [portrait ? 'borderLeft' : 'borderTop']: '1px solid rgba(255,255,255,0.35)',
+            [portrait ? 'borderRight' : 'borderBottom']: '1px solid rgba(255,255,255,0.35)',
           }}
-          title={`Magnetic stripe — ${magneticStripeHeightMm} mm, ${magneticStripeTopMm} mm from the top edge`}
+          title={`Magnetic stripe — ${magneticStripeHeightMm} mm, ${magneticStripeTopMm} mm from the ${portrait ? 'right-hand' : 'top'} edge`}
         />
       )}
 
@@ -107,7 +121,10 @@ export function CardGuideOverlay({
           <div
             key={track.track}
             style={{
-              ...box(0, track.top, widthMm, track.bottom - track.top),
+              ...(() => {
+              const rect = band(track.top, track.bottom - track.top)
+              return box(rect.x, rect.y, rect.width, rect.height)
+            })(),
               border: '1px dashed rgba(0, 208, 255, 0.9)',
               boxSizing: 'border-box',
             }}

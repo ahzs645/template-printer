@@ -165,7 +165,7 @@
           <g>
             <text class="cls-19" transform="translate(247.24 538.24)" id="fullName_First_MiddleInitial_Last"><tspan x="0" y="0">Timber J. </tspan><tspan class="cls-82" x="91.88" y="0">W</tspan><tspan class="cls-76" x="110.4" y="0">olves</tspan></text>
             <text class="cls-32" transform="translate(251.17 563.62)" id="studentId"><tspan x="0" y="0">230135918</tspan></text>
-            <text transform="translate(250.32 602.34)" data-static="true"><tspan><tspan class="cls-20" x="0" y="0">V</tspan><tspan class="cls-19" x="11.12" y="0">alid: </tspan></tspan></text><text id="customValidYears" class="cls-31" transform="translate(250.32 602.34)"><tspan x="55.22" y="0">202X-202X</tspan></text>
+            <text transform="translate(250.32 602.34)" data-static="true"><tspan><tspan class="cls-20" x="0" y="0">V</tspan><tspan class="cls-19" x="11.12" y="0">alid: </tspan></tspan></text><text id="customValidYears" class="cls-31" transform="translate(250.32 602.34) translate(55.22 0)"><tspan x="0" y="0">202X-202X</tspan></text>
             <text class="cls-25" transform="translate(284.04 497.87)" data-static="true"><tspan x="0" y="0">Identification Ca</tspan><tspan class="cls-83" x="176.15" y="0">r</tspan><tspan x="184.5" y="0">d</tspan></text>
           </g>
         </g>

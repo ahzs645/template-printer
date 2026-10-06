@@ -136,6 +136,7 @@ import {
 } from './lib/designVariants'
 import { VariantsPanel } from './components/VariantsPanel'
 import { useVariantArtwork } from './hooks/useVariantArtwork'
+import { orientLike } from './lib/slotPlacement'
 import { cn } from './lib/utils'
 
 /**
@@ -907,6 +908,31 @@ function App() {
     )
     return { x: rect.x, y: rect.y }
   }, [template])
+
+  /**
+   * The other side's preview box, at the same scale as this one. It can be the
+   * other way round — a landscape back on a portrait badge — so it takes its
+   * own proportions rather than this side's.
+   */
+  const otherSideBox = useMemo(() => {
+    const viewBox = otherSidePreview ? /viewBox="([^"]+)"/.exec(otherSidePreview.svg) : null
+    const [, , w, h] = viewBox ? viewBox[1].trim().split(/[\s,]+/).map(Number) : []
+    if (!w || !h) return { width: previewWidth, height: previewHeight }
+    const aspect = w / h
+    const thisAspect = previewWidth / previewHeight
+    if (aspect >= 1 === thisAspect >= 1) return { width: previewWidth, height: previewWidth / aspect }
+    const longEdge = Math.max(previewWidth, previewHeight)
+    return aspect >= 1 ? { width: longEdge, height: longEdge / aspect } : { width: longEdge * aspect, height: longEdge }
+  }, [otherSidePreview, previewWidth, previewHeight])
+
+  /** Both sides for the lanyard view, the back turned to the front's shape. */
+  const lanyardSides = useMemo(() => {
+    const front = activeSide === 'back' ? otherSidePreview?.svg ?? renderedSvg : renderedSvg
+    const back = activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null
+    const frontBox = front ? /viewBox="([^"]+)"/.exec(front)?.[1].trim().split(/[\s,]+/).map(Number) : null
+    if (!front || !back || !frontBox || frontBox.length !== 4) return { front, back }
+    return { front, back: orientLike(back, { width: frontBox[2], height: frontBox[3] }) }
+  }, [activeSide, otherSidePreview, renderedSvg])
 
   /** The artwork's full physical size, bleed included. */
   const artworkSizeMm = useMemo(() => {
@@ -2719,7 +2745,7 @@ function App() {
                           >
                             <InlineSvg
                               className="canvas-preview"
-                              style={{ width: previewWidth, height: previewHeight }}
+                              style={{ width: otherSideBox.width, height: otherSideBox.height }}
                               markup={otherSidePreview.svg}
                               name="editor-other-side"
                             />
@@ -3181,8 +3207,8 @@ function App() {
       <LanyardDialog
         open={lanyardOpen}
         onOpenChange={setLanyardOpen}
-        frontSvg={activeSide === 'back' ? otherSidePreview?.svg ?? renderedSvg : renderedSvg}
-        backSvg={activeSide === 'back' ? renderedSvg : otherSidePreview?.svg ?? null}
+        frontSvg={lanyardSides.front}
+        backSvg={lanyardSides.back}
         widthMm={cardSizeMm.width}
         heightMm={cardSizeMm.height}
         artworkWidthMm={artworkSizeMm.width}

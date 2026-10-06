@@ -1188,6 +1188,10 @@ function applySvgTextField(
 
   if (lines.length <= 1) {
     element.textContent = lines[0] ?? ''
+    // The position may have lived on the tspan just removed (Illustrator offsets
+    // a word within a line that way); keep it, or the text jumps to the origin.
+    if (!element.hasAttribute('x') && baseX !== '0') element.setAttribute('x', baseX)
+    if (!element.hasAttribute('y') && baseY !== '0') element.setAttribute('y', baseY)
   } else {
     // Prefer the spacing the template itself used; only fall back to a ratio
     // when the original was a single line and has nothing to copy.

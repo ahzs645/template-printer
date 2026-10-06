@@ -11,10 +11,10 @@ import type { UserData } from '../lib/fieldParser'
 import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
 import type { ExportBackSide } from '../hooks/useExportBackSide'
+import { placeCardInSlot } from '../lib/slotPlacement'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
 import { cn } from '../lib/utils'
 import { resolveSlotCardData, type SlotAssignment } from '../lib/exporter'
-import { scopeSvgElement } from '../lib/svgTemplate'
 import { InlineSvg } from './InlineSvg'
 import { describeStandardField } from '../lib/standardFields'
 
@@ -119,12 +119,6 @@ function getSvgNaturalSize(svgElement: Element): { width: number; height: number
  */
 function trayName(name: string): string {
   return name.replace(/\s*[-\u2013]\s*\d+\s+cards?$/i, '')
-}
-
-function shouldRotateCard(cardWidth: number, cardHeight: number, slotWidth: number, slotHeight: number): boolean {
-  const normalScale = Math.min(slotWidth / cardWidth, slotHeight / cardHeight)
-  const rotatedScale = Math.min(slotWidth / cardHeight, slotHeight / cardWidth)
-  return rotatedScale > normalScale * 1.05
 }
 
 /** The print layout last used, so a repeat visit does not start from "None". */
@@ -603,39 +597,14 @@ export function ExportPage({
         const cardDoc = parser.parseFromString(cardMarkup, 'image/svg+xml')
         const cardSvg = cardDoc.documentElement
 
-        const cardViewBox = cardSvg.getAttribute('viewBox')
-        let cardNaturalWidth = 100
-        let cardNaturalHeight = 100
-
-        if (cardViewBox) {
-          const [, , vbW, vbH] = cardViewBox.split(/\s+/).map(parseFloat)
-          cardNaturalWidth = vbW
-          cardNaturalHeight = vbH
-        } else {
-          const cardWidth = cardSvg.getAttribute('width')
-          const cardHeight = cardSvg.getAttribute('height')
-          if (cardWidth) cardNaturalWidth = parseFloat(cardWidth)
-          if (cardHeight) cardNaturalHeight = parseFloat(cardHeight)
-        }
-
-        const scale = Math.min(slotWidth / cardNaturalWidth, slotHeight / cardNaturalHeight)
-        const scaledWidth = cardNaturalWidth * scale
-        const scaledHeight = cardNaturalHeight * scale
-
-        const offsetX = slotX + (slotWidth - scaledWidth) / 2
-        const offsetY = slotY + (slotHeight - scaledHeight) / 2
-
-        const cardGroup = layoutDoc.createElementNS('http://www.w3.org/2000/svg', 'g')
-        cardGroup.setAttribute('transform', `matrix(${scale}, 0, 0, ${scale}, ${offsetX}, ${offsetY})`)
-
-        const cardClone = cardSvg.cloneNode(true) as Element
-        const prefix = `slot${index + 1}-`
-        scopeSvgElement(cardClone, prefix)
-
-        Array.from(cardClone.children).forEach((child) => {
-          const clonedChild = child.cloneNode(true)
-          cardGroup.appendChild(clonedChild)
-        })
+        // SVG layouts print the card the way it is drawn, so it is not turned.
+        const cardGroup = placeCardInSlot(
+          layoutDoc,
+          cardSvg,
+          { x: slotX, y: slotY, width: slotWidth, height: slotHeight },
+          `slot${index + 1}-`,
+          { allowRotate: false },
+        )
 
         group.parentNode?.replaceChild(cardGroup, group)
       })
@@ -757,34 +726,12 @@ export function ExportPage({
         const cardSvg = cardDoc.documentElement
         if (cardSvg.tagName.toLowerCase() !== 'svg') continue
 
-        const { width: cardNaturalWidth, height: cardNaturalHeight } = getSvgNaturalSize(cardSvg)
-        const rotateCard = shouldRotateCard(cardNaturalWidth, cardNaturalHeight, cardWidth, cardHeight)
-        const fitWidth = rotateCard ? cardNaturalHeight : cardNaturalWidth
-        const fitHeight = rotateCard ? cardNaturalWidth : cardNaturalHeight
-        const scale = Math.min(cardWidth / fitWidth, cardHeight / fitHeight)
-
-        const scaledWidth = fitWidth * scale
-        const scaledHeight = fitHeight * scale
-        const offsetX = slotX + (cardWidth - scaledWidth) / 2
-        const offsetY = slotY + (cardHeight - scaledHeight) / 2
-
-        const cardGroup = layoutDoc.createElementNS(svgNs, 'g')
-        if (rotateCard) {
-          cardGroup.setAttribute(
-            'transform',
-            `matrix(0, ${scale}, ${-scale}, 0, ${offsetX + cardNaturalHeight * scale}, ${offsetY})`,
-          )
-        } else {
-          cardGroup.setAttribute('transform', `matrix(${scale}, 0, 0, ${scale}, ${offsetX}, ${offsetY})`)
-        }
-
-        const cardClone = cardSvg.cloneNode(true) as Element
-        scopeSvgElement(cardClone, `json-slot${index + 1}-`)
-
-        Array.from(cardClone.children).forEach((child) => {
-          const clonedChild = child.cloneNode(true)
-          cardGroup.appendChild(clonedChild)
-        })
+        const cardGroup = placeCardInSlot(
+          layoutDoc,
+          cardSvg,
+          { x: slotX, y: slotY, width: cardWidth, height: cardHeight },
+          `json-slot${index + 1}-`,
+        )
 
         layoutSvg.appendChild(cardGroup)
       }

@@ -80,7 +80,25 @@ docker-compose up
 **New Blank** generates any of this as a starting template. **Mag Stripe**,
 **Punch** and **Safe Area** draw the same geometry over an existing design as
 overlays, without changing the file. **Lanyard** hangs the card from its punch so
-you can see how it sits when worn.
+you can see how it sits when worn, on the hardware that would really hold it,
+modelled at retail sizes and passing through the hole:
+
+- a J-hook (44 mm, the usual for a slot);
+- a swivel hook (about 38 × 14 mm);
+- a vinyl strap clip (70 mm strap, 7/16 in snap) threaded through a slot;
+- a split ring (25 mm, the usual for a round hole);
+- a bulldog clip on the top edge of a card with no punch.
+
+**Close-up on the punch** follows the hardware as the card swings.
+
+Portrait and landscape are read from the artwork's shape; nothing needs
+setting:
+
+- a portrait card's magnetic-stripe guide runs along its long edge;
+- a landscape back on a portrait card is shown, and hung on the lanyard, turned
+  to match;
+- the tray layouts turn a portrait card into a landscape slot, in the preview
+  and in the PDF.
 
 **Packages**: a card design can be saved as a `.zip` holding the artwork for
 both sides, the field mappings, the card area and the fonts it uses. Opening one

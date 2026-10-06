@@ -168,7 +168,7 @@
         <g>
           
           
-          <text class="cls-21" transform="translate(1511.7804 251.1449)" data-static="true"><tspan class="cls-84" x="0" y="0">V</tspan><tspan x="8.34" y="0">ALID: </tspan></text><text id="customValidYears" class="cls-21" transform="translate(1511.7804 251.1449)"><tspan x="50.888" y="0">202X-202X</tspan></text>
+          <text class="cls-21" transform="translate(1511.7804 251.1449)" data-static="true"><tspan class="cls-84" x="0" y="0">V</tspan><tspan x="8.34" y="0">ALID: </tspan></text><text id="customValidYears" class="cls-21" transform="translate(1511.7804 251.1449) translate(50.888 0)"><tspan x="0" y="0">202X-202X</tspan></text>
         </g>
       </g>
       
