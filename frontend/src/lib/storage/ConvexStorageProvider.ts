@@ -175,6 +175,8 @@ export class ConvexStorageProvider implements StorageProvider {
       backCanvasData: payload.backCanvasData ?? null,
       cardWidth: payload.cardWidth ?? 86,
       cardHeight: payload.cardHeight ?? 54,
+      variants: payload.variants ?? null,
+      variantField: payload.variantField ?? null,
       createdAt: now,
       updatedAt: now,
     }

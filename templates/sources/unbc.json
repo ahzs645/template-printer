@@ -1,0 +1,72 @@
+{
+  "family": "unbc",
+  "title": "UNBC student ID",
+  "artboard": "unbc",
+  "split": { "aspect": 1.627 },
+  "back": "unbc/back.svg",
+  "designs": [
+    {
+      "slug": "landscape",
+      "name": "UNBC Student ID (landscape)",
+      "recipe": {
+        "texts": [
+          { "match": "WOLVES, TIMBER J.", "id": "fullName_Last_Comma_First_MiddleInitial_AllCaps" },
+          { "match": "230135918", "id": "studentId" }
+        ],
+        "splits": [{ "match": "VALID: 202X-202X", "value": "202X-202X", "id": "customValidYears", "optional": true }],
+        "photo": { "box": [6.43, 22.68, 16.41, 18.31] },
+        "staticText": true
+      },
+      "variants": [
+        { "card": "card-1", "slug": "raven-grey", "name": "Raven, grey" },
+        { "card": "card-2", "slug": "raven-grey-large", "name": "Raven, grey (large)" },
+        { "card": "card-3", "slug": "raven-grey-top", "name": "Raven, grey (top)" },
+        { "card": "card-5", "slug": "raven-colour", "name": "Raven, colour" },
+        { "card": "card-6", "slug": "raven-colour-large", "name": "Raven, colour (large)" },
+        { "card": "card-7", "slug": "raven-colour-top", "name": "Raven, colour (top)" },
+        { "card": "card-9", "slug": "crest", "name": "Crest" },
+        { "card": "card-10", "slug": "crest-right", "name": "Crest (right)" },
+        { "card": "card-8", "slug": "crest-no-validity", "name": "Crest, no validity line" },
+        { "card": "card-11", "slug": "shield", "name": "Shield" },
+        { "card": "card-12", "slug": "shield-large", "name": "Shield (large)" },
+        { "card": "card-13", "slug": "shield-small", "name": "Shield (small)" },
+        { "card": "card-14", "slug": "shield-outline", "name": "Shield outline" }
+      ]
+    },
+    {
+      "slug": "portrait",
+      "name": "UNBC Student ID (portrait)",
+      "recipe": {
+        "texts": [
+          { "match": "WOLVES, TIMBER J.", "id": "fullName_Last_Comma_First_MiddleInitial_AllCaps" },
+          { "match": "230135918", "id": "studentId" }
+        ],
+        "splits": [{ "match": "VALID: 202X-202X", "value": "202X-202X", "id": "customValidYears" }],
+        "photo": { "box": [3.97, 3.49, 35.46, 42.37] },
+        "staticText": true
+      },
+      "variants": [
+        { "card": "card-15", "slug": "shield-badge", "name": "Shield badge" },
+        { "card": "card-16", "slug": "shield-badge-logo-top", "name": "Shield badge, logo at top" },
+        { "card": "card-17", "slug": "crest", "name": "Crest" },
+        { "card": "card-18", "slug": "raven", "name": "Raven" },
+        { "card": "card-19", "slug": "raven-low", "name": "Raven (low)" },
+        { "card": "card-20", "slug": "shield-outline", "name": "Shield outline" }
+      ]
+    },
+    {
+      "slug": "id-card",
+      "name": "UNBC Identification Card",
+      "recipe": {
+        "texts": [
+          { "match": "Timber J. Wolves", "id": "fullName_First_MiddleInitial_Last" },
+          { "match": "230135918", "id": "studentId" }
+        ],
+        "splits": [{ "match": "Valid: 202X-202X", "value": "202X-202X", "id": "customValidYears" }],
+        "photo": { "box": [5.13, 17.95, 28.16, 28.16], "replace": true, "fill": "#808080" },
+        "staticText": true
+      },
+      "variants": [{ "card": "card-4", "slug": "green", "name": "Green" }]
+    }
+  ]
+}

@@ -196,10 +196,12 @@ export function createCardBlankSvg(options: CardBlankOptions): string {
   parts.push(`  <rect id="cardBackground" x="0" y="0" width="${round(widthMm)}" height="${round(heightMm)}" fill="#ffffff"/>`)
 
   if (magneticStripe && side === 'back') {
-    parts.push('  <g id="magneticStripe">')
+    // A guide, not ink: the stripe is on the card stock, and printing over it
+    // can stop it reading.
+    parts.push('  <g id="guide_magnetic_stripe">')
     parts.push(
       `    <rect x="0" y="${round(magneticStripeTopMm)}" width="${round(widthMm)}" ` +
-        `height="${round(magneticStripeHeightMm)}" fill="#1a1a1a"/>`,
+        `height="${round(magneticStripeHeightMm)}" fill="#1a1a1a" fill-opacity="0.35"/>`,
     )
     if (showMagneticTracks) {
       for (const track of MAGNETIC_TRACKS_MM) {
@@ -257,7 +259,11 @@ export function createCardBlankSvg(options: CardBlankOptions): string {
 
   const punchRect = getPunchRect({ punch, punchShape, widthMm, heightMm })
   if (punchRect) {
-    parts.push('  <g id="punchGuide" fill="none" stroke="#ff2d55" stroke-width="0.2" stroke-dasharray="0.8 0.6">')
+    // Named punch_<shape>_<position>: the app reads the punch from the name,
+    // and never prints the layer.
+    parts.push(
+      `  <g id="punch_${punchShape}_${punch.replace(/-/g, '_')}" fill="none" stroke="#ff2d55" stroke-width="0.2" stroke-dasharray="0.8 0.6">`,
+    )
     if (punchShape === 'round') {
       parts.push(
         `    <circle cx="${round(punchRect.x + punchRect.width / 2)}" cy="${round(punchRect.y + punchRect.height / 2)}" ` +
@@ -274,7 +280,8 @@ export function createCardBlankSvg(options: CardBlankOptions): string {
   }
 
   if (guides) {
-    parts.push('  <g id="printGuides" fill="none" stroke-width="0.15" pointer-events="none">')
+    // "guides" is shown while editing and left out of every print.
+    parts.push('  <g id="guides" fill="none" stroke-width="0.15" pointer-events="none">')
     parts.push(
       `    <rect x="${round(-bleedMm)}" y="${round(-bleedMm)}" width="${round(widthMm + bleedMm * 2)}" ` +
         `height="${round(heightMm + bleedMm * 2)}" stroke="#ff9500" stroke-dasharray="1 1"/>`,

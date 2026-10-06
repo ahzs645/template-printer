@@ -1,0 +1,115 @@
+{
+  "family": "northern-health",
+  "title": "Northern Health staff badge",
+  "artboard": "northern-health",
+  "split": { "aspect": 1.627 },
+  "designs": [
+    {
+      "slug": "portrait-bar",
+      "name": "Northern Health badge (portrait, side bar)",
+      "variants": [
+        {
+          "card": "card-1",
+          "slug": "no-punch",
+          "name": "No punch",
+          "recipe": {
+            "texts": [
+              { "match": "Ahmad Jalil", "id": "fullName_First_Last" },
+              { "match": "Clinical Informatics Specialist", "id": "position" }
+            ],
+            "photo": { "box": [3.97, 3.49, 35.46, 42.37] },
+            "staticText": true
+          }
+        },
+        {
+          "card": "card-2",
+          "slug": "slot-punch",
+          "name": "Slot punch",
+          "recipe": {
+            "remove": [
+              { "box": [3.81, 8.82, 35.78, 45.66], "tags": "use,image" },
+              { "inside": [4.2, 55.7, 15.3, 2.5], "tags": "path,polygon" },
+              { "inside": [4.3, 66.2, 25.0, 6.4], "tags": "path,polygon" }
+            ],
+            "photo": { "box": [3.97, 10.43, 35.46, 42.37] },
+            "punch": { "box": [18.04, 3.4, 14, 2.91], "id": "punch_slot_top_center" },
+            "addTexts": [
+              { "id": "fullName_First_Last", "lines": ["Ahmad Jalil"], "x": 4.37, "y": 57.95, "size": 2.81,
+                "font": "HelveticaNeue-Medium, 'Helvetica Neue', Helvetica, Arial, sans-serif", "weight": 500, "fill": "#000000" },
+              { "id": "position", "lines": ["Clinical Informatics", "Specialist"], "x": 4.37, "y": 68.5, "size": 2.81, "lineHeight": 1.19,
+                "font": "HelveticaNeue-Medium, 'Helvetica Neue', Helvetica, Arial, sans-serif", "weight": 500, "fill": "#000000" }
+            ],
+            "staticText": true
+          }
+        }
+      ]
+    },
+    {
+      "slug": "portrait-framed",
+      "name": "Northern Health badge (portrait, framed)",
+      "variants": [
+        {
+          "card": "card-3",
+          "slug": "slot-punch",
+          "name": "Slot punch",
+          "recipe": {
+            "remove": [{ "box": [17.09, 64.38, 17.66, 4.69], "tags": "text" }, { "box": [3.27, 71.26, 46.97, 4.5], "tags": "text" }],
+            "photo": { "clipOf": [9.1, 17.42, 35.78, 45.66] },
+            "punch": { "box": [19.94, 5.44, 14, 2.91], "id": "punch_slot_top_center" },
+            "addTexts": [
+              { "id": "fullName_First_LastInitial", "lines": ["Ahmad J"], "x": 26.13, "y": 68.17, "size": 4.185, "anchor": "middle",
+                "font": "Arial-BoldMT, Arial, Helvetica, sans-serif", "weight": 700, "fill": "#000000" },
+              { "id": "position", "lines": ["Spec. Clinical Informatics"], "x": 26.13, "y": 74.76, "size": 3.863, "anchor": "middle",
+                "font": "Arial-BoldMT, Arial, Helvetica, sans-serif", "weight": 700, "fill": "#000000" }
+            ],
+            "staticText": true
+          }
+        }
+      ]
+    },
+    {
+      "slug": "portrait-round-photo",
+      "name": "Northern Health badge (portrait, round photo)",
+      "variants": [
+        {
+          "card": "card-4",
+          "slug": "slot-punch",
+          "name": "Slot punch",
+          "recipe": {
+            "remove": [{ "inside": [4.4, 52.4, 27.2, 5.1], "tags": "path,polygon" }],
+            "texts": [{ "match": "Spec. Clinical Informatics", "id": "position" }],
+            "photo": { "clipOf": [10, 8.42, 33.98, 43.36], "circle": true },
+            "punch": { "box": [20.54, 4.22, 14, 2.91], "id": "punch_slot_top_center" },
+            "addTexts": [
+              { "id": "fullName_First_LastInitial", "lines": ["Ahmad J"], "x": 4.53, "y": 57.29, "size": 6.58,
+                "font": "Arial-BoldMT, Arial, Helvetica, sans-serif", "weight": 700, "fill": "#000000" }
+            ],
+            "staticText": true
+          }
+        }
+      ]
+    },
+    {
+      "slug": "landscape",
+      "name": "Northern Health badge (landscape)",
+      "recipe": {
+        "remove": [
+          { "box": [55.82, 2.13, 24.01, 30.64], "tolerance": 1.2, "tags": "image,use" },
+          { "inside": [4.9, 16.4, 23.6, 4.5], "tags": "path,polygon" }
+        ],
+        "texts": [{ "match": "Spec. Clinical Informatics", "id": "position" }],
+        "photo": { "box": [56.05, 3.33, 23.05, 27.59], "tags": "rect" },
+        "punch": { "box": [36.04, 3.33, 12.16, 2.53], "id": "punch_slot_top_center" },
+        "addTexts": [
+          { "id": "fullName_First_LastInitial", "lines": ["Ahmad J"], "x": 4.97, "y": 20.73, "size": 5.73,
+            "font": "Arial-BoldMT, Arial, Helvetica, sans-serif", "weight": 700, "fill": "#000000" }
+        ],
+        "staticText": true
+      },
+      "variants": [
+        { "card": "card-5", "slug": "tagline", "name": "With tagline" },
+        { "card": "card-6", "slug": "no-tagline", "name": "No tagline" }
+      ]
+    }
+  ]
+}

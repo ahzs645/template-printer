@@ -342,10 +342,12 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
   root.setAttribute('height', `${round(heightMm)}mm`)
   root.setAttributeNS(null, 'data-card-format', area.format.id)
 
-  // Cropping moves the origin onto the trim line, so the card then starts at 0,0.
-  const trimBox: Box = area.keepBleed
-    ? { ...area.box }
-    : { x: 0, y: 0, width: area.box.width, height: area.box.height }
+  // Either way the card is the box, in the artwork's own coordinates. Cropping
+  // moves the viewBox onto it rather than moving it to 0,0, so the guides would
+  // be offset by the box's origin if it were restated from 0,0 here.
+  const trimBox: Box = { ...area.box }
+  // Recorded in the file so the card area survives being saved and reopened.
+  root.setAttributeNS(null, 'data-trim-box', [trimBox.x, trimBox.y, trimBox.width, trimBox.height].map(round).join(' '))
 
   return {
     svg: new XMLSerializer().serializeToString(root),
@@ -357,6 +359,100 @@ export function applyCardArea(rawSvg: string, canvas: Box, area: CardArea): Appl
     trimHeightMm: area.format.heightMm,
     trimLineRemoved,
   }
+}
+
+/**
+ * The card area a template declares for itself.
+ *
+ * `data-card-format` names the format and `data-trim-box` (x y width height, in
+ * the template's own units) says where the card is. Without a trim box the
+ * format is only trusted when the file is already drawn at that size, i.e. the
+ * whole canvas is the card. A tall trim box is a portrait card: the format's
+ * sides are swapped rather than treating it as a different format.
+ */
+export function readDeclaredCardArea(
+  root: Element,
+  canvas: Box,
+  physical: { width: number; height: number; unit: 'mm' | 'px' },
+): {
+  formatId: string
+  keepBleed: boolean
+  bleedMm?: Bleed
+  trimBox: Box
+  trimWidthMm: number
+  trimHeightMm: number
+} | null {
+  // A rectangle named guide_trim says outright which rectangle is the card.
+  // Unlike data-* attributes, a layer name survives a trip through Illustrator.
+  const named = namedTrimBox(root)
+  const format =
+    CARD_FORMATS.find((candidate) => candidate.id === root.getAttribute('data-card-format')) ??
+    (named ? closestFormatEitherWay(named) : undefined)
+  if (!format) return null
+
+  const declared = named
+    ? [named.x, named.y, named.width, named.height]
+    : root
+    .getAttribute('data-trim-box')
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number)
+  let trimBox: Box
+  if (declared && declared.length === 4 && declared.every(Number.isFinite) && declared[2] > 0 && declared[3] > 0) {
+    trimBox = { x: declared[0], y: declared[1], width: declared[2], height: declared[3] }
+  } else {
+    if (physical.unit !== 'mm') return null
+    const matches = (a: number, b: number) => Math.abs(a - b) < 0.5
+    const sameSize =
+      (matches(physical.width, format.widthMm) && matches(physical.height, format.heightMm)) ||
+      (matches(physical.width, format.heightMm) && matches(physical.height, format.widthMm))
+    if (!sameSize) return null
+    trimBox = { ...canvas }
+  }
+
+  const portrait = trimBox.height > trimBox.width
+  const trimWidthMm = portrait ? format.heightMm : format.widthMm
+  const trimHeightMm = portrait ? format.widthMm : format.heightMm
+  const unitsPerMmX = trimBox.width / trimWidthMm
+  const unitsPerMmY = trimBox.height / trimHeightMm
+  const bleedMm: Bleed = {
+    left: round((trimBox.x - canvas.x) / unitsPerMmX),
+    right: round((canvas.x + canvas.width - (trimBox.x + trimBox.width)) / unitsPerMmX),
+    top: round((trimBox.y - canvas.y) / unitsPerMmY),
+    bottom: round((canvas.y + canvas.height - (trimBox.y + trimBox.height)) / unitsPerMmY),
+  }
+  const keepBleed = Object.values(bleedMm).some((value) => value > 0.01)
+
+  return {
+    formatId: format.id,
+    keepBleed,
+    ...(keepBleed ? { bleedMm } : {}),
+    trimBox,
+    trimWidthMm,
+    trimHeightMm,
+  }
+}
+
+const TRIM_ID = /^_?guide[_-]?trim(?:$|[_-])/i
+
+/** The untransformed rectangle named guide_trim, if the artwork has one. */
+function namedTrimBox(root: Element): Box | null {
+  for (const element of Array.from(root.querySelectorAll('rect[id]'))) {
+    if (!TRIM_ID.test(element.getAttribute('id') ?? '')) continue
+    if (element.getAttribute('transform') || element.parentElement?.closest('[transform]')) continue
+    const width = readNumber(element.getAttribute('width'))
+    const height = readNumber(element.getAttribute('height'))
+    if (!width || !height) continue
+    return { x: readNumber(element.getAttribute('x')) ?? 0, y: readNumber(element.getAttribute('y')) ?? 0, width, height }
+  }
+  return null
+}
+
+/** The card format a rectangle's shape matches, whichever way up it is drawn. */
+function closestFormatEitherWay(box: Box): CardFormat | undefined {
+  const landscape = box.width >= box.height ? box : { ...box, width: box.height, height: box.width }
+  const { format, errorPercent } = closestFormat(landscape)
+  return format && errorPercent < 3 ? format : undefined
 }
 
 /** How closely a rectangle's geometry has to match to count as the same one. */

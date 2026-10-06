@@ -6,7 +6,7 @@ import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from './ui/select'
 import { Switch } from './ui/switch'
 import type { TemplateSummary } from '../lib/templates'
-import type { FieldDefinition, CardData, PrintLayout, CardDesign } from '../lib/types'
+import type { FieldDefinition, CardData, PrintLayout, CardDesign, TemplateMeta } from '../lib/types'
 import type { UserData } from '../lib/fieldParser'
 import type { ColorProfile } from '../lib/calibration/exportUtils'
 import { useExportPreview } from '../hooks/useExportPreview'
@@ -76,6 +76,8 @@ export type ExportPageProps = {
   selectedCardDesignId: string | null
   /** The back of the active card design, when it has one. */
   backSide: ExportBackSide | null
+  /** Each person's own front, for designs whose variants are chosen per record. */
+  resolveFront?: ((user: UserData) => TemplateMeta | null) | null
   onCardDesignSelect: (designId: string | null) => void
   onTemplateSelect: (template: TemplateSummary) => void
   onCardDataChange: (fieldId: string, value: string) => void
@@ -360,6 +362,7 @@ export function ExportPage({
   cardDesigns,
   selectedCardDesignId,
   backSide,
+  resolveFront = null,
   onCardDesignSelect,
   onTemplateSelect,
   onCardDataChange,
@@ -445,6 +448,7 @@ export function ExportPage({
     fields,
     renderedSvg,
     backSide,
+    resolveFront,
   })
 
   const selectedPrintLayout = printTemplates.find(

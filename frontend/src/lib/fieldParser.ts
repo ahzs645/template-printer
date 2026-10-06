@@ -221,6 +221,7 @@ type NameSegment =
  *
  * Supported format tokens:
  * - First / Last / Middle (or MiddleName) / MiddleInitial
+ * - FirstInitial / LastInitial -> the bare letter, for "Ahmad J" badge names
  * - Comma        -> attaches to the previous word, followed by a space
  * - LineBreak    -> starts a new line (aliases: NewLine, Break)
  *
@@ -232,6 +233,7 @@ type NameSegment =
  * - Last_Comma_LineBreak_First    -> "Wolves,\nTimber"
  * - First_MiddleInitial_Last      -> "Timber J. Wolves"
  * - First_Middle_Last             -> "Timber John Wolves"
+ * - First_LastInitial             -> "Timber W"
  *
  * Name parts that are empty for a given user are dropped, so a user with no
  * middle name renders "Timber Wolves" rather than "Timber  Wolves", and a
@@ -244,6 +246,9 @@ function formatFullName(formatParts: string[], userData: UserData, capitalizatio
     middle: userData.middleName || '',
     middlename: userData.middleName || '',
     middleinitial: toMiddleInitial(userData.middleName),
+    // Badges shorten to "Ahmad J": the bare letter, since nothing follows it.
+    firstinitial: userData.firstName?.trim().charAt(0).toUpperCase() || '',
+    lastinitial: userData.lastName?.trim().charAt(0).toUpperCase() || '',
   }
 
   const segments: NameSegment[] = []

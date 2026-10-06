@@ -41,6 +41,8 @@ const NAME_FORMAT_TOKENS = [
   'Middle',
   'MiddleName',
   'MiddleInitial',
+  'FirstInitial',
+  'LastInitial',
   'Comma',
   'LineBreak',
   'NewLine',
@@ -81,6 +83,8 @@ export const STANDARD_FIELDS = [
   'fullName_First_MiddleInitial_Last_AllCaps',
   'fullName_First_Middle_Last',
   'fullName_First_Middle_Last_AllCaps',
+  'fullName_First_LastInitial',
+  'fullName_First_LastInitial_AllCaps',
 
   // Composite name fields stacked over two lines
   'fullName_First_LineBreak_Last',

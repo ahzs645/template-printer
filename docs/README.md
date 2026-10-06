@@ -87,6 +87,50 @@ both sides, the field mappings, the card area and the fonts it uses. Opening one
 restores all of it, so a design moves between machines without the fonts being
 loaded again. Share links stay the lightweight option — they cannot carry fonts.
 
+<a id="variants"></a>
+**Variants**: a design often comes in several looks of the same card, such as a
+watermark in grey or in colour, with or without a lanyard slot, or a Student and
+a Staff edition. Each look is a variant, with its own front artwork. Variants
+share everything else:
+
+- the fields, and what each layer means (saving **Map Fields** on one variant
+  updates them all);
+- the back;
+- the sample data typed in while designing.
+
+Manage them under **Variants** in the Design tab's left panel:
+
+- add another front from an SVG or from the library;
+- rename a variant, remove it, or make it the default;
+- click one to switch to it.
+
+One package (`.zip`) carries every variant. The default is also stored where
+older versions of the app look for a single front, so those versions still open
+the default.
+
+Batch exports print the variant that is open. Alternatively, set **Variant for
+each person** to position, department or grade, and give each variant the values
+it is for (for example `Staff, Faculty`). Each record then prints with its own
+variant, in the same PDF and on the same tray sheets. A record that matches no
+variant gets the one that is open.
+
+**Designer starter kit** (in **New Blank**): a front and a back as artboards,
+landscape or portrait, for designing in Illustrator, Affinity, Inkscape or Figma.
+Each is the full card size plus 1/16 in of bleed. The kit includes:
+
+- guide layers for the bleed, trim, rounded corners, safe area, punch and
+  magnetic stripe;
+- placeholders already named for auto-mapping;
+- a README of the layer names.
+
+The guides are never printed. The trim is a rectangle named `guide_trim`, so an
+exported file opens at the right size with no Card Area step. See [Guides,
+Punches and Fixed Artwork](./svg-layer-naming.md#guides-punches-and-fixed-artwork).
+
+`templates/` holds the UNBC and Northern Health card library converted to this
+format, and the tools that convert a designer's mockup artboard; see
+[`templates/README.md`](../templates/README.md).
+
 **Opening a package from a link**: point the app at a hosted package with a
 `?url=` parameter and it downloads and opens it on load:
 

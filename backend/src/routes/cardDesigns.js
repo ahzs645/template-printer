@@ -7,9 +7,20 @@ import {
   updateCardDesign,
   deleteCardDesign,
   getTemplateById,
+  normalizeVariants,
 } from '../db.js'
 
 const router = Router()
+
+/** The first template a variant list points at that does not exist, if any. */
+function missingVariantTemplate(variants) {
+  for (const variant of variants ?? []) {
+    for (const templateId of [variant.frontTemplateId, variant.backTemplateId]) {
+      if (templateId && !getTemplateById(templateId)) return templateId
+    }
+  }
+  return null
+}
 
 router.get('/', (req, res, next) => {
   try {
@@ -61,11 +72,20 @@ router.post('/', (req, res, next) => {
       }
     }
 
+    const variants = normalizeVariants(req.body?.variants)
+    const missing = missingVariantTemplate(variants)
+    if (missing) {
+      res.status(400).json({ error: `Variant template not found: ${missing}.` })
+      return
+    }
+
     const design = createCardDesign({
       name,
       description: typeof description === 'string' ? description : null,
       frontTemplateId,
       backTemplateId,
+      variants,
+      variantField: typeof req.body?.variantField === 'string' ? req.body.variantField : null,
     })
 
     res.status(201).json(design)
@@ -122,6 +142,19 @@ router.put('/:id', (req, res, next) => {
         }
       }
       updates.backTemplateId = backTemplateId ?? null
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'variants')) {
+      const variants = normalizeVariants(req.body.variants)
+      const missing = missingVariantTemplate(variants)
+      if (missing) {
+        res.status(400).json({ error: `Variant template not found: ${missing}.` })
+        return
+      }
+      updates.variants = variants
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'variantField')) {
+      updates.variantField = typeof req.body.variantField === 'string' ? req.body.variantField : null
     }
 
     const updated = updateCardDesign(id, updates)

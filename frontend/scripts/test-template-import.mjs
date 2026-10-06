@@ -84,6 +84,16 @@ const { assignCardSides, readSideFromFileName, suggestDesignName } = await impor
 const { TEST_CASES, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
 const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } = await import('../src/lib/cardTrim.ts')
 const { calculateCardPositions, getSlotScale } = await import('../src/lib/exporter.ts')
+const { parsePunchLayerId, isInNonFieldLayer } = await import('../src/lib/layerRoles.ts')
+const { createStarterArtboard } = await import('../src/lib/starterKit.ts')
+const {
+  addVariant,
+  getDesignVariants,
+  makeDefaultVariant,
+  removeVariant,
+  variantForUser,
+  variantsPatch,
+} = await import('../src/lib/designVariants.ts')
 const {
   ID1_HEIGHT_MM,
   ID1_WIDTH_MM,
@@ -551,7 +561,7 @@ check('a barcode blank imports as a barcode field', async () => {
 
 check('the stripe covers all three ISO tracks', () => {
   const svg = createCardBlankSvg({ side: 'back', magneticStripe: true })
-  const stripe = /<g id="magneticStripe">\s*<rect x="0" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(svg)
+  const stripe = /<g id="guide_magnetic_stripe">\s*<rect x="0" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(svg)
   assert.ok(stripe, 'the stripe should be drawn')
   const top = Number(stripe[1])
   const bottom = top + Number(stripe[2])
@@ -560,7 +570,7 @@ check('the stripe covers all three ISO tracks', () => {
 })
 
 check('the stripe is only ever put on a back', () => {
-  assert.ok(!createCardBlankSvg({ side: 'front', magneticStripe: true }).includes('magneticStripe'))
+  assert.ok(!createCardBlankSvg({ side: 'front', magneticStripe: true }).includes('magnetic_stripe'))
 })
 
 check('places the punch on the edge it names', () => {
@@ -864,6 +874,192 @@ check('a card area lands the trim line exactly on the tray slot', async () => {
 check('every tray layout in the seed agrees on the card size', () => {
   const sizes = new Set(printLayouts.map((layout) => `${layout.cardWidth}x${layout.cardHeight}`))
   assert.deepEqual([...sizes], ['3.3750x2.1250'], 'all layouts target a CR80 card')
+})
+
+// --- guides, punches and fixed artwork ---------------------------------------
+
+console.log('\nlayer roles')
+
+const GUIDED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60" width="85.725mm" height="53.975mm" data-card-format="id-1">
+  <rect id="artwork_background" width="100" height="60" fill="#fff"/>
+  <g id="guides"><rect x="2" y="2" width="96" height="56" fill="none" stroke="#0f0"/><text x="3" y="5">SAFE AREA</text></g>
+  <g id="punch_round_top_left"><circle cx="20" cy="6" r="3"/></g>
+  <g id="static_labels"><text x="10" y="40">NAME</text></g>
+  <text id="firstName" x="10" y="30">Sample</text>
+</svg>`
+
+check('guide, punch and static text never become fields', async () => {
+  const { autoFields } = await parseTemplateString(GUIDED, 'guided.svg')
+  assert.deepEqual(autoFields.map((field) => field.sourceId), ['firstName'])
+})
+
+check('a punch layer says where the card is punched', async () => {
+  const { metadata } = await parseTemplateString(GUIDED, 'guided.svg')
+  assert.deepEqual(metadata.punch, { position: 'top-left', shape: 'round' })
+  assert.deepEqual(parsePunchLayerId('punch'), { position: 'top-center', shape: 'slot' })
+  assert.deepEqual(parsePunchLayerId('punch_slot_right_center_1_'), { position: 'right-center', shape: 'slot' })
+  assert.equal(parsePunchLayerId('puncheon'), null)
+})
+
+check('guides show while editing and never print; the punch never draws', async () => {
+  const { metadata, autoFields } = await parseTemplateString(GUIDED, 'guided.svg')
+  const preview = renderSvgWithData(metadata, autoFields, {})
+  const printed = renderSvgWithData(metadata, autoFields, {}, { mode: 'production' })
+  assert.ok(preview.includes('id="guides"'), 'guides are shown in the preview')
+  assert.ok(!printed.includes('id="guides"'), 'guides are not printed')
+  assert.ok(!preview.includes('punch_round') && !printed.includes('punch_round'), 'the punch is never ink')
+  assert.ok(printed.includes('NAME'), 'static artwork still prints')
+})
+
+check('isInNonFieldLayer looks through ancestors', () => {
+  const doc = new DOMParser().parseFromString(GUIDED, 'image/svg+xml')
+  assert.equal(isInNonFieldLayer(doc.getElementById('static_labels').firstElementChild), true)
+  assert.equal(isInNonFieldLayer(doc.getElementById('firstName')), false)
+})
+
+// --- card area carried in the file -------------------------------------------
+
+console.log('\ndeclared card area')
+
+check('a template drawn at card size declares itself the card', async () => {
+  const { metadata } = await parseTemplateString(GUIDED, 'guided.svg')
+  assert.equal(metadata.cardArea?.formatId, 'id-1')
+  assert.equal(metadata.cardArea?.keepBleed, false)
+  assert.equal(metadata.trimCandidates, undefined, 'no trim-line suggestion once the card area is known')
+})
+
+check('a trim box with bleed is read back, portrait included', async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 57.15 88.9" width="57.15mm" height="88.9mm"
+    data-card-format="id-1" data-trim-box="1.5875 1.5875 53.975 85.725"><rect width="57.15" height="88.9"/></svg>`
+  const { metadata } = await parseTemplateString(svg, 'portrait.svg')
+  assert.equal(metadata.cardArea?.trimWidthMm, 53.975)
+  assert.equal(metadata.cardArea?.trimHeightMm, 85.725)
+  assert.equal(metadata.cardArea?.keepBleed, true)
+  assert.ok(Math.abs(metadata.cardArea.bleedMm.top - 1.5875) < 0.001)
+})
+
+check('setting a card area records the trim box in the file', async () => {
+  const source = fs.readFileSync(path.join(REFERENCE_DIR, 'id-card-front.svg'), 'utf8')
+  const { metadata } = await parseTemplateString(source, 'id-card-front.svg')
+  const [candidate] = metadata.trimCandidates
+  const applied = applyCardArea(metadata.rawSvg, metadata.viewBox, { box: candidate.box, format: CARD_FORMATS[0], keepBleed: true })
+  const reopened = await parseTemplateString(applied.svg, 'id-card-front.svg')
+  assert.deepEqual(reopened.metadata.cardArea?.trimBox, candidate.box)
+})
+
+// --- name initials -------------------------------------------------------------
+
+console.log('\nname initials')
+
+check('fullName_First_LastInitial -> "Ahmad J"', () => {
+  assert.equal(parseField('fullName_First_LastInitial', { firstName: 'Ahmad', lastName: 'jalil' }), 'Ahmad J')
+  assert.equal(normalizeStandardFieldName('FULLNAME_FIRST_LASTINITIAL_ALLCAPS'), 'fullName_First_LastInitial_AllCaps')
+})
+
+// --- variants ------------------------------------------------------------------
+
+console.log('\ndesign variants')
+
+const DESIGN = { id: 'd1', name: 'Card', frontTemplateId: 'front-a', backTemplateId: 'back' }
+
+check('a design without variants has one, made from its own front', () => {
+  assert.deepEqual(getDesignVariants(DESIGN).map((variant) => variant.frontTemplateId), ['front-a'])
+})
+
+check('adding, re-ordering and removing variants keeps the front on the default', () => {
+  const added = addVariant(DESIGN, { id: 'b', name: 'B', frontTemplateId: 'front-b' })
+  assert.deepEqual(added.map((variant) => variant.frontTemplateId), ['front-a', 'front-b'])
+  const design = { ...DESIGN, ...variantsPatch(added) }
+  const reordered = variantsPatch(makeDefaultVariant(design, 'b'))
+  assert.equal(reordered.frontTemplateId, 'front-b')
+  assert.equal(removeVariant({ ...design, ...reordered }, 'b').length, 1)
+  assert.equal(removeVariant({ ...DESIGN }, 'default').length, 1, 'the last variant stays')
+})
+
+check('each person gets the variant listing their value, case-insensitively', () => {
+  const design = {
+    ...DESIGN,
+    variantField: 'position',
+    variants: [
+      { id: 'student', name: 'Student', frontTemplateId: 'front-a' },
+      { id: 'staff', name: 'Staff', frontTemplateId: 'front-b', match: ['Staff', 'Faculty'] },
+    ],
+  }
+  const fallback = design.variants[0]
+  assert.equal(variantForUser(design, { position: 'faculty' }, fallback).id, 'staff')
+  assert.equal(variantForUser(design, { position: 'Student' }, fallback).id, 'student')
+  assert.equal(variantForUser(design, {}, null), null)
+  assert.equal(variantForUser({ ...design, variantField: null }, { position: 'Staff' }, fallback).id, 'student')
+})
+
+// --- the converted card library in templates/ --------------------------------
+
+console.log('\ncard library')
+
+const LIBRARY_DIR = path.resolve(HERE, '../../templates')
+const EXPECTED_LAYERS = {
+  unbc: ['photo', 'studentId'],
+  'northern-health': ['photo', 'position'],
+}
+for (const family of Object.keys(EXPECTED_LAYERS)) {
+  const familyDir = path.join(LIBRARY_DIR, family)
+  if (!fs.existsSync(familyDir)) continue
+  const files = fs.readdirSync(familyDir, { recursive: true }).filter((file) => String(file).endsWith('.svg'))
+  for (const file of files) {
+    check(`${family}/${file} imports at card size with its fields`, async () => {
+      const raw = fs.readFileSync(path.join(familyDir, String(file)), 'utf8')
+      const { metadata, autoFields } = await parseTemplateString(raw, String(file))
+      assert.equal(metadata.cardArea?.formatId, 'id-1', 'declares its card area')
+      const layers = autoFields.map((field) => field.sourceId)
+      const isBack = String(file).includes('back')
+      for (const layer of isBack ? ['studentId', 'barcode_codabar_studentId'] : EXPECTED_LAYERS[family]) {
+        assert.ok(layers.includes(layer), `has a ${layer} layer (found ${layers.join(', ')})`)
+      }
+      assert.ok(autoFields.every((field) => !/^text-field/.test(field.sourceId)), 'fixed artwork is not offered as a field')
+    })
+  }
+}
+
+// --- the designer starter kit --------------------------------------------------
+
+console.log('\nstarter kit')
+
+for (const orientation of ['landscape', 'portrait']) {
+  for (const side of ['front', 'back']) {
+    check(`the ${orientation} ${side} artboard imports ready to print`, async () => {
+      const svg = createStarterArtboard(side, { orientation, punch: 'top-center', magneticStripe: true })
+      const { metadata, autoFields } = await parseTemplateString(svg, `card-${side}.svg`)
+      const portrait = orientation === 'portrait'
+      assert.equal(metadata.cardArea?.trimWidthMm, portrait ? 53.975 : 85.725)
+      assert.equal(metadata.cardArea?.keepBleed, true)
+      const layers = autoFields.map((field) => field.sourceId).sort()
+      assert.deepEqual(layers, side === 'front'
+        ? ['fullName_First_Last', 'photo', 'position', 'studentId']
+        : ['barcode_code128_studentId', 'studentId'])
+      assert.deepEqual(metadata.punch, { position: 'top-center', shape: 'slot' })
+      const printed = renderSvgWithData(metadata, autoFields, {}, { mode: 'production' })
+      assert.ok(!/id="guide|id="punch/.test(printed), 'no guide or punch layer is printed')
+    })
+  }
+}
+
+check('an exported artboard that lost its data attributes still knows the card', async () => {
+  // What comes back from Illustrator: no data-*, sizes in points, layer names kept.
+  const svg = createStarterArtboard('front', { orientation: 'landscape' })
+    .replace(/ data-card-format="[^"]*"/, '')
+    .replace(/ data-trim-box="[^"]*"/, '')
+    .replace(/width="[\d.]+mm" height="[\d.]+mm"/, 'width="252" height="162"')
+  const { metadata } = await parseTemplateString(svg, 'card-front.svg')
+  assert.equal(metadata.cardArea?.formatId, 'id-1')
+  assert.deepEqual(metadata.cardArea?.trimBox, { x: 0, y: 0, width: 85.725, height: 53.975 })
+})
+
+check('a blank prints none of its guides', async () => {
+  const svg = createCardBlankSvg({ side: 'back', magneticStripe: true, punch: 'left-center', guides: true })
+  const { metadata, autoFields } = await parseTemplateString(svg, 'card-back.svg')
+  const printed = renderSvgWithData(metadata, autoFields, {}, { mode: 'production' })
+  assert.ok(!/id="guides"|id="punch_|id="guide_magnetic/.test(printed))
+  assert.deepEqual(metadata.punch, { position: 'left-center', shape: 'slot' })
 })
 
 // --- result -----------------------------------------------------------------

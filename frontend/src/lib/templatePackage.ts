@@ -10,7 +10,12 @@ import { portableEditorJson, readEditorDocument, type PackagedEditor } from './e
  *   manifest.json     what the package holds, and what each layer means
  *   front.svg         the artwork
  *   back.svg          the other side, when there is one
+ *   variants/<id>/…   other looks of the same card (see lib/designVariants.ts)
  *   fonts/…           the font files the artwork asks for
+ *
+ * Variants are optional and additive: `sides` always describes the default
+ * variant, so an older app opening a package with variants still gets a
+ * complete card, just without the alternatives.
  */
 
 import JSZip from 'jszip'
@@ -41,6 +46,16 @@ export type PackagedFont = {
   mimeType: string
 }
 
+/** One look of the card. Its back is the package's back unless it has its own. */
+export type PackagedVariant = {
+  id: string
+  name: string
+  front: PackagedSide
+  back?: PackagedSide
+  /** Record values that select this variant (see `variantField`). */
+  match?: string[]
+}
+
 export type TemplatePackageManifest = {
   editor?: PackagedEditor
   format: typeof PACKAGE_FORMAT
@@ -49,6 +64,10 @@ export type TemplatePackageManifest = {
   /** Name for the card design created when the package is opened. */
   name: string
   sides: { front: PackagedSide; back?: PackagedSide }
+  /** Every variant, the default first; absent for a design with one look. */
+  variants?: PackagedVariant[]
+  /** Record field that picks each person's variant. */
+  variantField?: string
   fonts: PackagedFont[]
   /** Sample values, so the package previews as it did when it was made. */
   sampleData?: Record<string, string>
@@ -62,11 +81,25 @@ export type PackageSideInput = {
   mappings: FieldMapping[]
 }
 
+export type PackageVariantInput = {
+  id: string
+  name: string
+  front: PackageSideInput
+  back?: PackageSideInput | null
+  match?: string[]
+}
+
 export type CreatePackageInput = {
   editor?: PackagedEditor
   name: string
   front: PackageSideInput
   back?: PackageSideInput | null
+  /**
+   * All variants, the default first. The default's front is `front`, and is
+   * not written twice.
+   */
+  variants?: PackageVariantInput[]
+  variantField?: string | null
   /** Every font held in storage; only the ones the artwork uses are packaged. */
   availableFonts: FontData[]
   sampleData?: Record<string, string>
@@ -137,11 +170,41 @@ export async function createTemplatePackage(input: CreatePackageInput): Promise<
   zip.file('front.svg', input.front.template.rawSvg)
   if (input.back) zip.file('back.svg', input.back.template.rawSvg)
 
+  // Variants after the first are written under variants/<id>/.
+  const packagedVariants: PackagedVariant[] = []
+  const extraSides: PackageSideInput[] = []
+  if (input.variants && input.variants.length > 1) {
+    const usedDirs = new Set<string>()
+    input.variants.forEach((variant, index) => {
+      const entry: PackagedVariant = {
+        id: variant.id,
+        name: variant.name,
+        front: sideManifest('front.svg', variant.front),
+        ...(variant.match?.length ? { match: variant.match } : {}),
+      }
+      if (index > 0) {
+        let dir = `variants/${sanitiseFileName(variant.id)}`
+        while (usedDirs.has(dir)) dir += '-'
+        usedDirs.add(dir)
+        zip.file(`${dir}/front.svg`, variant.front.template.rawSvg)
+        entry.front = sideManifest(`${dir}/front.svg`, variant.front)
+        extraSides.push(variant.front)
+        if (variant.back) {
+          zip.file(`${dir}/back.svg`, variant.back.template.rawSvg)
+          entry.back = sideManifest(`${dir}/back.svg`, variant.back)
+          extraSides.push(variant.back)
+        }
+      }
+      packagedVariants.push(entry)
+    })
+  }
+
   const required = new Set<string>([
     ...input.front.template.fonts,
     ...(input.back?.template.fonts ?? []),
+    ...extraSides.flatMap((side) => side.template.fonts),
   ])
-  for (const side of [input.front, input.back]) {
+  for (const side of [input.front, input.back, ...extraSides]) {
     for (const field of side?.fields ?? []) {
       // A barcode layer is replaced by drawn bars, so whatever font its
       // placeholder used is never rendered and does not need packaging.
@@ -197,6 +260,8 @@ export async function createTemplatePackage(input: CreatePackageInput): Promise<
       front: sideManifest('front.svg', input.front),
       ...(input.back ? { back: sideManifest('back.svg', input.back) } : {}),
     },
+    ...(packagedVariants.length > 1 ? { variants: packagedVariants } : {}),
+    ...(packagedVariants.length > 1 && input.variantField ? { variantField: input.variantField } : {}),
     fonts,
     sampleData: input.sampleData && Object.keys(input.sampleData).length > 0 ? input.sampleData : undefined,
     missingFonts: missingFonts.length > 0 ? missingFonts : undefined,
@@ -212,11 +277,21 @@ export async function createTemplatePackage(input: CreatePackageInput): Promise<
 
 export type LoadedPackageSide = PackagedSide & { svg: string }
 
+export type LoadedPackageVariant = {
+  id: string
+  name: string
+  match?: string[]
+  front: LoadedPackageSide
+  back?: LoadedPackageSide
+}
+
 export type LoadedPackage = {
   editor?: PackagedEditor
   manifest: TemplatePackageManifest
   front: LoadedPackageSide
   back?: LoadedPackageSide
+  /** Every variant, the default first, when the package has more than one. */
+  variants?: LoadedPackageVariant[]
   /** Font files, ready to register under the name the artwork asks for. */
   fonts: Array<{ name: string; file: File }>
 }
@@ -301,7 +376,25 @@ export async function readTemplatePackage(file: Blob): Promise<LoadedPackage> {
     }
     editor = {...meta, front: await readScene(meta.front), back: meta.back ? await readScene(meta.back) : undefined}
   }
-  return { manifest, front, back: await readSide(manifest.sides.back), fonts, editor }
+  let variants: LoadedPackageVariant[] | undefined
+  if (Array.isArray(manifest.variants) && manifest.variants.length > 1) {
+    variants = []
+    for (const variant of manifest.variants) {
+      if (!variant?.front?.file || typeof variant.id !== 'string') continue
+      const variantFront = variant.front.file === manifest.sides.front.file ? front : await readSide(variant.front)
+      if (!variantFront) continue
+      variants.push({
+        id: variant.id,
+        name: typeof variant.name === 'string' && variant.name.trim() ? variant.name : variant.id,
+        ...(Array.isArray(variant.match) ? { match: variant.match.filter((value) => typeof value === 'string') } : {}),
+        front: variantFront,
+        back: await readSide(variant.back),
+      })
+    }
+    if (variants.length < 2) variants = undefined
+  }
+
+  return { manifest, front, back: await readSide(manifest.sides.back), variants, fonts, editor }
 }
 
 /** A file name for a package. */

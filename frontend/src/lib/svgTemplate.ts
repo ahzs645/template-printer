@@ -2,7 +2,8 @@ import { parseAbsoluteSvgLength, coordinatePercent, normalizeCardFields, isBound
 import opentype from 'opentype.js'
 
 import { generateBarcodeSvg, isBarcodeFontFamily } from './barcode'
-import { detectTrimCandidates, isWorthSuggesting } from './cardTrim'
+import { detectTrimCandidates, isWorthSuggesting, readDeclaredCardArea } from './cardTrim'
+import { findTemplatePunch, removeNonPrintingLayers } from './layerRoles'
 import { isImageFieldName } from './standardFields'
 import { parseBarcodeLayerId } from './standardFields'
 import type {
@@ -15,6 +16,7 @@ import type {
   TemplateMeta,
 } from './types'
 
+const GENERIC_FONT_FAMILIES = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui'])
 const PLACEHOLDER_PATTERN = /\{\{(field|image|barcode|date):([a-zA-Z0-9_-]+)\}\}/
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -591,6 +593,11 @@ export function extractFontFamilies(svg: Document): string[] {
     fonts.delete(family)
   }
 
+  // A generic family is whatever the browser picks: nothing to load or embed.
+  for (const family of Array.from(fonts)) {
+    if (GENERIC_FONT_FAMILIES.has(family.toLowerCase())) fonts.delete(family)
+  }
+
   return Array.from(fonts)
 }
 
@@ -724,7 +731,12 @@ export async function parseTemplateString(rawSvg: string, fileName = 'template.s
   const autoFields = normalizeCardFields(doc,{width,height,unit,viewBox},legacy)
   const normalizedSvg = new XMLSerializer().serializeToString(svgNode)
   const objectUrl = URL.createObjectURL(new Blob([normalizedSvg],{type:'image/svg+xml'}))
-  return {metadata:{name:fileName,width,height,unit,rawSvg:normalizedSvg,objectUrl,viewBox,fonts,warnings:warnings.length?warnings:undefined,trimCandidates:trimCandidates.length?trimCandidates:undefined},autoFields}
+  // A template that already says which rectangle is the card (and where it is
+  // punched) carries that with it, so it prints at the right size every time it
+  // is opened rather than only in the session the card area was set.
+  const cardArea = readDeclaredCardArea(svgNode, canvasBox, {width, height, unit})
+  const punch = findTemplatePunch(doc) ?? undefined
+  return {metadata:{name:fileName,width,height,unit,rawSvg:normalizedSvg,objectUrl,viewBox,fonts,warnings:warnings.length?warnings:undefined,trimCandidates:trimCandidates.length&&!cardArea?trimCandidates:undefined,...(cardArea?{cardArea}:{}),...(punch?{punch}:{})},autoFields}
 }
 
 /**
@@ -873,9 +885,20 @@ function collectTemplateWarnings(doc: Document, fonts: string[]): string[] {
   return warnings
 }
 
-export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData, options: {mode?: 'preview' | 'production'} = {}): string {
+export type RenderOptions = {
+  mode?: 'preview' | 'production'
+  /**
+   * Keep guide layers (bleed, safe area) in the output. Defaults to true while
+   * previewing and is always false in production: guides are for the designer,
+   * not the card.
+   */
+  guides?: boolean
+}
+
+export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinition[], cardData: CardData, options: RenderOptions = {}): string {
   const doc = new DOMParser().parseFromString(template.rawSvg, 'image/svg+xml')
   const svgRoot = doc.documentElement, production = options.mode === 'production'
+  removeNonPrintingLayers(svgRoot, {keepGuides: !production && options.guides !== false})
   if (production) validateProductionCard(fields,cardData)
   bakeCssTextStyles(doc)
   for (const field of fields) {
@@ -902,6 +925,30 @@ export function renderSvgWithData(template: TemplateMeta, fields: FieldDefinitio
   }
   svgRoot.querySelectorAll('[data-editor-only="true"]').forEach(node=>node.remove())
   return new XMLSerializer().serializeToString(svgRoot)
+}
+
+/**
+ * A saved template drawn the way it will print with no person's data: barcodes
+ * as bars, the punch and guides handled, sample values in place.
+ *
+ * Showing the raw file instead is what made a barcode layer look broken
+ * whenever its side was not the one being edited — the placeholder digits were
+ * drawn in whatever font the browser fell back to.
+ */
+export async function renderTemplatePreview(
+  svgText: string,
+  name: string,
+  fields?: FieldDefinition[],
+  options: RenderOptions = {},
+): Promise<string> {
+  try {
+    const { metadata, autoFields } = await parseTemplateString(svgText, name)
+    URL.revokeObjectURL(metadata.objectUrl)
+    return renderSvgWithData(metadata, fields && fields.length > 0 ? fields : autoFields, {}, options)
+  } catch (error) {
+    console.error(`Could not render a preview of "${name}"`, error)
+    return svgText
+  }
 }
 
 /**

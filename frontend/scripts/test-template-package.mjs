@@ -234,6 +234,52 @@ await check('keeps the card area, so the card still prints at its real size', as
   assert.equal(reopened.front.cardArea.keepBleed, true)
 })
 
+section('variants')
+
+await check('every variant travels in one package and comes back in order', async () => {
+  const alternate = await loadSide('card-front.svg')
+  const { blob, manifest } = await createTemplatePackage({
+    name: 'id-card',
+    front,
+    back,
+    variants: [
+      { id: 'student', name: 'Student', front },
+      { id: 'staff', name: 'Staff', front: alternate, match: ['Staff'] },
+    ],
+    variantField: 'position',
+    availableFonts: [],
+  })
+  assert.equal(manifest.sides.front.file, 'front.svg', 'older apps still find the default front')
+  assert.deepEqual(manifest.variants.map((variant) => variant.front.file), ['front.svg', 'variants/staff/front.svg'])
+  assert.equal(manifest.variantField, 'position')
+
+  const reopened = await readTemplatePackage(new File([blob], 'id-card.zip', { type: 'application/zip' }))
+  assert.deepEqual(reopened.variants.map((variant) => variant.name), ['Student', 'Staff'])
+  assert.deepEqual(reopened.variants[1].match, ['Staff'])
+  assert.ok(reopened.variants[1].front.svg.includes('<svg'), 'the variant artwork is read back')
+  assert.equal(reopened.variants[0].front, reopened.front, 'the default is not read twice')
+  assert.ok(reopened.back, 'the shared back comes with it')
+})
+
+await check('a single-look design writes no variant list', async () => {
+  const { manifest } = await createTemplatePackage({ name: 'one', front, variants: [{ id: 'a', name: 'A', front }], availableFonts: [] })
+  assert.equal(manifest.variants, undefined)
+})
+
+section('sanitising')
+
+await check('an internal <use> survives; an external one does not', async () => {
+  const { sanitizeSvgMarkup } = await import('../src/lib/svgSanitizer.ts')
+  const clean = sanitizeSvgMarkup(
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+      '<defs><image id="art" width="1" height="1" href="data:image/png;base64,AA=="/></defs>' +
+      '<use id="inside" xlink:href="#art"/><use id="outside" href="https://example.com/x.svg#a"/></svg>',
+  )
+  assert.ok(clean.includes('id="inside"'), 'a watermark placed with <use> stays')
+  assert.ok(!clean.includes('example.com'), 'an external reference is dropped')
+  assert.ok(!clean.includes('id="outside"'), 'a <use> with nothing left to point at goes')
+})
+
 section('rejecting what is not a package')
 
 await check('a bare zip is refused', async () => {

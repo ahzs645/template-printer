@@ -68,6 +68,25 @@ export function clearOutlineFontBuffers(): void {
 }
 
 /**
+ * Picks the front artwork for one person's card, for designs whose variants
+ * are chosen per record (see lib/designVariants.ts). Variants name their layers
+ * the same, so the fields and mappings of the design apply unchanged; only the
+ * artwork they are drawn into changes. Set for the length of one export.
+ */
+export type CardVariantResolver = (user: UserData) => TemplateMeta | null
+
+let _variantResolver: CardVariantResolver | null = null
+
+export function setVariantResolver(resolver: CardVariantResolver | null): void {
+  _variantResolver = resolver
+}
+
+/** The artwork a person's front prints with: their variant's, or the default. */
+function frontFor(user: UserData, fallback: TemplateMeta): TemplateMeta {
+  return _variantResolver?.(user) ?? fallback
+}
+
+/**
  * Check if rotating a card 90° would give a significantly better fit within a slot.
  */
 function cardNeedsRotation(
@@ -263,7 +282,7 @@ export async function exportBatchCards(
     })
 
     // Render this user's card
-    const canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
+    const canvas = await renderCardToCanvas(frontFor(user, template), fields, cardData, dpi, colorProfile)
     const page = pdfDoc.addPage([widthPoints, heightPoints])
 
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
@@ -343,7 +362,7 @@ export async function exportBatchCardsWithPrintLayout(
       }
     })
 
-    let canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
+    let canvas = await renderCardToCanvas(frontFor(user, template), fields, cardData, dpi, colorProfile)
     if (rotate) canvas = rotateCanvas90CW(canvas)
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
@@ -586,7 +605,7 @@ export async function exportBatchCardsWithJsonLayout(
       }
     })
 
-    let canvas = await renderCardToCanvas(template, fields, cardData, dpi, colorProfile)
+    let canvas = await renderCardToCanvas(frontFor(user, template), fields, cardData, dpi, colorProfile)
     if (rotate) canvas = rotateCanvas90CW(canvas)
     const cardPngBytes = await dataUrlToUint8Array(canvas.toDataURL('image/png'))
     const cardImage = await pdfDoc.embedPng(cardPngBytes)
@@ -754,6 +773,9 @@ export async function exportWithSlotAssignments(
         continue
       }
 
+      // A person on the default front may print with their own variant.
+      if (template === defaultTemplate) template = frontFor(user, defaultTemplate)
+
       // Build card data from user and field mappings
       cardData = {}
       templateFields.forEach(field => {
@@ -907,7 +929,7 @@ async function exportBatchCardsVector(
       }
     })
 
-    await drawSvgMarkupOnPdf(pdf, renderCardSvgMarkup(template, fields, cardData, colorProfile), 0, 0, widthPoints, heightPoints)
+    await drawSvgMarkupOnPdf(pdf, renderCardSvgMarkup(frontFor(user, template), fields, cardData, colorProfile), 0, 0, widthPoints, heightPoints)
   }
 
   downloadBlob(pdf.output('blob'), `${template.name.replace(/\.svg$/i, '') || 'id-cards'}-batch-${users.length}-cards.pdf`)
@@ -944,7 +966,7 @@ async function exportBatchCardsWithPrintLayoutVector(
       }
     })
 
-    let cardMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
+    let cardMarkup = renderCardSvgMarkup(frontFor(user, template), fields, cardData, colorProfile)
     if (rotate) {
       cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
     }
@@ -1047,7 +1069,7 @@ async function exportBatchCardsWithJsonLayoutVector(
       }
     })
 
-    let cardMarkup = renderCardSvgMarkup(template, fields, cardData, colorProfile)
+    let cardMarkup = renderCardSvgMarkup(frontFor(user, template), fields, cardData, colorProfile)
     if (rotate) {
       cardMarkup = rotateSvgMarkup90CW(cardMarkup, template.width, template.height)
     }
@@ -1159,6 +1181,9 @@ async function exportWithSlotAssignmentsVector(
         cardEntries.push(null)
         continue
       }
+
+      // A person on the default front may print with their own variant.
+      if (template === defaultTemplate) template = frontFor(user, defaultTemplate)
 
       slotCardData = {}
       templateFields.forEach(field => {
