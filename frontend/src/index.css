@@ -374,6 +374,13 @@ input[type='range'] {
   gap: 16px;
   flex-shrink: 0;
   min-height: 56px;
+  /* The design ribbon is wider than a laptop screen, not only a phone's: let
+     every width scroll sideways rather than clip the groups at the end —
+     Check (with Lanyard) and Guides used to vanish below about 1440 px. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ribbon-group {
@@ -382,6 +389,7 @@ input[type='range'] {
   gap: 2px;
   padding-right: 16px;
   border-right: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .ribbon-group:last-child {
@@ -1309,4 +1317,340 @@ textarea.form-input {
 
 .link-result-banner__close:hover {
   opacity: 1;
+}
+
+/* ===== Lanyard ===== */
+/* The stage is the point of the dialog, so it gets most of the screen: a
+   dark studio the strap drops into from above, with the controls in a column
+   beside it on a desktop and under it on a phone. */
+.lanyard-dialog {
+  max-width: min(1240px, calc(100vw - 2rem)) !important;
+  width: calc(100vw - 2rem) !important;
+  height: min(860px, calc(100dvh - 2rem));
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lanyard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.25rem;
+  min-height: 0;
+}
+
+.lanyard-stage {
+  position: relative;
+  min-height: 420px;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 42%, #2b2f38 0%, #15171c 55%, #0b0c0f 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.lanyard-stage__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.lanyard-stage__message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.lanyard-stage__message--error {
+  color: #fca5a5;
+}
+
+.lanyard-stage__hint {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+.lanyard-stage__actions {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(20, 22, 27, 0.72);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+}
+
+.lanyard-stage__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lanyard-stage__button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lanyard-stage__button[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+}
+
+.lanyard-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.lanyard-controls__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.lanyard-controls__section:last-child {
+  border-bottom: 0;
+}
+
+.lanyard-controls__heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lanyard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.lanyard-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.lanyard-note--warning {
+  color: var(--warning);
+}
+
+.lanyard-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.lanyard-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-default);
+}
+
+.lanyard-segmented__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lanyard-segmented__option[aria-checked='true'] {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+.lanyard-segmented__glyph {
+  display: block;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+
+.lanyard-segmented__glyph--portrait {
+  width: 13px;
+  height: 20px;
+}
+
+.lanyard-segmented__glyph--landscape {
+  width: 20px;
+  height: 13px;
+  margin: 3.5px 0;
+}
+
+.lanyard-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.lanyard-swatches__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.lanyard-swatches__swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent);
+}
+
+.lanyard-swatches__custom {
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+/* The way into the lanyard view, under the card preview where the eye already is. */
+.lanyard-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lanyard-launch:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .lanyard-dialog {
+    height: auto;
+    grid-template-rows: auto auto;
+  }
+
+  .lanyard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lanyard-stage {
+    min-height: 0;
+    height: min(62dvh, 560px);
+  }
+
+  .lanyard-controls {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 480px) {
+  .lanyard-stage__hint {
+    display: none;
+  }
+
+  .lanyard-stage__actions {
+    gap: 2px;
+    bottom: 10px;
+  }
+
+  .lanyard-stage__button {
+    padding: 7px 9px;
+    font-size: 12px;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 400px) {
+  .lanyard-stage__button svg {
+    display: none;
+  }
+}
+
+/* What is on the card, in the lanyard dialog from the print screen. */
+.lanyard-segmented--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lanyard-segmented__option--row {
+  flex-direction: row;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+}
+
+.lanyard-segmented__option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lanyard-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.lanyard-field__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* The way into the lanyard from the print preview. */
+.export-preview-actions {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
 }

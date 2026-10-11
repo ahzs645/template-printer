@@ -91,8 +91,35 @@ modelled at retail sizes and passing through the hole:
 
 **Close-up on the punch** follows the hardware as the card swings.
 
-Portrait and landscape are read from the artwork's shape; nothing needs
-setting:
+The view works like React Bits' Lanyard: the strap drops in from above the
+frame, the card is a 0.76 mm PVC slab with its own corner radius and a real hole
+through it, and you can grab it, swing it and throw it to spin it before it turns
+back to face you. Tap the card, or press **Show back**, to turn it over: it
+spins the way the tap pushes it, the strap winds up as it turns, and a second
+tap unwinds it the way it came. A card spun round by a throw unwinds every
+turn, as a real strap does. **Drop again** re-hangs it. It
+opens from **Lanyard** in the Check group or **Hang on a lanyard** under the
+card preview.
+
+On the Export screen, **Hang on a lanyard** under the print preview shows the
+card as it will print, with an **On the card** panel to change what is on it:
+**Type it** edits the same text a quick export prints, and **A person** picks
+someone from the database. On a design whose variants are chosen per person
+(by position, department or grade), the person also picks the variant, so a
+Staff record hangs the Staff card. It opens on the first person of a batch, or
+on the first tray slot that prints from the database. Changes repaint the card
+where it hangs rather than dropping it again.
+
+**Hangs as** says whether the card is worn vertically or horizontally. *As
+drawn* follows the artwork; *Vertical* or *Horizontal* turns the artwork a
+quarter onto the card when it was laid out the other way, and the punch is then
+placed on the card as it hangs. The choice is remembered for each card in this
+browser, along with the strap's text, colour and width.
+
+Portrait and landscape are otherwise read from the artwork's shape; nothing
+needs setting. An SVG with no card area that is taller than it is wide is a
+portrait ID-1 card, and one drawn in points or CSS pixels that comes out up to
+5 mm larger than the card on each side is read as that card with bleed:
 
 - a portrait card's magnetic-stripe guide runs along its long edge;
 - a landscape back on a portrait card is shown, and hung on the lanyard, turned

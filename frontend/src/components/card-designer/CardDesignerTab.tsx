@@ -13,6 +13,8 @@ import { InlineSvg } from '../InlineSvg'
 import './card-designer.css'
 
 const PX_PER_MM=96/25.4
+/** 180 % on a desktop; on a phone, whatever fits the card across the screen (the panels stack under it there). */
+function initialZoom(cardWidthMm:number){if(typeof window==='undefined'||window.innerWidth>800)return 1.8;const room=window.innerWidth-48-50;return Math.max(.5,Math.min(1.8,Math.floor(room/(cardWidthMm*PX_PER_MM)*10)/10))}
 const SYSTEM_FONTS=['Arial','Helvetica','Times New Roman','Georgia','Verdana','sans-serif','serif']
 type SaveData={name:string;frontCanvasData:string;backCanvasData:string;cardWidth:number;cardHeight:number}
 type Props={designId?:string;initialName?:string;initialFrontData?:string|null;initialBackData?:string|null;initialCardWidth?:number;initialCardHeight?:number;onSave:(data:SaveData)=>void;onCancel:()=>void;fontOptions?:string[];missingFonts?:string[];getFonts?:()=>Promise<FontData[]>;onLoadFont?:(name:string,file:File)=>Promise<unknown>}
@@ -20,7 +22,7 @@ type Props={designId?:string;initialName?:string;initialFrontData?:string|null;i
 export function CardDesignerTab({initialName='Untitled Design',initialFrontData,initialBackData,initialCardWidth=85.6,initialCardHeight=53.98,onSave,onCancel,fontOptions=SYSTEM_FONTS,missingFonts=[],getFonts,onLoadFont}:Props){
   const [name,setName]=useState(initialName),[width,setWidth]=useState(initialCardWidth),[height,setHeight]=useState(initialCardHeight)
   const [side,setSide]=useState<'front'|'back'>('front'),[sessions,setSessions]=useState<{front:SceneSession;back:SceneSession}|null>(null)
-  const [revision,setRevision]=useState(0),[error,setError]=useState<string|null>(null),[message,setMessage]=useState(''),[grid,setGrid]=useState(true),[zoom,setZoom]=useState(1.8),[preview,setPreview]=useState(false),[previewSvg,setPreviewSvg]=useState('')
+  const [revision,setRevision]=useState(0),[error,setError]=useState<string|null>(null),[message,setMessage]=useState(''),[grid,setGrid]=useState(true),[zoom,setZoom]=useState(()=>initialZoom(initialCardWidth)),[preview,setPreview]=useState(false),[previewSvg,setPreviewSvg]=useState('')
   const frontElement=useRef<HTMLCanvasElement>(null),backElement=useRef<HTMLCanvasElement>(null)
   const initial=useRef({initialFrontData,initialBackData,initialCardWidth,initialCardHeight})
   const disposal=useRef<Promise<unknown>>(Promise.resolve())
