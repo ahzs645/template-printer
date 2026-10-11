@@ -66,13 +66,18 @@ export type LanyardOptions = {
   damping?: number
   /** Strap width in world units (the card's long side is 2.25). */
   strapWidth: number
+  /** Told whenever the card is turned over, by a tap or by flip(). */
+  onFlip?: (showingBack: boolean) => void
 }
 
 export type LanyardHandle = {
   update(options: Partial<LanyardOptions>): void
   /** Re-hang the card from the start position. */
   drop(): void
-  /** Turn the card round, to see the other side; it settles facing that way. */
+  /**
+   * Turn the card round, to see the other side; it settles facing that way.
+   * Tapping the card does the same.
+   */
   flip(): void
   dispose(): void
 }
@@ -94,6 +99,9 @@ const ANCHOR_Y = 4.2
 const REST_Y = -0.75
 /** How hard the card turns back to face the camera, rad/s² per radian off. */
 const FACE_SPRING = 14
+/** A press shorter than this that moves less than TAP_SLOP_PX is a tap, not a drag. */
+const TAP_MS = 320
+const TAP_SLOP_PX = 6
 
 /** The four corners of the rigid tetrahedron that stands in for the card's mass. */
 const TETRA = [
@@ -534,6 +542,10 @@ export async function createLanyardScene(
   // --- dragging -------------------------------------------------------------
 
   let dragging = false
+  /** Where and when the press began, to tell a tap from a drag. */
+  let pressX = 0
+  let pressY = 0
+  let pressTime = 0
   const dragTarget = new THREE.Vector3()
   const grabOffset = new THREE.Vector3()
 
@@ -813,6 +825,9 @@ export async function createLanyardScene(
     grabOffset.copy(centre).sub(hit.point)
     dragTarget.copy(centre)
     dragging = true
+    pressX = event.clientX
+    pressY = event.clientY
+    pressTime = performance.now()
     canvas.setPointerCapture(event.pointerId)
     canvas.style.cursor = 'grabbing'
   }
@@ -838,6 +853,10 @@ export async function createLanyardScene(
       // The pointer may already be gone.
     }
     canvas.style.cursor = ''
+    // A quick press that barely moved is a tap: turn the card over, the way
+    // you would flip a badge round to read the back.
+    const moved = Math.hypot(event.clientX - pressX, event.clientY - pressY)
+    if (event.type === 'pointerup' && moved < TAP_SLOP_PX && performance.now() - pressTime < TAP_MS) flipCard()
   }
 
   canvas.addEventListener('pointerdown', onPointerDown)
@@ -883,6 +902,20 @@ export async function createLanyardScene(
   function rehang() {
     resetChain()
     rememberRestShape()
+  }
+
+  function flipCard() {
+    targetYaw = targetYaw === 0 ? Math.PI : 0
+    // A flick, so it turns over with some life rather than drifting round.
+    readPose()
+    for (const particle of body) {
+      const x = particle.p.x - centre.x
+      const z = particle.p.z - centre.z
+      const spin = 0.06
+      particle.prev.x = particle.p.x - z * spin
+      particle.prev.z = particle.p.z + x * spin
+    }
+    options.onFlip?.(targetYaw !== 0)
   }
 
   rehang()
@@ -931,16 +964,7 @@ export async function createLanyardScene(
       rehang()
     },
     flip() {
-      targetYaw = targetYaw === 0 ? Math.PI : 0
-      // A flick, so it turns over with some life rather than drifting round.
-      readPose()
-      for (const particle of body) {
-        const x = particle.p.x - centre.x
-        const z = particle.p.z - centre.z
-        const spin = 0.06
-        particle.prev.x = particle.p.x - z * spin
-        particle.prev.z = particle.p.z + x * spin
-      }
+      flipCard()
     },
     dispose() {
       running = false

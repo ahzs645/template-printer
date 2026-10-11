@@ -188,6 +188,10 @@ export function LanyardDialog({
           punchShape,
           closeUp,
           ...strap,
+          // Tapping the card turns it over too; keep the button's label in step.
+          onFlip: (back) => {
+            if (!cancelled) setShowingBack(back)
+          },
         }),
       )
       .then((handle) => {
@@ -264,16 +268,13 @@ export function LanyardDialog({
               <>
                 <p className="lanyard-stage__hint">
                   <Hand size={14} aria-hidden="true" />
-                  Drag the card to swing it — throw it to spin it
+                  Drag to swing · tap to turn it over
                 </p>
                 <div className="lanyard-stage__actions">
                   <button
                     type="button"
                     className="lanyard-stage__button"
-                    onClick={() => {
-                      handleRef.current?.flip()
-                      setShowingBack((value) => !value)
-                    }}
+                    onClick={() => handleRef.current?.flip()}
                   >
                     <FlipHorizontal2 size={15} aria-hidden="true" />
                     {showingBack ? 'Show front' : 'Show back'}

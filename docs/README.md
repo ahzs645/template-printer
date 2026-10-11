@@ -94,7 +94,8 @@ modelled at retail sizes and passing through the hole:
 The view works like React Bits' Lanyard: the strap drops in from above the
 frame, the card is a 0.76 mm PVC slab with its own corner radius and a real hole
 through it, and you can grab it, swing it and throw it to spin it before it turns
-back to face you. **Show back** turns it over; **Drop again** re-hangs it. It
+back to face you. Tap the card, or press **Show back**, to turn it over;
+**Drop again** re-hangs it. It
 opens from **Lanyard** in the Check group or **Hang on a lanyard** under the
 card preview.
 
