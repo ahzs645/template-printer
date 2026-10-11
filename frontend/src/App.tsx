@@ -233,7 +233,7 @@ function App() {
   // JSON print layouts (Brainstorm-style layouts)
   const { printLayouts: jsonPrintLayouts, getPrintLayoutById } = usePrintLayouts()
 
-  const { users, loading: usersLoading } = useUsers()
+  const { users, loading: usersLoading, refresh: refreshUsers } = useUsers()
   const {
     designs: cardDesigns,
     loading: cardDesignsLoading,
@@ -247,6 +247,12 @@ function App() {
   const [exportMode, setExportMode] = useState<ExportMode>('quick')
   const [exportStatus, setExportStatus] = useState<ExportStatus>({ disabled: true, label: 'Export PDF' })
   const exportPageRef = useRef<ExportPageHandle>(null)
+
+  // The Users tab keeps its own list, so people added or imported there would
+  // not reach the print screen until a reload. Read the list again on the way in.
+  useEffect(() => {
+    if (activeTab === 'export') void refreshUsers()
+  }, [activeTab, refreshUsers])
   const [exportCanvasDesign, setExportCanvasDesign] = useState<CanvasDesignRenderResult | null>(null)
   const [designDialogOpen, setDesignDialogOpen] = useState(false)
   const [editingDesign, setEditingDesign] = useState<typeof cardDesigns[0] | null>(null)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { FlipHorizontal2, Hand, RotateCcw, ZoomIn } from 'lucide-react'
 
 import {
@@ -50,6 +50,11 @@ export type LanyardDialogProps = {
   onPunchShapeChange: (shape: PunchShape) => void
   /** Identifies the card, so how it hangs is remembered for it. */
   cardKey?: string | null
+  /**
+   * Controls for what is printed on the card — typed text, a person from the
+   * database — shown first. Changing them repaints the card where it hangs.
+   */
+  dataPanel?: ReactNode
 }
 
 type StrapSettings = {
@@ -124,6 +129,7 @@ export function LanyardDialog({
   onPunchChange,
   onPunchShapeChange,
   cardKey,
+  dataPanel,
 }: LanyardDialogProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -160,8 +166,16 @@ export function LanyardDialog({
   const natural = naturalOrientation(widthMm, heightMm)
   const hangsAs = orientation === 'auto' ? natural : orientation
 
+  // The artwork the scene starts from. Later changes — new text, another
+  // person — repaint the card through update() instead of rebuilding the
+  // scene, which would drop it from the top again on every keystroke.
+  const artworkRef = useRef({ frontSvg, backSvg })
+  artworkRef.current = { frontSvg, backSvg }
+  const hasArtwork = Boolean(frontSvg)
+
   // Build the scene once the dialog is actually open and sized.
   useEffect(() => {
+    const { frontSvg, backSvg } = artworkRef.current
     if (!open || !frontSvg) return
     const canvas = canvasRef.current
     const container = containerRef.current
@@ -200,6 +214,9 @@ export function LanyardDialog({
           return
         }
         handleRef.current = handle
+        // Catch up with anything that changed while the scene was being built.
+        const latest = artworkRef.current
+        if (latest.frontSvg) handle.update({ frontSvg: latest.frontSvg, backSvg: latest.backSvg })
       })
       .catch((cause) => {
         console.error(cause)
@@ -216,7 +233,14 @@ export function LanyardDialog({
     }
     // Rebuilding on every control change would be wasteful; update() handles those.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, frontSvg, backSvg, widthMm, heightMm, artworkWidthMm, artworkHeightMm, cardOriginXMm, cardOriginYMm])
+  }, [open, hasArtwork, widthMm, heightMm, artworkWidthMm, artworkHeightMm, cardOriginXMm, cardOriginYMm])
+
+  useEffect(() => {
+    if (!frontSvg) return
+    // A short pause, so typing repaints once per pause rather than per key.
+    const timer = window.setTimeout(() => handleRef.current?.update({ frontSvg, backSvg }), 140)
+    return () => window.clearTimeout(timer)
+  }, [frontSvg, backSvg])
 
   useEffect(() => {
     handleRef.current?.update({ punch, punchShape })
@@ -298,6 +322,13 @@ export function LanyardDialog({
           </div>
 
           <div className="lanyard-controls">
+            {dataPanel && (
+              <section className="lanyard-controls__section">
+                <h3 className="lanyard-controls__heading">On the card</h3>
+                {dataPanel}
+              </section>
+            )}
+
             <section className="lanyard-controls__section">
               <h3 className="lanyard-controls__heading">Card</h3>
 

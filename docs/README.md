@@ -99,6 +99,15 @@ back to face you. Tap the card, or press **Show back**, to turn it over;
 opens from **Lanyard** in the Check group or **Hang on a lanyard** under the
 card preview.
 
+On the Export screen, **Hang on a lanyard** under the print preview shows the
+card as it will print, with an **On the card** panel to change what is on it:
+**Type it** edits the same text a quick export prints, and **A person** picks
+someone from the database. On a design whose variants are chosen per person
+(by position, department or grade), the person also picks the variant, so a
+Staff record hangs the Staff card. It opens on the first person of a batch, or
+on the first tray slot that prints from the database. Changes repaint the card
+where it hangs rather than dropping it again.
+
 **Hangs as** says whether the card is worn vertically or horizontally. *As
 drawn* follows the artwork; *Vertical* or *Horizontal* turns the artwork a
 quarter onto the card when it was laid out the other way, and the punch is then

@@ -1619,3 +1619,38 @@ textarea.form-input {
     display: none;
   }
 }
+
+/* What is on the card, in the lanyard dialog from the print screen. */
+.lanyard-segmented--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lanyard-segmented__option--row {
+  flex-direction: row;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+}
+
+.lanyard-segmented__option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lanyard-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.lanyard-field__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* The way into the lanyard from the print preview. */
+.export-preview-actions {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
