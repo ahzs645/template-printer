@@ -97,8 +97,15 @@ const FOV = 20
 const ANCHOR_Y = 4.2
 /** Where the card's centre comes to rest. */
 const REST_Y = -0.75
-/** How hard the card turns back to face the camera, rad/s² per radian off. */
-const FACE_SPRING = 14
+/**
+ * How the card turns about its strap, after React Bits: a spring pulls the
+ * total twist back to where the card should face (rad/s² per radian off), and
+ * the spin about the strap is damped (per second).
+ */
+const TWIST_SPRING = 30
+const TWIST_DAMPING = 3
+/** How fast a tap sets the card turning, rad/s. */
+const FLIP_SPIN = 9
 /**
  * The light budget, as shares of π: the ambient plus the key at the angle it
  * meets a card facing the camera add up to 1, so that card shows its albedo.
@@ -108,8 +115,8 @@ const KEY_SHARE = 0.36
 const KEY_DIRECTION = { x: 1.2, y: 2, z: 6 }
 /** How strongly the clear coat reflects the studio. */
 const GLOSS_INTENSITY = 0.4
-/** A press shorter than this that moves less than TAP_SLOP_PX is a tap, not a drag. */
-const TAP_MS = 320
+/** A press shorter than this that never moves TAP_SLOP_PX is a tap, not a drag. */
+const TAP_MS = 450
 const TAP_SLOP_PX = 6
 
 /** The four corners of the rigid tetrahedron that stands in for the card's mass. */
@@ -516,7 +523,58 @@ export async function createLanyardScene(
   const orientation = new THREE.Quaternion()
   const scratch = new THREE.Vector3()
   const scratch2 = new THREE.Vector3()
-  let targetYaw = 0
+  /**
+   * The twist about the strap is counted in full, not wrapped to a half turn:
+   * spin the card round three times and it unwinds three times, as a real
+   * strap does. `turn` is where it should come to rest — 0 for the front,
+   * ±π for the back, the sign saying which way it went round.
+   */
+  let turn = 0
+  let twist = 0
+  let twistRaw = 0
+  let lastTwist = 0
+  const twistAxis = new THREE.Vector3()
+  const worldFront = new THREE.Vector3()
+  const twistCross = new THREE.Vector3()
+
+  /** The card's facing about its own up axis, relative to the camera, in (−π, π]. */
+  function rawTwist() {
+    // Straight ahead, flattened onto the plane the card turns in.
+    worldFront.set(-axisY.x * axisY.z, -axisY.y * axisY.z, 1 - axisY.z * axisY.z)
+    if (worldFront.lengthSq() < 1e-3) return twistRaw
+    return Math.atan2(twistCross.crossVectors(worldFront, axisZ).dot(axisY), worldFront.dot(axisZ))
+  }
+
+  /** Follow the twist through a step, counting whole turns. */
+  function trackTwist() {
+    const raw = rawTwist()
+    let turned = raw - twistRaw
+    if (turned > Math.PI) turned -= Math.PI * 2
+    else if (turned < -Math.PI) turned += Math.PI * 2
+    twist += turned
+    twistRaw = raw
+  }
+
+  /** Turn the body about its own up axis, through its centre. */
+  function rotateBodyAbout(axis: Vec3, angle: number, keepVelocity: boolean) {
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
+    for (const particle of body) {
+      for (const point of keepVelocity ? [particle.p, particle.prev] : [particle.p]) {
+        const r = scratch.copy(point).sub(centre)
+        const k = axis
+        const dot = k.dot(r)
+        const cx = k.y * r.z - k.z * r.y
+        const cy = k.z * r.x - k.x * r.z
+        const cz = k.x * r.y - k.y * r.x
+        point.set(
+          centre.x + r.x * cos + cx * sin + k.x * dot * (1 - cos),
+          centre.y + r.y * cos + cy * sin + k.y * dot * (1 - cos),
+          centre.z + r.z * cos + cz * sin + k.z * dot * (1 - cos),
+        )
+      }
+    }
+  }
 
   /** Place the rigid body at a position and orientation. */
   function placeBody(position: Vec3, rotation: THREE_NS.Quaternion) {
@@ -557,9 +615,14 @@ export async function createLanyardScene(
       rope[i].prev.copy(rope[i].p)
     }
     const attach = rope[ROPE_NODES - 1].p
-    const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetYaw + 0.6)
+    const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn + 0.6)
     const offset = attachLocal.clone().applyQuaternion(rotation)
     placeBody(attach.clone().sub(offset), rotation)
+    readPose()
+    // It starts a little turned, on whichever side it is meant to show.
+    twist = turn + 0.6
+    lastTwist = twist
+    twistRaw = rawTwist()
   }
 
   function solveDistance(a: Particle, b: Particle, length: number, ropeOnly: boolean) {
@@ -594,6 +657,9 @@ export async function createLanyardScene(
   let pressX = 0
   let pressY = 0
   let pressTime = 0
+  /** Set once the pointer has moved too far for the press to be a tap. */
+  let pressMoved = false
+  const pressPoint = new THREE.Vector3()
   const dragTarget = new THREE.Vector3()
   const grabOffset = new THREE.Vector3()
 
@@ -660,24 +726,16 @@ export async function createLanyardScene(
       rope[0].p.copy(anchor)
     }
 
+    readPose()
+    trackTwist()
+    const spin = (twist - lastTwist) / dt
+    lastTwist = twist
     if (!dragging) {
-      // Turn back to face the camera, the way React Bits trims the card's spin:
-      // a spring on the yaw, applied as a nudge to position so it shows up as
-      // angular velocity and the damping above settles it.
-      readPose()
-      let yaw = Math.atan2(axisZ.x, axisZ.z) - targetYaw
-      yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw))
-      const angle = -FACE_SPRING * yaw * dt * dt
-      if (Math.abs(angle) > 1e-7) {
-        const cos = Math.cos(angle)
-        const sin = Math.sin(angle)
-        for (const particle of body) {
-          const x = particle.p.x - centre.x
-          const z = particle.p.z - centre.z
-          particle.p.x = centre.x + x * cos + z * sin
-          particle.p.z = centre.z - x * sin + z * cos
-        }
-      }
+      // Turn back to where the card should face, the way React Bits does: a
+      // damped spring on the total twist about the card's up axis. It is
+      // applied as a nudge to position, so it shows up as angular velocity.
+      const angle = (TWIST_SPRING * (turn - twist) - TWIST_DAMPING * spin) * dt * dt
+      if (Math.abs(angle) > 1e-9) rotateBodyAbout(twistAxis.copy(axisY), angle, false)
     }
   }
 
@@ -705,7 +763,8 @@ export async function createLanyardScene(
   const across = new THREE.Vector3()
   const facing = new THREE.Vector3()
   const normal = new THREE.Vector3()
-  const toCamera = new THREE.Vector3(0, 0, 1)
+  const toCamera = new THREE.Vector3()
+  const lastSide = new THREE.Vector3()
 
   const cameraBase = new THREE.Vector3()
   const lookBase = new THREE.Vector3()
@@ -767,9 +826,9 @@ export async function createLanyardScene(
     for (let i = 1; i < RIBBON_POINTS; i += 1) total += points[i].distanceTo(points[i - 1])
     const tiles = total / (options.strapWidth * 8)
     const halfWidth = options.strapWidth / 2
-    // The strap lies flat to the viewer where it hangs, and turns to lie flat
-    // to the card where it meets the hardware.
-    const cardFacing = axisZ.dot(toCamera) >= 0 ? axisZ : scratch2.copy(axisZ).negate()
+    // The strap lies flat to the viewer where it hangs and winds up with the
+    // card's twist towards the hardware, as React Bits' does — a card spun
+    // three times shows three turns in the strap, which unwind with it.
 
     let arc = 0
     for (let i = 0; i < RIBBON_POINTS; i += 1) {
@@ -777,11 +836,16 @@ export async function createLanyardScene(
       if (i > 0) arc += point.distanceTo(points[i - 1])
       tangent.copy(points[Math.min(i + 1, RIBBON_POINTS - 1)]).sub(points[Math.max(i - 1, 0)]).normalize()
       const t = i / (RIBBON_POINTS - 1)
-      const blend = THREE.MathUtils.smoothstep(t, 0.55, 1)
-      facing.copy(toCamera).lerp(cardFacing, blend)
-      across.crossVectors(tangent, facing)
-      if (across.lengthSq() < 1e-8) across.set(1, 0, 0)
-      across.normalize()
+      toCamera.subVectors(camera.position, point).normalize()
+      const side = scratch2.crossVectors(toCamera, tangent)
+      if (side.lengthSq() < 1e-10) side.copy(i > 0 ? lastSide : scratch.set(1, 0, 0))
+      side.normalize()
+      // Keep the strap from flipping edge for edge between neighbouring points.
+      if (i > 0 && side.dot(lastSide) < 0) side.negate()
+      lastSide.copy(side)
+      const angle = -twist * Math.pow(t, 1.3)
+      facing.crossVectors(tangent, side)
+      across.copy(side).multiplyScalar(Math.cos(angle)).addScaledVector(facing, Math.sin(angle)).normalize()
       // Facing the viewer, to match the triangles' winding; a strap seen from
       // behind is lit from its other side, as DoubleSide flips it there.
       normal.crossVectors(tangent, across).normalize()
@@ -878,6 +942,8 @@ export async function createLanyardScene(
     pressX = event.clientX
     pressY = event.clientY
     pressTime = performance.now()
+    pressMoved = false
+    pressPoint.copy(hit.point)
     canvas.setPointerCapture(event.pointerId)
     canvas.style.cursor = 'grabbing'
   }
@@ -885,6 +951,7 @@ export async function createLanyardScene(
   function onPointerMove(event: PointerEvent) {
     toPointer(event)
     if (dragging) {
+      if (Math.hypot(event.clientX - pressX, event.clientY - pressY) > TAP_SLOP_PX) pressMoved = true
       if (raycaster.ray.intersectPlane(dragPlane, planePoint)) {
         dragTarget.copy(planePoint).add(grabOffset)
         clampDrag()
@@ -903,10 +970,10 @@ export async function createLanyardScene(
       // The pointer may already be gone.
     }
     canvas.style.cursor = ''
-    // A quick press that barely moved is a tap: turn the card over, the way
-    // you would flip a badge round to read the back.
-    const moved = Math.hypot(event.clientX - pressX, event.clientY - pressY)
-    if (event.type === 'pointerup' && moved < TAP_SLOP_PX && performance.now() - pressTime < TAP_MS) flipCard()
+    // A quick press that never wandered is a tap: turn the card over, the way
+    // you would flip a badge round to read the back, pushed round from where
+    // it was tapped.
+    if (event.type === 'pointerup' && !pressMoved && performance.now() - pressTime < TAP_MS) flipCard(pressPoint)
   }
 
   canvas.addEventListener('pointerdown', onPointerDown)
@@ -954,18 +1021,28 @@ export async function createLanyardScene(
     rememberRestShape()
   }
 
-  function flipCard() {
-    targetYaw = targetYaw === 0 ? Math.PI : 0
-    // A flick, so it turns over with some life rather than drifting round.
+  /**
+   * Turn the card over, as React Bits does. From the front it spins the way a
+   * push at `point` would turn it — tap the right half and it goes one way,
+   * the left half the other; from the back it unwinds the way it came. The
+   * spin is a flick of angular velocity about the card's up axis, and the
+   * twist spring brings it to rest the other way round.
+   */
+  function flipCard(point?: Vec3) {
     readPose()
-    for (const particle of body) {
-      const x = particle.p.x - centre.x
-      const z = particle.p.z - centre.z
-      const spin = 0.06
-      particle.prev.x = particle.p.x - z * spin
-      particle.prev.z = particle.p.z + x * spin
+    let direction = turn > 0 ? -1 : 1
+    if (turn === 0 && point) {
+      const away = scratch2.subVectors(point, camera.position).normalize()
+      direction = scratch.subVectors(point, centre).cross(away).dot(axisY) < 0 ? -1 : 1
     }
-    options.onFlip?.(targetYaw !== 0)
+    turn = turn === 0 ? Math.PI * direction : 0
+    // Add the angular velocity by moving where each particle was a step ago.
+    const omega = FLIP_SPIN * direction * SUBSTEP
+    for (const particle of body) {
+      const r = scratch.copy(particle.p).sub(centre)
+      particle.prev.sub(scratch2.crossVectors(axisY, r).multiplyScalar(omega))
+    }
+    options.onFlip?.(turn !== 0)
   }
 
   rehang()
