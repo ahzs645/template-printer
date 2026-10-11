@@ -91,8 +91,23 @@ modelled at retail sizes and passing through the hole:
 
 **Close-up on the punch** follows the hardware as the card swings.
 
-Portrait and landscape are read from the artwork's shape; nothing needs
-setting:
+The view works like React Bits' Lanyard: the strap drops in from above the
+frame, the card is a 0.76 mm PVC slab with its own corner radius and a real hole
+through it, and you can grab it, swing it and throw it to spin it before it turns
+back to face you. **Show back** turns it over; **Drop again** re-hangs it. It
+opens from **Lanyard** in the Check group or **Hang on a lanyard** under the
+card preview.
+
+**Hangs as** says whether the card is worn vertically or horizontally. *As
+drawn* follows the artwork; *Vertical* or *Horizontal* turns the artwork a
+quarter onto the card when it was laid out the other way, and the punch is then
+placed on the card as it hangs. The choice is remembered for each card in this
+browser, along with the strap's text, colour and width.
+
+Portrait and landscape are otherwise read from the artwork's shape; nothing
+needs setting. An SVG with no card area that is taller than it is wide is a
+portrait ID-1 card, and one drawn in points or CSS pixels that comes out up to
+5 mm larger than the card on each side is read as that card with bleed:
 
 - a portrait card's magnetic-stripe guide runs along its long edge;
 - a landscape back on a portrait card is shown, and hung on the lanyard, turned

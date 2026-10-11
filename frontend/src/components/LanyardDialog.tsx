@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { FlipHorizontal2, Hand, RotateCcw, ZoomIn } from 'lucide-react'
 
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from './ui/dialog'
-import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
@@ -24,7 +22,7 @@ import {
   type PunchPosition,
   type PunchShape,
 } from '../lib/cardBlanks'
-import type { LanyardHandle } from '../lib/lanyardScene'
+import { naturalOrientation, type LanyardHandle, type LanyardOrientation } from '../lib/lanyardScene'
 import {
   LANYARD_ATTACHMENTS,
   LANYARD_ATTACHMENT_LABELS,
@@ -50,6 +48,56 @@ export type LanyardDialogProps = {
   punchShape: PunchShape
   onPunchChange: (punch: PunchPosition) => void
   onPunchShapeChange: (shape: PunchShape) => void
+  /** Identifies the card, so how it hangs is remembered for it. */
+  cardKey?: string | null
+}
+
+type StrapSettings = {
+  strapColor: string
+  strapText: string
+  strapWidth: number
+  gravity: number
+  damping: number
+  attachment: LanyardAttachment
+}
+
+const DEFAULT_STRAP: StrapSettings = {
+  strapColor: '#155329',
+  strapText: '',
+  strapWidth: 0.42,
+  gravity: 40,
+  damping: 2.6,
+  attachment: 'auto',
+}
+
+const STRAP_SWATCHES = ['#155329', '#111827', '#1d4ed8', '#b91c1c', '#7c3aed', '#f59e0b', '#e5e7eb']
+
+const STRAP_STORAGE_KEY = 'template-printer:lanyard'
+const ORIENTATION_STORAGE_KEY = 'template-printer:lanyard-orientation'
+
+// Remembered per browser, as a convenience: storage can be missing or
+// blocked, in which case the defaults simply apply.
+function readStored<T>(key: string): Partial<T> | null {
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as Partial<T>) : null
+  } catch {
+    return null
+  }
+}
+
+function writeStored(key: string, value: unknown) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Nothing to do: the setting just will not be remembered.
+  }
+}
+
+function storedOrientation(cardKey: string | null | undefined): LanyardOrientation {
+  if (!cardKey) return 'auto'
+  const value = readStored<Record<string, LanyardOrientation>>(ORIENTATION_STORAGE_KEY)?.[cardKey]
+  return value === 'portrait' || value === 'landscape' ? value : 'auto'
 }
 
 /**
@@ -75,19 +123,42 @@ export function LanyardDialog({
   punchShape,
   onPunchChange,
   onPunchShapeChange,
+  cardKey,
 }: LanyardDialogProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const handleRef = useRef<LanyardHandle | null>(null)
 
-  const [strapColor, setStrapColor] = useState('#155329')
-  const [strapText, setStrapText] = useState('')
-  const [gravity, setGravity] = useState(32)
-  const [strapWidth, setStrapWidth] = useState(0.24)
-  const [attachment, setAttachment] = useState<LanyardAttachment>('auto')
+  const [strap, setStrap] = useState<StrapSettings>(() => ({ ...DEFAULT_STRAP, ...readStored<StrapSettings>(STRAP_STORAGE_KEY) }))
+  const [orientation, setOrientation] = useState<LanyardOrientation>(() => storedOrientation(cardKey))
   const [closeUp, setCloseUp] = useState(false)
+  const [showingBack, setShowingBack] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const changeStrap = (patch: Partial<StrapSettings>) =>
+    setStrap((current) => {
+      const next = { ...current, ...patch }
+      writeStored(STRAP_STORAGE_KEY, next)
+      return next
+    })
+
+  // Each card remembers how it is meant to hang.
+  useEffect(() => {
+    setOrientation(storedOrientation(cardKey))
+  }, [cardKey])
+
+  const changeOrientation = (value: LanyardOrientation) => {
+    setOrientation(value)
+    if (!cardKey) return
+    const stored = readStored<Record<string, LanyardOrientation>>(ORIENTATION_STORAGE_KEY) ?? {}
+    if (value === 'auto') delete stored[cardKey]
+    else stored[cardKey] = value
+    writeStored(ORIENTATION_STORAGE_KEY, stored)
+  }
+
+  const natural = naturalOrientation(widthMm, heightMm)
+  const hangsAs = orientation === 'auto' ? natural : orientation
 
   // Build the scene once the dialog is actually open and sized.
   useEffect(() => {
@@ -99,6 +170,7 @@ export function LanyardDialog({
     let cancelled = false
     setLoading(true)
     setError(null)
+    setShowingBack(false)
 
     import('../lib/lanyardScene')
       .then(({ createLanyardScene }) =>
@@ -111,14 +183,11 @@ export function LanyardDialog({
           artworkHeightMm: artworkHeightMm ?? heightMm,
           cardOriginXMm,
           cardOriginYMm,
+          orientation,
           punch,
           punchShape,
-          strapColor,
-          strapText,
-          gravity,
-          strapWidth,
-          attachment,
           closeUp,
+          ...strap,
         }),
       )
       .then((handle) => {
@@ -150,182 +219,234 @@ export function LanyardDialog({
   }, [punch, punchShape])
 
   useEffect(() => {
-    handleRef.current?.update({ strapColor, strapText, gravity, strapWidth })
-  }, [strapColor, strapText, gravity, strapWidth])
+    handleRef.current?.update({ orientation })
+  }, [orientation])
 
   useEffect(() => {
-    handleRef.current?.update({ attachment })
-  }, [attachment])
+    handleRef.current?.update({
+      strapColor: strap.strapColor,
+      strapText: strap.strapText,
+      gravity: strap.gravity,
+      strapWidth: strap.strapWidth,
+      damping: strap.damping,
+    })
+  }, [strap.strapColor, strap.strapText, strap.gravity, strap.strapWidth, strap.damping])
+
+  useEffect(() => {
+    handleRef.current?.update({ attachment: strap.attachment })
+  }, [strap.attachment])
 
   useEffect(() => {
     handleRef.current?.update({ closeUp })
   }, [closeUp])
 
-  const shownAttachment = resolveAttachment(attachment, punch !== 'none', punchShape)
-
+  const shownAttachment = resolveAttachment(strap.attachment, punch !== 'none', punchShape)
   const punchHitsStripe = hasMagneticStripe && punchConflictsWithStripe({ punch, punchShape })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent style={{ maxWidth: '980px', width: '95vw' }}>
+      <DialogContent className="lanyard-dialog">
         <DialogHeader>
           <DialogTitle>On a lanyard</DialogTitle>
           <DialogDescription>
             The card hangs from its punch, so moving the punch tips it the way a real holder would.
-            Drag the card to swing it.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="dialog-split dialog-split--preview-first">
-          <div
-            ref={containerRef}
-            style={{
-              position: 'relative',
-              height: 460,
-              borderRadius: '0.75rem',
-              background: 'linear-gradient(180deg, var(--bg-surface-alt) 0%, var(--border-default) 100%)',
-              overflow: 'hidden',
-            }}
-          >
-            <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />
-            {loading && (
-              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                Building the card…
-              </p>
-            )}
-            {error && (
-              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--danger)', padding: '2rem', textAlign: 'center' }}>
-                {error}
-              </p>
-            )}
-            {!frontSvg && (
-              <p style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                Open a template to hang it on a lanyard.
-              </p>
+        <div className="lanyard-layout">
+          <div ref={containerRef} className="lanyard-stage">
+            <canvas ref={canvasRef} className="lanyard-stage__canvas" />
+            {loading && <p className="lanyard-stage__message">Building the card…</p>}
+            {error && <p className="lanyard-stage__message lanyard-stage__message--error">{error}</p>}
+            {!frontSvg && <p className="lanyard-stage__message">Open a template to hang it on a lanyard.</p>}
+
+            {frontSvg && !error && (
+              <>
+                <p className="lanyard-stage__hint">
+                  <Hand size={14} aria-hidden="true" />
+                  Drag the card to swing it — throw it to spin it
+                </p>
+                <div className="lanyard-stage__actions">
+                  <button
+                    type="button"
+                    className="lanyard-stage__button"
+                    onClick={() => {
+                      handleRef.current?.flip()
+                      setShowingBack((value) => !value)
+                    }}
+                  >
+                    <FlipHorizontal2 size={15} aria-hidden="true" />
+                    {showingBack ? 'Show front' : 'Show back'}
+                  </button>
+                  <button
+                    type="button"
+                    className="lanyard-stage__button"
+                    aria-pressed={closeUp}
+                    onClick={() => setCloseUp((value) => !value)}
+                  >
+                    <ZoomIn size={15} aria-hidden="true" />
+                    Close-up
+                  </button>
+                  <button type="button" className="lanyard-stage__button" onClick={() => handleRef.current?.drop()}>
+                    <RotateCcw size={15} aria-hidden="true" />
+                    Drop again
+                  </button>
+                </div>
+              </>
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label>Punch position</Label>
-              <Select value={punch} onValueChange={(value) => onPunchChange(value as PunchPosition)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PUNCH_POSITIONS.map((position) => (
-                    <SelectItem key={position} value={position}>
-                      {PUNCH_POSITION_LABELS[position]}
-                    </SelectItem>
+          <div className="lanyard-controls">
+            <section className="lanyard-controls__section">
+              <h3 className="lanyard-controls__heading">Card</h3>
+
+              <div className="lanyard-field">
+                <Label id="lanyard-orientation-label">Hangs as</Label>
+                <div className="lanyard-segmented" role="radiogroup" aria-labelledby="lanyard-orientation-label">
+                  {(['auto', 'portrait', 'landscape'] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={orientation === value}
+                      className="lanyard-segmented__option"
+                      onClick={() => changeOrientation(value)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`lanyard-segmented__glyph lanyard-segmented__glyph--${value === 'auto' ? natural : value}`}
+                      />
+                      {value === 'auto' ? 'As drawn' : value === 'portrait' ? 'Vertical' : 'Horizontal'}
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
-              {punch === 'none' && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                  With no punch the card hangs from a clip on its top edge.
+                </div>
+                <p className="lanyard-note">
+                  {orientation === 'auto'
+                    ? `The artwork is ${natural === 'portrait' ? 'taller than it is wide' : 'wider than it is tall'}, so it hangs ${natural === 'portrait' ? 'vertically' : 'horizontally'}.`
+                    : hangsAs === natural
+                      ? `Hangs ${hangsAs === 'portrait' ? 'vertically' : 'horizontally'}, as drawn.`
+                      : `Artwork turned a quarter to hang ${hangsAs === 'portrait' ? 'vertically' : 'horizontally'}. The punch is placed on the card as it hangs.`}
                 </p>
-              )}
-            </div>
+              </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label>Punch shape</Label>
-              <Select
-                value={punchShape}
-                onValueChange={(value) => onPunchShapeChange(value as PunchShape)}
-                disabled={punch === 'none'}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="slot">Lanyard slot (12 × 3 mm)</SelectItem>
-                  <SelectItem value="round">Round hole (⌀5 mm)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="lanyard-field">
+                <Label>Punch position</Label>
+                <Select value={punch} onValueChange={(value) => onPunchChange(value as PunchPosition)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PUNCH_POSITIONS.map((position) => (
+                      <SelectItem key={position} value={position}>
+                        {PUNCH_POSITION_LABELS[position]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {punch === 'none' && <p className="lanyard-note">With no punch the card hangs from a clip on its top edge.</p>}
+              </div>
 
-            {punchHitsStripe && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--warning)', margin: 0 }}>
-                This punch cuts through the magnetic stripe on the back.
-              </p>
-            )}
+              <div className="lanyard-field">
+                <Label>Punch shape</Label>
+                <Select value={punchShape} onValueChange={(value) => onPunchShapeChange(value as PunchShape)} disabled={punch === 'none'}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slot">Lanyard slot (12 × 3 mm)</SelectItem>
+                    <SelectItem value="round">Round hole (⌀5 mm)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {punchHitsStripe && (
+                  <p className="lanyard-note lanyard-note--warning">This punch cuts through the magnetic stripe on the back.</p>
+                )}
+              </div>
+            </section>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label>Attachment</Label>
-              <Select value={attachment} onValueChange={(value) => setAttachment(value as LanyardAttachment)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANYARD_ATTACHMENTS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {LANYARD_ATTACHMENT_LABELS[option]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+            <section className="lanyard-controls__section">
+              <h3 className="lanyard-controls__heading">Hardware</h3>
+              <div className="lanyard-field">
+                <Label>Attachment</Label>
+                <Select value={strap.attachment} onValueChange={(value) => changeStrap({ attachment: value as LanyardAttachment })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANYARD_ATTACHMENTS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {LANYARD_ATTACHMENT_LABELS[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {shownAttachment !== strap.attachment && (
+                  <p className="lanyard-note">
+                    Showing a {LANYARD_ATTACHMENT_LABELS[shownAttachment].toLowerCase()}
+                    {strap.attachment === 'auto' ? ', the usual one for this punch.' : ', since that does not fit this punch.'}
+                  </p>
+                )}
+              </div>
+              <label className="lanyard-switch">
                 <Switch checked={closeUp} onCheckedChange={setCloseUp} />
                 Close-up on the punch
               </label>
-              {shownAttachment !== attachment && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                  Showing a {LANYARD_ATTACHMENT_LABELS[shownAttachment].toLowerCase()}
-                  {attachment === 'auto' ? ', the usual one for this punch.' : ', since that does not fit this punch.'}
-                </p>
-              )}
-            </div>
+            </section>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label htmlFor="strap-text">Strap text</Label>
-              <Input
-                id="strap-text"
-                value={strapText}
-                placeholder="e.g. UNBC ///"
-                onChange={(event) => setStrapText(event.target.value)}
-              />
-            </div>
+            <section className="lanyard-controls__section">
+              <h3 className="lanyard-controls__heading">Strap</h3>
+              <div className="lanyard-field">
+                <Label htmlFor="strap-text">Printed text</Label>
+                <Input
+                  id="strap-text"
+                  value={strap.strapText}
+                  placeholder="e.g. UNBC ///"
+                  onChange={(event) => changeStrap({ strapText: event.target.value })}
+                />
+              </div>
+              <div className="lanyard-field">
+                <Label htmlFor="strap-color">Colour</Label>
+                <div className="lanyard-swatches">
+                  {STRAP_SWATCHES.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="lanyard-swatches__swatch"
+                      style={{ background: color }}
+                      aria-label={`Strap colour ${color}`}
+                      aria-pressed={strap.strapColor.toLowerCase() === color}
+                      onClick={() => changeStrap({ strapColor: color })}
+                    />
+                  ))}
+                  <input
+                    id="strap-color"
+                    type="color"
+                    value={strap.strapColor}
+                    onChange={(event) => changeStrap({ strapColor: event.target.value })}
+                    className="lanyard-swatches__custom"
+                    aria-label="Custom strap colour"
+                  />
+                </div>
+              </div>
+              <div className="lanyard-field">
+                <Label>Width</Label>
+                <Slider value={[strap.strapWidth]} min={0.2} max={0.7} step={0.02} onValueChange={([value]) => changeStrap({ strapWidth: value })} />
+              </div>
+            </section>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label htmlFor="strap-color">Strap colour</Label>
-              <input
-                id="strap-color"
-                type="color"
-                value={strapColor}
-                onChange={(event) => setStrapColor(event.target.value)}
-                className="color-swatch"
-                style={{ width: '100%' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label>Strap width</Label>
-              <Slider
-                value={[strapWidth]}
-                min={0.1}
-                max={0.5}
-                step={0.02}
-                onValueChange={([value]) => setStrapWidth(value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <Label>Swing</Label>
-              <Slider value={[gravity]} min={8} max={64} step={1} onValueChange={([value]) => setGravity(value)} />
-            </div>
-
-            <Button type="button" variant="outline" onClick={() => handleRef.current?.drop()}>
-              <RotateCcw size={15} style={{ marginRight: 6 }} />
-              Drop it again
-            </Button>
+            <section className="lanyard-controls__section">
+              <h3 className="lanyard-controls__heading">Motion</h3>
+              <div className="lanyard-field">
+                <Label>Gravity</Label>
+                <Slider value={[strap.gravity]} min={10} max={80} step={1} onValueChange={([value]) => changeStrap({ gravity: value })} />
+              </div>
+              <div className="lanyard-field">
+                <Label>Settles</Label>
+                <Slider value={[strap.damping]} min={0.6} max={8} step={0.1} onValueChange={([value]) => changeStrap({ damping: value })} />
+                <p className="lanyard-note">Left swings for longer; right comes to rest quickly.</p>
+              </div>
+            </section>
           </div>
         </div>
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

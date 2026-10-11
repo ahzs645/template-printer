@@ -71,7 +71,8 @@ import { BarcodeScanDialog } from './components/BarcodeScanDialog'
 import { TestCardsDialog } from './components/TestCardsDialog'
 import { LanyardDialog } from './components/LanyardDialog'
 import { CardAreaDialog } from './components/CardAreaDialog'
-import { trimRectInMm, type AppliedCardArea } from './lib/cardTrim'
+import { type AppliedCardArea } from './lib/cardTrim'
+import { inferCardGeometry } from './lib/cardGeometry'
 import {
   createTemplatePackage,
   type PackageSideInput,
@@ -91,7 +92,7 @@ import {
 } from './lib/packageUrl'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
-import { ID1_HEIGHT_MM, ID1_WIDTH_MM, PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
+import { PUNCH_POSITIONS, PUNCH_POSITION_LABELS, type PunchPosition, type PunchShape } from './lib/cardBlanks'
 import {
   buildSharedTemplatePayload,
   clearShareTarget,
@@ -878,36 +879,17 @@ function App() {
    *
    * Once a card area is set this is the trim line, not the artwork around it —
    * a magnetic stripe sits a fixed distance from the card's edge, not from the
-   * edge of the bleed. Templates measured in pixels fall back to ID-1.
+   * edge of the bleed. Without one, the size, orientation and bleed are read off
+   * the artwork (see inferCardGeometry).
    */
-  const cardSizeMm = useMemo(() => {
-    if (template?.cardArea) {
-      return { width: template.cardArea.trimWidthMm, height: template.cardArea.trimHeightMm }
-    }
-    if (template?.unit === 'mm' && template.width && template.height) {
-      return { width: template.width, height: template.height }
-    }
-    return { width: ID1_WIDTH_MM, height: ID1_HEIGHT_MM }
-  }, [template])
+  const cardGeometry = useMemo(() => inferCardGeometry(template), [template])
+  const cardSizeMm = cardGeometry.card
 
   /**
    * Where the card sits inside the artwork, in millimetres. The preview shows
    * the whole artwork, so guides drawn over it have to be offset by the bleed.
    */
-  const cardOriginMm = useMemo(() => {
-    if (!template?.cardArea) return { x: 0, y: 0 }
-    const { trimBox, trimWidthMm, trimHeightMm } = template.cardArea
-    const artwork = template.viewBox ?? { x: 0, y: 0, width: template.width, height: template.height }
-    // Millimetres per unit come from the card itself, which is right whether
-    // the file is drawn in millimetres, pixels or points.
-    const rect = trimRectInMm(
-      trimBox,
-      artwork,
-      (artwork.width * trimWidthMm) / trimBox.width,
-      (artwork.height * trimHeightMm) / trimBox.height,
-    )
-    return { x: rect.x, y: rect.y }
-  }, [template])
+  const cardOriginMm = cardGeometry.origin
 
   /**
    * The other side's preview box, at the same scale as this one. It can be the
@@ -935,21 +917,7 @@ function App() {
   }, [activeSide, otherSidePreview, renderedSvg])
 
   /** The artwork's full physical size, bleed included. */
-  const artworkSizeMm = useMemo(() => {
-    if (template?.unit === 'mm' && template.width && template.height) {
-      return { width: template.width, height: template.height }
-    }
-    // Drawn in pixels or points (as Illustrator exports), but the card area says
-    // how big the card is — so the artwork around it scales by the same amount.
-    if (template?.cardArea && template.viewBox) {
-      const { trimBox, trimWidthMm, trimHeightMm } = template.cardArea
-      return {
-        width: (template.viewBox.width * trimWidthMm) / trimBox.width,
-        height: (template.viewBox.height * trimHeightMm) / trimBox.height,
-      }
-    }
-    return cardSizeMm
-  }, [template, cardSizeMm])
+  const artworkSizeMm = cardGeometry.artwork
 
   /**
    * Bring the other side of the linked card design into the editor.
@@ -2730,6 +2698,10 @@ function App() {
                             safeArea={showSafeAreaGuide}
                           />
                         </div>
+                        <button type="button" className="lanyard-launch" onClick={() => setLanyardOpen(true)}>
+                          <Badge2 size={14} aria-hidden="true" />
+                          Hang on a lanyard
+                        </button>
                       </div>
 
                       {linkedDesign && otherSidePreview && (
@@ -3220,6 +3192,7 @@ function App() {
         punchShape={punchShapeGuide}
         onPunchChange={setPunchGuide}
         onPunchShapeChange={setPunchShapeGuide}
+        cardKey={linkedDesignId ?? selectedTemplateId}
       />
 
       {/* Test Cards Dialog */}
