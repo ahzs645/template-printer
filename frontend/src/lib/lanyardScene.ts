@@ -99,6 +99,15 @@ const ANCHOR_Y = 4.2
 const REST_Y = -0.75
 /** How hard the card turns back to face the camera, rad/s² per radian off. */
 const FACE_SPRING = 14
+/**
+ * The light budget, as shares of π: the ambient plus the key at the angle it
+ * meets a card facing the camera add up to 1, so that card shows its albedo.
+ */
+const AMBIENT_SHARE = 0.64
+const KEY_SHARE = 0.36
+const KEY_DIRECTION = { x: 1.2, y: 2, z: 6 }
+/** How strongly the clear coat reflects the studio. */
+const GLOSS_INTENSITY = 0.4
 /** A press shorter than this that moves less than TAP_SLOP_PX is a tap, not a drag. */
 const TAP_MS = 320
 const TAP_SLOP_PX = 6
@@ -233,7 +242,9 @@ function buildStudio(THREE: THREE) {
   strip(2, [0, -1, 5], [0, 0, Math.PI / 3], [100, 0.1])
   strip(3, [-1, -1, 1], [0, 0, Math.PI / 3], [100, 0.1])
   strip(3, [1, 1, 1], [0, 0, Math.PI / 3], [100, 0.1])
-  strip(10, [-10, 0, 14], [0, Math.PI / 2, Math.PI / 3], [100, 10])
+  // React Bits' broad key panel, narrowed: as wide as theirs it laid a sheen
+  // over the whole card that greyed every dark colour on it.
+  strip(6, [-10, 0, 14], [0, Math.PI / 2, Math.PI / 3], [100, 2.5])
   strip(1.5, [8, 6, 6], [0, 0, 0], [6, 30])
   return {
     scene,
@@ -277,43 +288,78 @@ export async function createLanyardScene(
 
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
   renderer.setClearColor(0x000000, 0)
-  renderer.toneMapping = THREE.NeutralToneMapping
+  // No tone mapping: the card should show the colours that will be printed,
+  // and any curve, Neutral included, greys the darks and lifts the lights.
+  renderer.toneMapping = THREE.NoToneMapping
   renderer.outputColorSpace = THREE.SRGBColorSpace
 
   const scene = new THREE.Scene()
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 200)
+  // A near plane well clear of zero keeps depth precision for the card's
+  // 0.76 mm thickness; the close-up never comes nearer than about 2.5.
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 120)
 
-  // Physically based lights: an ambient of π returns a diffuse surface's own
-  // colour, so the artwork reads true and the studio adds only the gloss.
-  scene.add(new THREE.AmbientLight(0xffffff, Math.PI * 0.82))
-  const key = new THREE.DirectionalLight(0xffffff, 0.9)
-  key.position.set(3, 5, 6)
+  // Physically based lights, balanced so a card facing the viewer shows its
+  // artwork at its own colour: an ambient plus a key light from near the camera
+  // that together give an irradiance of π, which returns a matte surface's
+  // albedo exactly. Turning the card away from the key darkens it a little,
+  // which is what makes it read as an object rather than a sticker.
+  scene.add(new THREE.AmbientLight(0xffffff, Math.PI * AMBIENT_SHARE))
+  const key = new THREE.DirectionalLight(0xffffff, Math.PI * KEY_SHARE)
+  key.position.set(KEY_DIRECTION.x, KEY_DIRECTION.y, KEY_DIRECTION.z)
   scene.add(key)
 
+  // The studio is given only to what should reflect it — the gloss, the edge
+  // and the metal — and is not the scene's environment. As ambient light it
+  // was several times brighter than everything else together, and flooded the
+  // artwork (React Bits' card can take it because it is mostly metal).
   const pmrem = new THREE.PMREMGenerator(renderer)
   const studio = buildStudio(THREE)
-  const environment = pmrem.fromScene(studio.scene, 0.04).texture
+  // Unblurred, so the strips stay strips: blurred, they spread into a glow
+  // that greyed the card's darks.
+  const environment = pmrem.fromScene(studio.scene, 0).texture
   studio.dispose()
-  scene.environment = environment
 
-  const faceMaterial = () =>
-    new THREE.MeshPhysicalMaterial({
-      roughness: 0.55,
-      metalness: 0,
-      clearcoat: 1,
-      clearcoatRoughness: 0.12,
-      envMapIntensity: 0.9,
-    })
-  const frontMaterial = faceMaterial()
-  const backMaterial = faceMaterial()
-  const edgeMaterial = new THREE.MeshPhysicalMaterial({ color: 0xf3f3ef, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.2 })
+  // Each face is two layers, as a laminated card is: the ink, matte and lit
+  // only by the lights above, and over it a clear coat that is all reflection
+  // and no colour — black, so drawn additively it adds the studio's streaks and
+  // nothing else, and the ink keeps its printed colour.
+  const inkMaterial = () => new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, envMapIntensity: 0 })
+  const frontMaterial = inkMaterial()
+  const backMaterial = inkMaterial()
+  const glossMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x000000,
+    roughness: 0.03,
+    metalness: 0,
+    envMap: environment,
+    envMapIntensity: GLOSS_INTENSITY,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4,
+  })
+  const edgeMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0xf3f3ef,
+    roughness: 0.4,
+    clearcoat: 1,
+    clearcoatRoughness: 0.2,
+    envMap: environment,
+    envMapIntensity: 0.25,
+  })
 
   const cardGroup = new THREE.Group()
   scene.add(cardGroup)
   const frontMesh = new THREE.Mesh(new THREE.BufferGeometry(), frontMaterial)
   const backMesh = new THREE.Mesh(new THREE.BufferGeometry(), backMaterial)
-  const edgeMesh = new THREE.Mesh(new THREE.BufferGeometry(), edgeMaterial)
-  cardGroup.add(frontMesh, backMesh, edgeMesh)
+  // ExtrudeGeometry puts its caps in group 0 and its walls in group 1. Only the
+  // walls are drawn: caps a hair behind each face z-fight with it, and white
+  // PVC showing through in stripes is what made the artwork look washed out.
+  const hiddenCaps = new THREE.MeshBasicMaterial({ visible: false })
+  const edgeMesh = new THREE.Mesh(new THREE.BufferGeometry(), [hiddenCaps, edgeMaterial])
+  const frontGloss = new THREE.Mesh(frontMesh.geometry, glossMaterial)
+  const backGloss = new THREE.Mesh(backMesh.geometry, glossMaterial)
+  cardGroup.add(frontMesh, backMesh, edgeMesh, frontGloss, backGloss)
 
   // --- the card's shape -----------------------------------------------------
 
@@ -395,15 +441,17 @@ export async function createLanyardScene(
     const backNormals = back.getAttribute('normal')
     for (let i = 0; i < backNormals.count; i += 1) backNormals.setXYZ(i, 0, 0, -1)
     back.translate(0, 0, -thickness / 2)
-    // The edge, and the walls of the hole: the caps sit just inside the faces.
-    const edge = new THREE.ExtrudeGeometry(shape, { depth: thickness * 0.96, bevelEnabled: false, curveSegments: 24 })
-    edge.translate(0, 0, -thickness * 0.48)
+    // The edge, and the walls of the hole, between the two faces.
+    const edge = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 24 })
+    edge.translate(0, 0, -thickness / 2)
 
     frontMesh.geometry.dispose()
     backMesh.geometry.dispose()
     edgeMesh.geometry.dispose()
     frontMesh.geometry = front
     backMesh.geometry = back
+    frontGloss.geometry = front
+    backGloss.geometry = back
     edgeMesh.geometry = edge
   }
 
@@ -646,7 +694,7 @@ export async function createLanyardScene(
     indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
   }
   ribbonGeometry.setIndex(indices)
-  const strapMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.92, metalness: 0, envMapIntensity: 0.12 })
+  const strapMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.92, metalness: 0 })
   const ribbon = new THREE.Mesh(ribbonGeometry, strapMaterial)
   ribbon.frustumCulled = false
   scene.add(ribbon)
@@ -734,7 +782,9 @@ export async function createLanyardScene(
       across.crossVectors(tangent, facing)
       if (across.lengthSq() < 1e-8) across.set(1, 0, 0)
       across.normalize()
-      normal.crossVectors(across, tangent).normalize()
+      // Facing the viewer, to match the triangles' winding; a strap seen from
+      // behind is lit from its other side, as DoubleSide flips it there.
+      normal.crossVectors(tangent, across).normalize()
       position.setXYZ(i * 2, point.x + across.x * halfWidth, point.y + across.y * halfWidth, point.z + across.z * halfWidth)
       position.setXYZ(i * 2 + 1, point.x - across.x * halfWidth, point.y - across.y * halfWidth, point.z - across.z * halfWidth)
       normals.setXYZ(i * 2, normal.x, normal.y, normal.z)
@@ -759,7 +809,7 @@ export async function createLanyardScene(
     const heightPx = aspect >= 1 ? Math.round(TEXTURE_LONG_EDGE / aspect) : TEXTURE_LONG_EDGE
     const anisotropy = renderer.capabilities.getMaxAnisotropy()
 
-    const apply = async (svg: string, material: THREE_NS.MeshPhysicalMaterial) => {
+    const apply = async (svg: string, material: THREE_NS.MeshStandardMaterial) => {
       try {
         const rendered = await rasterise(svg, widthPx, heightPx, geometry.turned)
         if (generation !== textureGeneration) return
@@ -977,8 +1027,10 @@ export async function createLanyardScene(
       frontMaterial.map?.dispose()
       backMaterial.map?.dispose()
       frontMaterial.dispose()
+      glossMaterial.dispose()
       backMaterial.dispose()
       edgeMaterial.dispose()
+      hiddenCaps.dispose()
       frontMesh.geometry.dispose()
       backMesh.geometry.dispose()
       edgeMesh.geometry.dispose()
