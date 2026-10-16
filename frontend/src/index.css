@@ -235,6 +235,7 @@ input[type='range'] {
 }
 
 .app-workspace {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -623,6 +624,58 @@ input[type='range'] {
   justify-content: safe center;
   overflow: auto;
   min-height: 0;
+}
+
+/* Zoom for the card preview, floating over the canvas's bottom-right corner. */
+.canvas-zoom {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  z-index: 2;
+}
+
+.canvas-zoom__button,
+.canvas-zoom__level {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.canvas-zoom__button {
+  width: 28px;
+}
+
+.canvas-zoom__level {
+  min-width: 48px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom__button:hover:not(:disabled),
+.canvas-zoom__level:hover {
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
+}
+
+.canvas-zoom__button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .canvas-preview-frame {

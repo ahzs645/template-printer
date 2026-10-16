@@ -26,6 +26,8 @@ import {
   Ruler,
   Zap,
   Database,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 
 import './App.css'
@@ -73,6 +75,7 @@ import { LanyardDialog } from './components/LanyardDialog'
 import { CardAreaDialog } from './components/CardAreaDialog'
 import { type AppliedCardArea } from './lib/cardTrim'
 import { inferCardGeometry } from './lib/cardGeometry'
+import { fitPreviewWidth, otherSideScale, stepZoom, ZOOM_STEPS } from './lib/previewFit'
 import {
   createTemplatePackage,
   type PackageSideInput,
@@ -152,10 +155,18 @@ let shareLinkHandled = false
 type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
 type DesignMode = 'import' | 'designer' | 'designs'
 
-const PREVIEW_BASE_WIDTH = 420
-const PREVIEW_MIN_WIDTH = 220
+// The card's long edge when fitted, at most: a big window fits a big card,
+// not one that fills a 4K screen. Zoom goes past it.
+const PREVIEW_MAX_LONG_EDGE = 640
+const PREVIEW_MIN_WIDTH = 96
 // Breathing room between the card and the edges of its container.
 const PREVIEW_GUTTER = 16
+// Matches the gap between the two sides, and the label and button that sit
+// above and below each one, so a fitted card never needs scrolling.
+const PREVIEW_SIDE_GAP = 24
+const PREVIEW_SIDE_CHROME = 76
+// Kept clear under the card for the zoom buttons floating over the canvas.
+const PREVIEW_ZOOM_CLEARANCE = 40
 
 function App() {
   const storage = useStorage()
@@ -468,29 +479,59 @@ function App() {
     [fields, selectedFieldId],
   )
 
-  // Width of the canvas area, watched so the preview fits whatever space the
+  // Size of the canvas area, watched so the preview fits whatever space the
   // current layout gives it (a phone gives it far less than a desktop).
   const [canvasNode, setCanvasNode] = useState<HTMLDivElement | null>(null)
-  const [canvasWidth, setCanvasWidth] = useState(PREVIEW_BASE_WIDTH + PREVIEW_GUTTER)
+  const [canvasSize, setCanvasSize] = useState({ width: 640, height: 560 })
+  // 1 is the whole card fitted to the canvas; the zoom buttons scale from there.
+  const [previewZoom, setPreviewZoom] = useState(1)
 
   useEffect(() => {
     if (!canvasNode || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0
-      if (width > 0) setCanvasWidth(width)
+      const rect = entries[0]?.contentRect
+      if (rect && rect.width > 0 && rect.height > 0) setCanvasSize({ width: rect.width, height: rect.height })
     })
     observer.observe(canvasNode)
     return () => observer.disconnect()
   }, [canvasNode])
 
+  // Ctrl/Cmd + wheel (and a trackpad pinch, which arrives as one) zooms the
+  // card rather than the page. It has to be a non-passive listener to stop the
+  // browser zooming too.
+  useEffect(() => {
+    if (!canvasNode) return
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      const factor = Math.exp(-event.deltaY * 0.0025)
+      setPreviewZoom((zoom) => Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], Math.max(ZOOM_STEPS[0], zoom * factor)))
+    }
+    canvasNode.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvasNode.removeEventListener('wheel', onWheel)
+  }, [canvasNode])
+
   const previewRatio = template ? template.height / template.width : 54 / 86
+  const otherSideAspect = useMemo(() => {
+    if (!linkedDesignId || !otherSidePreview) return null
+    const viewBox = /viewBox="([^"]+)"/.exec(otherSidePreview.svg)
+    const [, , w, h] = viewBox ? viewBox[1].trim().split(/[\s,]+/).map(Number) : []
+    return w && h ? w / h : null
+  }, [linkedDesignId, otherSidePreview])
   // The field overlays are positioned from previewWidth, so the preview has to
-  // be measured rather than clamped in CSS: on a phone 420px would run off the
-  // right edge, and a CSS-only clamp would leave the overlays behind.
-  const previewWidth = Math.max(
-    PREVIEW_MIN_WIDTH,
-    Math.min(PREVIEW_BASE_WIDTH, canvasWidth - PREVIEW_GUTTER),
-  )
+  // be measured rather than sized in CSS, which would leave the overlays behind.
+  // By default it is as big as fits both sides of the card in the canvas.
+  const previewFit = fitPreviewWidth({
+    availableWidth: canvasSize.width - 2 * PREVIEW_GUTTER,
+    availableHeight: canvasSize.height - 2 * PREVIEW_GUTTER - PREVIEW_ZOOM_CLEARANCE,
+    ratio: previewRatio,
+    otherAspect: otherSideAspect,
+    gap: PREVIEW_SIDE_GAP,
+    chrome: PREVIEW_SIDE_CHROME,
+    maxWidth: PREVIEW_MAX_LONG_EDGE / Math.max(1, previewRatio),
+    minWidth: PREVIEW_MIN_WIDTH,
+  })
+  const previewWidth = previewFit.width * previewZoom
   const previewHeight = previewWidth * previewRatio
 
   const renderedSvg = useMemo(() => {
@@ -903,15 +944,10 @@ function App() {
    * own proportions rather than this side's.
    */
   const otherSideBox = useMemo(() => {
-    const viewBox = otherSidePreview ? /viewBox="([^"]+)"/.exec(otherSidePreview.svg) : null
-    const [, , w, h] = viewBox ? viewBox[1].trim().split(/[\s,]+/).map(Number) : []
-    if (!w || !h) return { width: previewWidth, height: previewHeight }
-    const aspect = w / h
-    const thisAspect = previewWidth / previewHeight
-    if (aspect >= 1 === thisAspect >= 1) return { width: previewWidth, height: previewWidth / aspect }
-    const longEdge = Math.max(previewWidth, previewHeight)
-    return aspect >= 1 ? { width: longEdge, height: longEdge / aspect } : { width: longEdge * aspect, height: longEdge }
-  }, [otherSidePreview, previewWidth, previewHeight])
+    if (!otherSideAspect) return { width: previewWidth, height: previewHeight }
+    const scale = otherSideScale(previewRatio, otherSideAspect)
+    return { width: previewWidth * scale.width, height: previewWidth * scale.height }
+  }, [otherSideAspect, previewRatio, previewWidth, previewHeight])
 
   /** Both sides for the lanyard view, the back turned to the front's shape. */
   const lanyardSides = useMemo(() => {
@@ -2668,7 +2704,18 @@ function App() {
               <div className="app-workspace">
                 <div className="canvas-container" ref={setCanvasNode}>
                   {template && renderedSvg ? (
-                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: previewFit.stacked ? 'column' : 'row',
+                        gap: PREVIEW_SIDE_GAP,
+                        alignItems: previewFit.stacked ? 'center' : 'flex-start',
+                        justifyContent: 'center',
+                        // Zoomed in, the card overflows; room around it keeps its edge reachable.
+                        padding: previewZoom > 1 ? PREVIEW_GUTTER : 0,
+                        paddingBottom: (previewZoom > 1 ? PREVIEW_GUTTER : 0) + PREVIEW_ZOOM_CLEARANCE,
+                      }}
+                    >
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                         {linkedDesign && (
                           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
@@ -2741,6 +2788,39 @@ function App() {
                     </div>
                   )}
                 </div>
+                {template && renderedSvg && (
+                  <div className="canvas-zoom" role="group" aria-label="Zoom">
+                    <button
+                      type="button"
+                      className="canvas-zoom__button"
+                      onClick={() => setPreviewZoom((zoom) => stepZoom(zoom, -1))}
+                      disabled={previewZoom <= ZOOM_STEPS[0] + 1e-6}
+                      title="Zoom out"
+                      aria-label="Zoom out"
+                    >
+                      <ZoomOut size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="canvas-zoom__level"
+                      onClick={() => setPreviewZoom(1)}
+                      title="Fit the whole card (Ctrl or ⌘ + scroll to zoom)"
+                      aria-label="Fit the whole card"
+                    >
+                      {Math.abs(previewZoom - 1) < 1e-6 ? 'Fit' : `${Math.round(previewZoom * 100)}%`}
+                    </button>
+                    <button
+                      type="button"
+                      className="canvas-zoom__button"
+                      onClick={() => setPreviewZoom((zoom) => stepZoom(zoom, 1))}
+                      disabled={previewZoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1] - 1e-6}
+                      title="Zoom in"
+                      aria-label="Zoom in"
+                    >
+                      <ZoomIn size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Right Panel - Card Data & Field Settings */}

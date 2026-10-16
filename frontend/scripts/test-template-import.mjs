@@ -86,6 +86,7 @@ const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } =
 const { calculateCardPositions, getSlotScale, resolveSlotCardData } = await import('../src/lib/exporter.ts')
 const { parsePunchLayerId, isInNonFieldLayer } = await import('../src/lib/layerRoles.ts')
 const { createStarterArtboard } = await import('../src/lib/starterKit.ts')
+const { fitPreviewWidth, otherSideScale, stepZoom } = await import('../src/lib/previewFit.ts')
 const { cardBoxOf, orientLike } = await import('../src/lib/slotPlacement.ts')
 const {
   addVariant,
@@ -1060,6 +1061,63 @@ check('a card typed in on the print screen prints its own photo, or the card\'s'
   assert.ok(withOwn.includes(ownPhoto.src) && !withOwn.includes(designPhoto.src), 'its own photo replaces the card\'s')
   const withoutOwn = printed({ source: 'custom', side: 'front', customData: { [autoFields.find((f) => f.type !== 'image').id]: 'Second Person' } })
   assert.ok(withoutOwn.includes(designPhoto.src), 'a card with no photo of its own keeps the card\'s')
+})
+
+// --- the editor preview -------------------------------------------------------
+
+console.log('\neditor preview')
+
+const FIT = { gap: 24, chrome: 76, maxWidth: 10000, minWidth: 0 }
+/** The space a fitted card takes, both sides included. */
+function footprint(fit, ratio, otherAspect) {
+  const other = otherAspect ? otherSideScale(ratio, otherAspect) : null
+  const w = fit.width
+  if (!other) return { width: w, height: w * ratio + FIT.chrome }
+  return fit.stacked
+    ? { width: w * Math.max(1, other.width), height: w * (ratio + other.height) + 2 * FIT.chrome + FIT.gap }
+    : { width: w * (1 + other.width) + FIT.gap, height: w * Math.max(ratio, other.height) + FIT.chrome }
+}
+
+check('a portrait card and its landscape back both fit the canvas without scrolling', () => {
+  // The UNBC portrait front (162 × 252) with its landscape back, on a laptop-sized canvas.
+  const ratio = 252 / 162
+  const area = { availableWidth: 1100, availableHeight: 640 }
+  const fit = fitPreviewWidth({ ...area, ratio, otherAspect: 252 / 162, ...FIT })
+  const used = footprint(fit, ratio, 252 / 162)
+  assert.equal(fit.stacked, false, 'side by side on a wide canvas')
+  assert.ok(used.width <= area.availableWidth + 0.5 && used.height <= area.availableHeight + 0.5, JSON.stringify(used))
+  assert.ok(Math.abs(used.height - area.availableHeight) < 0.5 || Math.abs(used.width - area.availableWidth) < 0.5, 'and as big as fits')
+})
+
+check('on a narrow canvas the back goes under the front when that is bigger', () => {
+  const ratio = 54 / 86
+  const area = { availableWidth: 360, availableHeight: 900 }
+  const fit = fitPreviewWidth({ ...area, ratio, otherAspect: 86 / 54, ...FIT })
+  assert.equal(fit.stacked, true)
+  const used = footprint(fit, ratio, 86 / 54)
+  assert.ok(used.width <= area.availableWidth + 0.5 && used.height <= area.availableHeight + 0.5, JSON.stringify(used))
+})
+
+check('a fitted card stays within its size limits', () => {
+  const big = fitPreviewWidth({ availableWidth: 4000, availableHeight: 3000, ratio: 0.63, otherAspect: null, ...FIT, maxWidth: 640 })
+  assert.equal(big.width, 640)
+  const tiny = fitPreviewWidth({ availableWidth: 50, availableHeight: 50, ratio: 0.63, otherAspect: null, ...FIT, minWidth: 160 })
+  assert.equal(tiny.width, 160)
+})
+
+check('the other side is drawn at the same scale, turned or not', () => {
+  assert.deepEqual(otherSideScale(0.63, 1 / 0.63), { width: 1, height: 0.63 })
+  // A landscape back on a portrait front shares its long edge.
+  const turned = otherSideScale(1.6, 1.6)
+  assert.ok(Math.abs(turned.width - 1.6) < 1e-9 && Math.abs(turned.height - 1) < 1e-9)
+})
+
+check('zoom steps in and out from wherever it is', () => {
+  assert.equal(stepZoom(1, 1), 1.25)
+  assert.equal(stepZoom(1, -1), 0.9)
+  assert.equal(stepZoom(1.1, -1), 1)
+  assert.equal(stepZoom(4, 1), 4)
+  assert.equal(stepZoom(0.5, -1), 0.5)
 })
 
 // --- the designer starter kit --------------------------------------------------
