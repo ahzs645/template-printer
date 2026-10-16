@@ -26,6 +26,8 @@ export interface UserData {
   lastName: string
   middleName?: string | null
   studentId?: string | null
+  /** Library patron number, printed and barcoded on the back of some cards. */
+  libraryNumber?: string | null
   department?: string | null
   position?: string | null
   grade?: string | null
@@ -177,6 +179,8 @@ function getSimpleField(fieldType: string, userData: UserData): string {
       return toMiddleInitial(userData.middleName)
     case 'studentId':
       return userData.studentId || ''
+    case 'libraryNumber':
+      return userData.libraryNumber || ''
     case 'department':
       return userData.department || ''
     case 'position':
@@ -335,7 +339,7 @@ export function extractFieldsFromSVG(svgContent: string): string[] {
 function isKnownSimpleField(fieldName: string): boolean {
   const knownFields = [
     'firstName', 'lastName', 'middleName', 'fullName',
-    'studentId', 'department', 'position', 'grade',
+    'studentId', 'libraryNumber', 'department', 'position', 'grade',
     'email', 'phoneNumber', 'address', 'emergencyContact',
     'issueDate', 'expiryDate', 'birthDate',
     'photo', 'signature', 'logo', 'profilephoto', 'ProfilePhoto'
@@ -363,6 +367,10 @@ export function suggestFieldMapping(csvHeader: string): string | null {
     'student id': 'studentId',
     'studentid': 'studentId',
     'id': 'studentId',
+    'library number': 'libraryNumber',
+    'librarynumber': 'libraryNumber',
+    'library barcode': 'libraryNumber',
+    'library id': 'libraryNumber',
     'dept': 'department',
     'department': 'department',
     'position': 'position',

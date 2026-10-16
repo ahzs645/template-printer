@@ -1013,13 +1013,37 @@ for (const family of Object.keys(EXPECTED_LAYERS)) {
       assert.equal(metadata.cardArea?.formatId, 'id-1', 'declares its card area')
       const layers = autoFields.map((field) => field.sourceId)
       const isBack = String(file).includes('back')
-      for (const layer of isBack ? ['studentId', 'barcode_codabar_studentId'] : EXPECTED_LAYERS[family]) {
+      for (const layer of isBack ? ['libraryNumber', 'barcode_codabar_libraryNumber'] : EXPECTED_LAYERS[family]) {
         assert.ok(layers.includes(layer), `has a ${layer} layer (found ${layers.join(', ')})`)
       }
+      if (isBack) assert.ok(!layers.includes('studentId'), 'the back prints the library number, not the student number')
       assert.ok(autoFields.every((field) => !/^text-field/.test(field.sourceId)), 'fixed artwork is not offered as a field')
     })
   }
 }
+
+check('the UNBC back prints the library number, at the artwork\'s barcode size', async () => {
+  const raw = fs.readFileSync(path.join(LIBRARY_DIR, 'unbc/back.svg'), 'utf8')
+  const { metadata, autoFields } = await parseTemplateString(raw, 'back.svg')
+  const person = { firstName: 'Hyunseo', lastName: 'Kim', studentId: '230137282', libraryNumber: '20020146822740' }
+  const cardData = {}
+  for (const field of autoFields) {
+    const name = normalizeStandardFieldName(field.sourceId) ?? parseBarcodeLayerId(field.sourceId)?.standardFieldName
+    if (name) cardData[field.id] = parseField(name, person)
+  }
+  const markup = renderSvgWithData(metadata, autoFields, cardData, { mode: 'production' })
+  const doc = new DOMParser().parseFromString(markup, 'image/svg+xml')
+  assert.equal(doc.getElementById('libraryNumber').textContent.trim(), person.libraryNumber)
+  assert.ok(!markup.includes(person.studentId), 'the student number does not appear on the back')
+
+  // The bars fill the 185 × 34.5 pt band drawn on the artwork, whatever the value's length.
+  const barcode = doc.getElementById('barcode_codabar_libraryNumber')
+  assert.equal(barcode.getAttribute('data-idcard-barcode'), 'codabar')
+  const [scaleX, scaleY] = /scale\(([\d.e-]+) ([\d.e-]+)\)/.exec(barcode.getAttribute('transform')).slice(1).map(Number)
+  const natural = generateBarcodeSvg({ symbology: 'codabar', text: person.libraryNumber })
+  assert.ok(Math.abs(natural.width * scaleX - 185) < 0.01, `barcode is ${natural.width * scaleX} pt wide`)
+  assert.ok(Math.abs(natural.height * scaleY - 34.5) < 0.01, `barcode is ${natural.height * scaleY} pt tall`)
+})
 
 // --- the designer starter kit --------------------------------------------------
 

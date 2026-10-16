@@ -107,6 +107,7 @@ function createSchema(db) {
       lastName TEXT NOT NULL,
       middleName TEXT,
       studentId TEXT,
+      libraryNumber TEXT,
       department TEXT,
       position TEXT,
       grade TEXT,
@@ -216,6 +217,15 @@ function createSchema(db) {
   // Migration: Add cardDesignId column to users if it doesn't exist
   try {
     db.exec(`ALTER TABLE users ADD COLUMN cardDesignId TEXT`)
+  } catch (error) {
+    if (!error.message.includes('duplicate column name')) {
+      throw error
+    }
+  }
+
+  // Migration: Add libraryNumber column to users if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN libraryNumber TEXT`)
   } catch (error) {
     if (!error.message.includes('duplicate column name')) {
       throw error
@@ -819,10 +829,10 @@ export function createUser(userData) {
 
   const stmt = db.prepare(`
     INSERT INTO users (
-      id, firstName, lastName, middleName, studentId, department,
+      id, firstName, lastName, middleName, studentId, libraryNumber, department,
       position, grade, email, phoneNumber, address, emergencyContact,
       cardDesignId, photoPath, signaturePath, issueDate, expiryDate, birthDate, metadata
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   stmt.run(
@@ -831,6 +841,7 @@ export function createUser(userData) {
     userData.lastName,
     userData.middleName || null,
     userData.studentId || null,
+    userData.libraryNumber || null,
     userData.department || null,
     userData.position || null,
     userData.grade || null,
@@ -863,6 +874,7 @@ export function updateUser(id, userData) {
       lastName = ?,
       middleName = ?,
       studentId = ?,
+      libraryNumber = ?,
       department = ?,
       position = ?,
       grade = ?,
@@ -886,6 +898,7 @@ export function updateUser(id, userData) {
     userData.lastName ?? existing.lastName,
     userData.middleName ?? existing.middleName,
     userData.studentId ?? existing.studentId,
+    userData.libraryNumber ?? existing.libraryNumber,
     userData.department ?? existing.department,
     userData.position ?? existing.position,
     userData.grade ?? existing.grade,

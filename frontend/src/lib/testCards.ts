@@ -27,6 +27,7 @@ const BASE: UserData = {
   firstName: 'Sample',
   lastName: 'Person',
   studentId: '230137282',
+  libraryNumber: '12345678901234',
   department: 'Computer Science',
   position: 'Student',
   email: 'sample.person@example.edu',

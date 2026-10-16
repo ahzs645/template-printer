@@ -139,6 +139,12 @@ const TEXT_FIELDS_SOURCE: Array<{
     description: 'Unique identifier for the user.',
   },
   {
+    id: 'libraryNumber',
+    label: 'Library Number',
+    sample: '12345678901234',
+    description: 'Library patron number, separate from the ID. Use barcode_codabar_libraryNumber for its barcode.',
+  },
+  {
     id: 'department',
     label: 'Department',
     sample: 'Engineering',

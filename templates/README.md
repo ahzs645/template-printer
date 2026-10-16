@@ -22,10 +22,13 @@ is a `punch_…` guide, never ink.
 | `northern-health/portrait-round-photo` | 1 (round photo) | – | `fullName_First_LastInitial`, `position`, `photo` |
 | `northern-health/landscape` | 2: with tagline, without | – | `fullName_First_LastInitial`, `position`, `photo` |
 
-The UNBC back carries `barcode_codabar_studentId`, a Codabar barcode generated
-from the record's student number. It is drawn as bars, not set in a barcode
-font. The back also has `studentId`, and a `guide_magnetic_stripe` marking where
-the card stock's stripe sits; the stripe is not printed.
+The UNBC back carries the library number, which is not the student number:
+`libraryNumber` after "Library Number:", and `barcode_codabar_libraryNumber`, a
+Codabar barcode of the same value. Fill in **Library Number** on each person.
+The barcode is drawn as bars, not set in a barcode font, as a fixed 185 × 34.5 pt
+band (`data-barcode-width`, `data-barcode-height`) measured from the artwork.
+The back also has a `guide_magnetic_stripe` marking where the card stock's
+stripe sits; the stripe is not printed.
 
 `customValidYears` is the "202X-202X" after VALID:. Set it once in **Map Fields**
 (for example to `2025-2029`); the change applies to every variant.
@@ -41,6 +44,8 @@ the card stock's stripe sits; the stripe is not printed.
 - The magnetic stripe on the UNBC back is now a guide rather than a printed black
   band.
 - The back text "NONTRANFERABLE" now reads "NON-TRANSFERABLE".
+- The back's number and barcode come from the library number, not the student
+  number, as on the artwork, and the barcode is the artwork's width and height.
 - Positions on the artboards were drawn at a 1.627 aspect ratio; ID-1 is 1.588.
   Each card keeps its full drawn width, and the trim box gains about 0.6 mm top
   and bottom. Nothing is stretched. Bands that ran to the edge now carry on into

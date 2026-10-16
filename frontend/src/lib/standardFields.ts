@@ -19,6 +19,7 @@ const SIMPLE_FIELD_TYPES = [
   'middleName',
   'middleInitial',
   'studentId',
+  'libraryNumber',
   'department',
   'position',
   'grade',
@@ -107,6 +108,7 @@ export const STANDARD_FIELDS = [
 
   // Other fields
   'studentId',
+  'libraryNumber',
   'department',
   'position',
   'grade',
@@ -204,6 +206,7 @@ const FIELD_TYPE_LABELS: Record<string, string> = {
   middleName: 'Middle name',
   middleInitial: 'Middle initial',
   studentId: 'ID number',
+  libraryNumber: 'Library number',
   department: 'Department',
   position: 'Position',
   grade: 'Grade',

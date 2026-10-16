@@ -775,6 +775,9 @@ export function UsersTab({
                   {selectedUser.studentId && (
                     <div><span style={{ color: 'var(--text-muted)' }}>ID:</span> {selectedUser.studentId}</div>
                   )}
+                  {selectedUser.libraryNumber && (
+                    <div><span style={{ color: 'var(--text-muted)' }}>Library:</span> {selectedUser.libraryNumber}</div>
+                  )}
                   {selectedUser.email && (
                     <div><span style={{ color: 'var(--text-muted)' }}>Email:</span> {selectedUser.email}</div>
                   )}
@@ -1023,13 +1026,21 @@ export function UsersTab({
                   />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Email</label>
+                  <label className="form-label">Library Number</label>
                   <Input
-                    type="email"
-                    value={formData.email || ''}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    value={formData.libraryNumber || ''}
+                    onChange={(e) => setFormData({ ...formData, libraryNumber: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Email</label>
+                <Input
+                  type="email"
+                  value={formData.email || ''}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>

@@ -8,8 +8,12 @@
   guide_magnetic_stripe  where the card stock's magnetic stripe sits; shown
                          while editing, never printed (ink over a stripe can
                          stop it reading)
-  barcode_codabar_studentId  generated Codabar of the record's studentId
-  studentId              the same number, printed after the label
+  libraryNumber          the record's library number, printed after the label.
+                         It is its own field, not the student number.
+  barcode_codabar_libraryNumber  generated Codabar of that library number,
+                         drawn as a fixed 185 x 34.5 pt band to match the
+                         artwork (data-barcode-width / data-barcode-height);
+                         the font size alone would draw it far too small
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 162" width="88.9mm" height="57.15mm" data-card-format="id-1" data-trim-box="4.5 4.5 243 153">
   <defs>
@@ -28,6 +32,6 @@
     <text class="cls-text" font-size="12.07" transform="translate(31.83 100.74)">Library Number: </text>
     <text class="cls-text" font-size="6.34" transform="translate(56.82 144.54)">NON-TRANSFERABLE - REPLACEMENT CHARGE</text>
   </g>
-  <text id="studentId" class="cls-text" font-size="12.07" transform="translate(121.5 100.74)"><tspan x="0" y="0">230135918</tspan></text>
-  <text id="barcode_codabar_studentId" class="cls-text" font-size="20" transform="translate(30.22 137.76)"><tspan x="0" y="0">230135918</tspan></text>
+  <text id="libraryNumber" class="cls-text" font-size="12.07" transform="translate(121.5 100.74)"><tspan x="0" y="0">12345678901234</tspan></text>
+  <text id="barcode_codabar_libraryNumber" class="cls-text" font-size="20" data-barcode-width="185" data-barcode-height="34.5" transform="translate(30.22 137.76)"><tspan x="0" y="0">12345678901234</tspan></text>
 </svg>

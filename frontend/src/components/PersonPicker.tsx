@@ -24,7 +24,7 @@ export function SlotPersonPicker({ users, selectedUserId, onSelect }: SlotPerson
     const needle = query.trim().toLowerCase()
     if (!needle) return users
     return users.filter((user) =>
-      [personName(user), user.position, user.department, user.studentId, user.email]
+      [personName(user), user.position, user.department, user.studentId, user.libraryNumber, user.email]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(needle)),
     )
