@@ -35,7 +35,7 @@ export type LanyardOrientation = 'auto' | 'portrait' | 'landscape'
 export type LanyardOptions = {
   /** Rendered front artwork. */
   frontSvg: string
-  /** Rendered back artwork; the front is reused when absent. */
+  /** Rendered back artwork. A card without one shows blank stock on its back. */
   backSvg?: string | null
   /** Size of the whole artwork in millimetres, bleed included. */
   artworkWidthMm: number
@@ -888,7 +888,17 @@ export async function createLanyardScene(
       }
     }
 
-    await Promise.all([apply(options.frontSvg, frontMaterial), apply(options.backSvg || options.frontSvg, backMaterial)])
+    // A card with no back prints nothing there, so it turns over to bare stock
+    // rather than a second copy of the front.
+    const blank = (material: THREE_NS.MeshStandardMaterial) => {
+      material.map?.dispose()
+      material.map = null
+      material.needsUpdate = true
+    }
+    await Promise.all([
+      apply(options.frontSvg, frontMaterial),
+      options.backSvg ? apply(options.backSvg, backMaterial) : blank(backMaterial),
+    ])
   }
 
   function refreshStrapTexture() {

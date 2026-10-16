@@ -301,7 +301,7 @@ export function LanyardDialog({
                     onClick={() => handleRef.current?.flip()}
                   >
                     <FlipHorizontal2 size={15} aria-hidden="true" />
-                    {showingBack ? 'Show front' : 'Show back'}
+                    {showingBack ? 'Show front' : backSvg ? 'Show back' : 'Show blank back'}
                   </button>
                   <button
                     type="button"
