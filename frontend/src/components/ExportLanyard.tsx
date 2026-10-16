@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Keyboard, Users } from 'lucide-react'
 
 import { LanyardDialog } from './LanyardDialog'
+import { PhotoFieldInput } from './PhotoFieldInput'
 import { SlotPersonPicker } from './PersonPicker'
 import type { ExportBackSide } from '../hooks/useExportBackSide'
 import type { CardSide } from '../hooks/useExportPreview'
@@ -26,6 +27,8 @@ export type ExportLanyardProps = {
   fields: FieldDefinition[]
   cardData: CardData
   onCardDataChange: (fieldId: string, value: string) => void
+  /** Upload a photo into the card's own data, the same one the Design tab sets. */
+  onCardImageUpload: (fieldId: string, file: File) => void
   users: UserData[]
   /** Who to show first: the first person picked for a batch, when there is one. */
   initialUserId?: string | null
@@ -56,6 +59,7 @@ export function ExportLanyard({
   fields,
   cardData,
   onCardDataChange,
+  onCardImageUpload,
   users,
   initialUserId,
   renderCardForUser,
@@ -105,8 +109,6 @@ export function ExportLanyard({
     return getDesignVariants(design).find((variant) => variant.frontTemplateId === templateId)?.name ?? null
   }, [design, person, templateId])
 
-  // Photos are picked on the page; here it is the words on the card.
-  const textFields = fields.filter((field) => field.type !== 'image')
 
   const dataPanel = (
     <>
@@ -139,9 +141,18 @@ export function ExportLanyard({
       </div>
 
       {source.kind === 'typed' ? (
-        textFields.length > 0 ? (
+        fields.length > 0 ? (
           <div className="lanyard-fields">
-            {textFields.map((field) => (
+            {fields.map((field) => field.type === 'image' ? (
+              <PhotoFieldInput
+                key={field.id}
+                label={fieldLabel(field)}
+                labelClassName="lanyard-field__label"
+                labelStyle={{ display: 'block', marginBottom: '0.375rem' }}
+                value={cardData[field.id]}
+                onPick={(file) => onCardImageUpload(field.id, file)}
+              />
+            ) : (
               <label key={field.id} className="lanyard-field">
                 <span className="lanyard-field__label">{fieldLabel(field)}</span>
                 <input
@@ -153,10 +164,10 @@ export function ExportLanyard({
                 />
               </label>
             ))}
-            <p className="lanyard-note">The same text the card prints with in a quick export.</p>
+            <p className="lanyard-note">The same details the card prints with in a quick export.</p>
           </div>
         ) : (
-          <p className="lanyard-note">This card has no text fields to fill in.</p>
+          <p className="lanyard-note">This card has no fields to fill in.</p>
         )
       ) : (
         <SlotPersonPicker

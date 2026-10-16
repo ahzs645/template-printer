@@ -13,11 +13,13 @@ import { useExportPreview } from '../hooks/useExportPreview'
 import type { ExportBackSide } from '../hooks/useExportBackSide'
 import { placeCardInSlot } from '../lib/slotPlacement'
 import { usePrintLayouts } from '../hooks/usePrintLayouts'
-import { cn } from '../lib/utils'
+import { cn, isImageValue } from '../lib/utils'
 import { resolveSlotCardData, type SlotAssignment } from '../lib/exporter'
+import { readImageFile } from '../lib/cardData'
 import { InlineSvg } from './InlineSvg'
 import { SlotPersonPicker } from './PersonPicker'
 import { ExportLanyard } from './ExportLanyard'
+import { PhotoFieldInput } from './PhotoFieldInput'
 import { describeStandardField } from '../lib/standardFields'
 
 export type ExportFormat = 'pdf' | 'png' | 'svg'
@@ -83,6 +85,8 @@ export type ExportPageProps = {
   onCardDesignSelect: (designId: string | null) => void
   onTemplateSelect: (template: TemplateSummary) => void
   onCardDataChange: (fieldId: string, value: string) => void
+  /** Upload a photo into the card's own data, the same one the Design tab sets. */
+  onCardImageUpload: (fieldId: string, file: File) => void
   colorProfiles: ColorProfile[]
   colorProfilesLoading: boolean
 }
@@ -175,7 +179,11 @@ type SlotFieldInputsProps = {
   hasOwnData: boolean
   /** Whether an earlier card is also being printed, to say whose values these start from. */
   followsAnotherCard: boolean
+  /** The values set on this card alone, to tell its own photo from the Design tab's. */
+  ownData: CardData | undefined
   onChange: (fieldId: string, value: string) => void
+  onPhotoPick: (fieldId: string, file: File) => void
+  onPhotoRevert: (fieldId: string) => void
   onReset: () => void
 }
 
@@ -186,15 +194,24 @@ function slotFieldLabel(field: FieldDefinition): string {
 
 /**
  * The fields of one slot, so each card on the page can name a different
- * person. Image fields are left to the card's own data: a photo is picked in
- * the Design tab, not typed in.
+ * person. A photo uploaded here is this card's alone; until one is, the card
+ * prints with the photo from the Design tab.
  */
-function SlotFieldInputs({ fields, values, hasOwnData, followsAnotherCard, onChange, onReset }: SlotFieldInputsProps) {
-  const textFields = fields.filter((field) => field.type !== 'image')
-  if (textFields.length === 0) {
+function SlotFieldInputs({
+  fields,
+  values,
+  hasOwnData,
+  followsAnotherCard,
+  ownData,
+  onChange,
+  onPhotoPick,
+  onPhotoRevert,
+  onReset,
+}: SlotFieldInputsProps) {
+  if (fields.length === 0) {
     return (
       <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-        This side has no text fields to fill in.
+        This side has no fields to fill in.
       </div>
     )
   }
@@ -223,9 +240,23 @@ function SlotFieldInputs({ fields, values, hasOwnData, followsAnotherCard, onCha
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {textFields.map((field) => {
+        {fields.map((field) => {
           const value = values[field.id]
           const label = slotFieldLabel(field)
+          if (field.type === 'image') {
+            const ownPhoto = isImageValue(ownData?.[field.id])
+            return (
+              <PhotoFieldInput
+                key={field.id}
+                label={label}
+                labelStyle={{ fontSize: 11, display: 'block' }}
+                value={value}
+                onPick={(file) => onPhotoPick(field.id, file)}
+                onRevert={ownPhoto ? () => onPhotoRevert(field.id) : undefined}
+                note={ownPhoto ? 'This card\'s own photo' : isImageValue(value) ? 'From the Design tab' : 'None yet — this card prints without one'}
+              />
+            )
+          }
           return (
             <div key={field.id} className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: 11 }}>{label}</label>
@@ -283,6 +314,7 @@ export function ExportPage({
   onCardDesignSelect,
   onTemplateSelect,
   onCardDataChange,
+  onCardImageUpload,
   colorProfiles,
   colorProfilesLoading,
 }: ExportPageProps) {
@@ -767,6 +799,32 @@ export function ExportPage({
     })
   }
 
+  /** Give one slot its own photo, read from the picked file. */
+  const pickSlotPhoto = async (slotIndex: number, fieldId: string, file: File) => {
+    const photo = await readImageFile(file)
+    if (!photo) return
+    setExportOptions((prev) => {
+      const newAssignments = [...prev.slotAssignments]
+      const current = newAssignments[slotIndex]
+      if (!current) return prev
+      newAssignments[slotIndex] = { ...current, customData: { ...(current.customData ?? {}), [fieldId]: photo } }
+      return { ...prev, slotAssignments: newAssignments }
+    })
+  }
+
+  /** Drop a slot's own photo, so it prints the Design tab's again. */
+  const revertSlotPhoto = (slotIndex: number, fieldId: string) => {
+    setExportOptions((prev) => {
+      const newAssignments = [...prev.slotAssignments]
+      const current = newAssignments[slotIndex]
+      if (!current?.customData) return prev
+      const rest = { ...current.customData }
+      delete rest[fieldId]
+      newAssignments[slotIndex] = { ...current, customData: Object.keys(rest).length > 0 ? rest : undefined }
+      return { ...prev, slotAssignments: newAssignments }
+    })
+  }
+
   /**
    * Print only the first `count` slots. The ones after it go blank; the ones
    * kept that had been blanked this way come back as a card again.
@@ -926,18 +984,28 @@ export function ExportPage({
               Enter data for the card
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {fields.map((field) => (
-                <div key={field.id} className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">{slotFieldLabel(field)}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={(cardData[field.id] as string) || ''}
-                    onChange={(e) => onCardDataChange(field.id, e.target.value)}
-                    placeholder={field.label || `Enter ${slotFieldLabel(field)}`}
+              {fields.map((field) =>
+                field.type === 'image' ? (
+                  <PhotoFieldInput
+                    key={field.id}
+                    label={slotFieldLabel(field)}
+                    labelStyle={{ display: 'block' }}
+                    value={cardData[field.id]}
+                    onPick={(file) => onCardImageUpload(field.id, file)}
                   />
-                </div>
-              ))}
+                ) : (
+                  <div key={field.id} className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">{slotFieldLabel(field)}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={typeof cardData[field.id] === 'string' ? (cardData[field.id] as string) : ''}
+                      onChange={(e) => onCardDataChange(field.id, e.target.value)}
+                      placeholder={field.label || `Enter ${slotFieldLabel(field)}`}
+                    />
+                  </div>
+                ),
+              )}
             </div>
           </PanelSection>
         )}
@@ -1240,7 +1308,10 @@ export function ExportPage({
                         values={resolveSlotCardData(assignment, cardData)}
                         hasOwnData={slotHasOwnData(assignment)}
                         followsAnotherCard={index > 0}
+                        ownData={assignment.customData}
                         onChange={(fieldId, value) => updateSlotField(index, fieldId, value)}
+                        onPhotoPick={(fieldId, file) => void pickSlotPhoto(index, fieldId, file)}
+                        onPhotoRevert={(fieldId) => revertSlotPhoto(index, fieldId)}
                         onReset={() => updateSlotAssignment(index, { customData: undefined })}
                       />
                     )}
@@ -1379,6 +1450,7 @@ export function ExportPage({
         fields={fields}
         cardData={cardData}
         onCardDataChange={onCardDataChange}
+        onCardImageUpload={onCardImageUpload}
         users={users}
         initialUserId={
           mode === 'database'

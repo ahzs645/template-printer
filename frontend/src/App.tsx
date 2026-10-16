@@ -3098,6 +3098,7 @@ function App() {
                   handleTemplateSelect(templateSummary)
                 }}
                 onCardDataChange={handleCardDataChange}
+                onCardImageUpload={handleImageUpload}
                 colorProfiles={colorProfiles}
                 colorProfilesLoading={colorProfilesLoading}
               />

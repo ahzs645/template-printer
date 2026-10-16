@@ -83,7 +83,7 @@ const { generateBarcodeSvg, normalizeBarcodeText, validateBarcodeText } = await 
 const { assignCardSides, readSideFromFileName, suggestDesignName } = await import('../src/lib/cardSides.ts')
 const { TEST_CASES, analyseRenderedCard, countIssues, runTestCards } = await import('../src/lib/testCards.ts')
 const { CARD_FORMATS, applyCardArea, detectTrimCandidates, isWorthSuggesting } = await import('../src/lib/cardTrim.ts')
-const { calculateCardPositions, getSlotScale } = await import('../src/lib/exporter.ts')
+const { calculateCardPositions, getSlotScale, resolveSlotCardData } = await import('../src/lib/exporter.ts')
 const { parsePunchLayerId, isInNonFieldLayer } = await import('../src/lib/layerRoles.ts')
 const { createStarterArtboard } = await import('../src/lib/starterKit.ts')
 const { cardBoxOf, orientLike } = await import('../src/lib/slotPlacement.ts')
@@ -1043,6 +1043,23 @@ check('the UNBC back prints the library number, at the artwork\'s barcode size',
   const natural = generateBarcodeSvg({ symbology: 'codabar', text: person.libraryNumber })
   assert.ok(Math.abs(natural.width * scaleX - 185) < 0.01, `barcode is ${natural.width * scaleX} pt wide`)
   assert.ok(Math.abs(natural.height * scaleY - 34.5) < 0.01, `barcode is ${natural.height * scaleY} pt tall`)
+})
+
+check('a card typed in on the print screen prints its own photo, or the card\'s', async () => {
+  const raw = fs.readFileSync(path.join(LIBRARY_DIR, 'northern-health/portrait-framed/slot-punch.svg'), 'utf8')
+  const { metadata, autoFields } = await parseTemplateString(raw, 'slot-punch.svg')
+  const photo = autoFields.find((field) => field.type === 'image')
+  assert.ok(photo, 'the badge has a photo field')
+  const designPhoto = { src: 'data:image/png;base64,REVTSUdO', offsetX: 0, offsetY: 0, scale: 1 }
+  const ownPhoto = { src: 'data:image/png;base64,T1dO', offsetX: 0, offsetY: 0, scale: 1 }
+  const cardData = { [photo.id]: designPhoto }
+  const printed = (assignment) =>
+    renderSvgWithData(metadata, autoFields, resolveSlotCardData(assignment, cardData), { mode: 'production' })
+
+  const withOwn = printed({ source: 'custom', side: 'front', customData: { [photo.id]: ownPhoto } })
+  assert.ok(withOwn.includes(ownPhoto.src) && !withOwn.includes(designPhoto.src), 'its own photo replaces the card\'s')
+  const withoutOwn = printed({ source: 'custom', side: 'front', customData: { [autoFields.find((f) => f.type !== 'image').id]: 'Second Person' } })
+  assert.ok(withoutOwn.includes(designPhoto.src), 'a card with no photo of its own keeps the card\'s')
 })
 
 // --- the designer starter kit --------------------------------------------------
