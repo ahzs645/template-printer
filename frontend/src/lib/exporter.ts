@@ -89,7 +89,7 @@ function frontFor(user: UserData, fallback: TemplateMeta): TemplateMeta {
 /**
  * Check if rotating a card 90° would give a significantly better fit within a slot.
  */
-function cardNeedsRotation(
+export function cardNeedsRotation(
   cardWidth: number,
   cardHeight: number,
   slotWidth: number,
@@ -1586,7 +1586,7 @@ function getTemplateSizeInMm(template: TemplateMeta): { widthMm: number; heightM
   return { widthMm, heightMm }
 }
 
-function getTemplateSizeInPoints(template: TemplateMeta): { widthPoints: number; heightPoints: number } {
+export function getTemplateSizeInPoints(template: TemplateMeta): { widthPoints: number; heightPoints: number } {
   const { widthMm, heightMm } = getTemplateSizeInMm(template)
   return {
     widthPoints: (widthMm / MM_PER_INCH) * POINTS_PER_INCH,
