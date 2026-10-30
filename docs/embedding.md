@@ -74,6 +74,50 @@ export function Printer({ packageBytes }) {
 | `theme` | the user's choice | `'light'` or `'dark'`, if the host decides. |
 | `className`, `style` | | For the root element, which always has the class `template-printer`. |
 
+## Parts
+
+A host that only fills and prints a card (a brand's staff card, say) does not
+need the whole app in its page. `embed/parts` exports the pieces, headless,
+so the host builds the screen in its own interface:
+
+```jsx
+import { CardPreview, PRINT_LAYOUTS, exportCardsPdf, parsePeople, useCardPackage } from './vendor/template-printer/frontend/src/embed/parts'
+
+export function PrintCard({ packageBytes }) {
+  const { card, error, loading } = useCardPackage(packageBytes)
+  const [person, setPerson] = useState(null)
+  if (!card) return error ? <p>{error.message}</p> : <p>Opening…</p>
+  const values = person ?? card.sample
+  return (
+    <>
+      <CardPreview card={card} face="front" person={values} className="my-card" />
+      {card.back && <CardPreview card={card} face="back" person={values} className="my-card" />}
+      {card.inputs.map((input) => (
+        <input key={input.key} value={values[input.key] ?? ''} onChange={(event) => setPerson({ ...values, [input.key]: event.target.value })} />
+      ))}
+      <button onClick={async () => save(await exportCardsPdf(card, [values], { layout: PRINT_LAYOUTS[0], faces: 'both' }))}>PDF</button>
+    </>
+  )
+}
+```
+
+| Export | What it is |
+| --- | --- |
+| `useCardPackage(bytes)` | `{ card, error, loading }` for a package ZIP (`Uint8Array`, `ArrayBuffer` or `Blob`), opened again when a different object is passed. Wraps `openCardPackage`. |
+| `openCardPackage(bytes)` | Reads a package into memory (nothing is stored) and registers its fonts with `document.fonts`. The `CardPackage` has `name`, `front`, `back`, `variants`, `inputs`, `sample`, `fonts` and `missingFonts`. |
+| `card.inputs` | What a person fills in: `{ key, label, kind: 'text' \| 'image', faces }`, read from the package's mappings. A layer mapped to `fullName_First_LineBreak_Last` asks for `firstName` and `lastName`; a layer with no mapping is filled by its field id. Images are data or http(s) URLs. |
+| `card.sample` | The person the package was made with, read back from its sample values. |
+| `CardPreview` | One face, filled, drawn inline (so it uses the registered fonts) and scoped so a front and back can share a page. Props: `card`, `face`, `person`, `label`, `className`, `style`. It has no styles of its own: the artwork fills the element's width. |
+| `renderCardSvg(card, face, person, { production })` | The same as markup. |
+| `exportCardsPdf(card, people, { layout, faces, mirrorBacks, dpi })` | A PDF (`Uint8Array`) of one card per person, in a layout's slots (or each card a page of its own size without one), backs on the pages after their fronts when `faces: 'both'`. `mirrorBacks` mirrors the back pages for a sheet printed on both sides. Cards are drawn at `dpi` (300) at their placed size. |
+| `exportCardPng(card, face, person, { dpi })` | One face as a PNG `Blob`. |
+| `PRINT_LAYOUTS`, `printLayoutKind(layout)` | The built-in layouts (card trays, sheets, a single card), and which of `'card'`, `'sheet'` or `'tray'` one is. |
+| `parsePeople(text, inputs)` | People from a CSV or tab-separated paste: columns in the order of the text inputs, or in any order under a header row naming them. |
+
+The parts need neither `template-printer.css` nor Tailwind, and they touch no
+storage. Fonts are registered with `document.fonts` (global), and exports
+carry them inside the artwork, since an image cannot use the page's fonts.
+
 ## Styles
 
 `template-printer.css` must be compiled by Tailwind v4 (`@tailwindcss/vite`).

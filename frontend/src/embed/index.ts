@@ -4,7 +4,8 @@
  *   import { TemplatePrinter } from './vendor/template-printer/frontend/src/embed'
  *   import './vendor/template-printer/frontend/src/embed/template-printer.css'
  *
- * See docs/embedding.md.
+ * A host that only fills and prints a card can take the pieces instead, from
+ * ./parts (headless, no stylesheet). See docs/embedding.md.
  */
 export { TemplatePrinter } from './TemplatePrinter'
 export type { TemplatePrinterProps, TemplatePrinterStorage, TemplatePrinterTab } from './TemplatePrinter'
