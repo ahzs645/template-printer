@@ -3,6 +3,7 @@ import { Check, Pencil, Plus, Star, Trash2, Upload, X } from 'lucide-react'
 
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import type { CardDesign } from '../lib/types'
 import type { TemplateSummary } from '../lib/templates'
 import { getDesignVariants, VARIANT_FIELDS, type CardDesignVariant } from '../lib/designVariants'
@@ -22,6 +23,9 @@ type VariantsPanelProps = {
   onVariantFieldChange: (field: string | null) => void
   onMatchChange: (variant: CardDesignVariant, values: string) => void
 }
+
+// Radix gives an empty value no item of its own, so "no field" needs a name.
+const SAME_FOR_EVERYONE = '__same__'
 
 const FIELD_LABELS: Record<string, string> = {
   position: 'Position',
@@ -182,42 +186,45 @@ export function VariantsPanel({
         }}
       />
       {picking && candidates.length > 0 && (
-        <select
-          className="h-8 rounded-control border border-line bg-surface px-2 text-sm text-ink"
-          defaultValue=""
-          onChange={(event) => {
-            if (event.target.value) onAddFromLibrary(event.target.value)
+        <Select
+          onValueChange={(value) => {
+            if (value) onAddFromLibrary(value)
             setPicking(false)
           }}
-          aria-label="Template to add as a variant"
         >
-          <option value="" disabled>
-            Choose a template…
-          </option>
-          {candidates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-8" aria-label="Template to add as a variant">
+            <SelectValue placeholder="Choose a template…" />
+          </SelectTrigger>
+          <SelectContent>
+            {candidates.map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {template.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
 
       {variants.length > 1 && (
         <label className="flex flex-col gap-1" style={{ fontSize: 12 }}>
           <span>Variant for each person</span>
-          <select
-            className="h-8 rounded-control border border-line bg-surface px-2 text-sm text-ink"
-            value={design.variantField ?? ''}
-            onChange={(event) => onVariantFieldChange(event.target.value || null)}
+          <Select
+            value={design.variantField ?? SAME_FOR_EVERYONE}
+            onValueChange={(value) => onVariantFieldChange(value === SAME_FOR_EVERYONE ? null : value)}
             disabled={busy}
           >
-            <option value="">Same for everyone (the one open)</option>
-            {VARIANT_FIELDS.map((field) => (
-              <option key={field} value={field}>
-                Chosen by {FIELD_LABELS[field].toLowerCase()}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-8" aria-label="Variant for each person">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SAME_FOR_EVERYONE}>Same for everyone (the one open)</SelectItem>
+              {VARIANT_FIELDS.map((field) => (
+                <SelectItem key={field} value={field}>
+                  Chosen by {FIELD_LABELS[field].toLowerCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {perPerson && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               A batch export prints each person with the variant listing their {FIELD_LABELS[design.variantField!]?.toLowerCase() ?? design.variantField};
