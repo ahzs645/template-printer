@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import type { Canvas, FabricObject } from 'fabric'
 import { useFabricCanvas } from './hooks/useFabricCanvas'
 import type { CardSide } from './types'
+import { useIsEventInScope } from '../../contexts/PrinterScope'
 
 // Pixels per mm at 96 DPI
 const PX_PER_MM = 96 / 25.4
@@ -35,6 +36,7 @@ export function DesignerCanvas({
 }: DesignerCanvasProps) {
   const canvasElementRef = useRef<HTMLCanvasElement>(null)
   const hasLoadedRef = useRef(false)
+  const inScope = useIsEventInScope()
 
   const handleCanvasChange = useCallback(() => {
     // Will be called by the hook when canvas changes
@@ -101,6 +103,7 @@ export function DesignerCanvas({
     if (!canvas) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!inScope(e)) return
       // Don't handle if user is typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
@@ -121,7 +124,7 @@ export function DesignerCanvas({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canvas, fabricCanvas])
+  }, [canvas, fabricCanvas, inScope])
 
   // Calculate container dimensions for centering
   const containerWidth = cardWidth * PX_PER_MM

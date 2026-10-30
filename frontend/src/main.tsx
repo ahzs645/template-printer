@@ -1,16 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
-import { ThemeProvider } from './contexts/ThemeContext'
-import { StorageProviderRoot } from './lib/storage'
+import { TemplatePrinter } from './embed'
+import { convexUrlFromEnv, storageModeFromEnv } from './lib/storage'
 
+// The standalone app is the same component a host embeds, given the whole page:
+// it reads ?url= and #share/ links, and its storage comes from the build.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StorageProviderRoot>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    </StorageProviderRoot>
+    <TemplatePrinter syncUrl storage={storageModeFromEnv()} convexUrl={convexUrlFromEnv()} />
   </StrictMode>,
 )

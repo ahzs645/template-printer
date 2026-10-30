@@ -1,12 +1,6 @@
-/* Global app styles - component styles moved to inline styles with shadcn/ui */
-
-.app-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background: var(--bg-app);
-  color: var(--text-primary);
-}
+/* App-wide element styles. Imported nested inside `.template-printer` by
+   embed/template-printer.css, so "every button" means every button in the
+   printer, not in the page around it. */
 
 /* SVG preview container - allows SVG to scale properly */
 .svg-preview svg {

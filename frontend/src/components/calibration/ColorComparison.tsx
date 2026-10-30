@@ -44,7 +44,7 @@ export function ColorComparisonPanel({
   const [showOverlay, setShowOverlay] = useState(true)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 @min-[64rem]:grid-cols-2 gap-8">
       {/* Expected Colors Section */}
       <div>
         <ColorGrid colorChart={colorChart} />

@@ -6,6 +6,9 @@ export { IndexedDBStorageProvider } from './IndexedDBStorageProvider'
 export {
   StorageProviderRoot,
   useStorage,
+  useStorageMode,
+  storageModeFromEnv,
+  convexUrlFromEnv,
   getStorageMode,
   isConvexMode,
   isLocalMode,

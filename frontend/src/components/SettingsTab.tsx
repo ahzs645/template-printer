@@ -4,7 +4,7 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 
 import { Button } from './ui/button'
-import { useStorage, getStorageMode } from '../lib/storage'
+import { useStorage, useStorageMode } from '../lib/storage'
 import { ConvexStorageProvider } from '../lib/storage/ConvexStorageProvider'
 import type { ExportData, StorageMode } from '../lib/storage'
 
@@ -44,7 +44,7 @@ function getStorageModeInfo(storageMode: StorageMode) {
 
 export function SettingsTab({ onDataImported }: SettingsTabProps) {
   const storage = useStorage()
-  const storageMode = getStorageMode()
+  const { mode: storageMode, convexUrl } = useStorageMode()
   const storageModeInfo = getStorageModeInfo(storageMode)
   const importInputRef = useRef<HTMLInputElement>(null)
 
@@ -52,7 +52,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
   const [importing, setImporting] = useState(false)
   const [migratingToConvex, setMigratingToConvex] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const canMigrateToConvex = storageMode === 'local' && Boolean(import.meta.env.VITE_CONVEX_URL)
+  const canMigrateToConvex = storageMode === 'local' && Boolean(convexUrl)
 
   const handleExport = async () => {
     setExporting(true)
@@ -127,7 +127,7 @@ export function SettingsTab({ onDataImported }: SettingsTabProps) {
 
     try {
       const exportData = await storage.exportAllData()
-      const convexStorage = new ConvexStorageProvider()
+      const convexStorage = new ConvexStorageProvider(convexUrl)
       await convexStorage.importAllData(exportData)
 
       setStatus({

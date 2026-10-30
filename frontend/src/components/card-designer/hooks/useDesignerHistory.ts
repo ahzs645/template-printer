@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Canvas } from 'fabric'
+import { useIsEventInScope } from '../../../contexts/PrinterScope'
 
 const MAX_HISTORY_SIZE = 50
 
@@ -13,6 +14,7 @@ export function useDesignerHistory({ canvas, onStateChange }: UseDesignerHistory
   const [historyIndex, setHistoryIndex] = useState(-1)
   const isRestoringRef = useRef(false)
   const lastSavedStateRef = useRef<string | null>(null)
+  const inScope = useIsEventInScope()
 
   // Save the current state to history
   const saveState = useCallback(() => {
@@ -130,6 +132,7 @@ export function useDesignerHistory({ canvas, onStateChange }: UseDesignerHistory
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!inScope(e)) return
       // Don't handle if user is typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
@@ -153,7 +156,7 @@ export function useDesignerHistory({ canvas, onStateChange }: UseDesignerHistory
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo])
+  }, [undo, redo, inScope])
 
   return {
     undo,

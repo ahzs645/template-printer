@@ -30,7 +30,8 @@ import {
   ZoomOut,
 } from 'lucide-react'
 
-import './App.css'
+// Styles: App.css and the rest of the printer's CSS are bundled, scoped to the
+// printer's root, by embed/template-printer.css.
 import { IconNav } from './components/IconNav'
 import { Ribbon, RibbonGroup, RibbonButton, RibbonDivider } from './components/Ribbon'
 import { DockablePanel, PanelSection } from './components/ui/dockable-panel'
@@ -89,9 +90,13 @@ import {
   describePackageSource,
   fetchPackage,
   forgetOpenedPackage,
+  packageFromBytes,
   readPackageUrl,
   recallOpenedPackage,
   rememberOpenedPackage,
+  resolveHostPackageUrl,
+  type FetchedPackage,
+  type PackageBytes,
 } from './lib/packageUrl'
 import type { ScannedBarcode } from './lib/barcodeScanner'
 import { CardGuideOverlay } from './components/CardGuideOverlay'
@@ -152,7 +157,39 @@ import { cn } from './lib/utils'
 let linkPackageHandled = false
 let shareLinkHandled = false
 
-type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
+/**
+ * Packages open one after another. Two at once would both miss the record of
+ * the other and import the same design twice (StrictMode's double effect run
+ * does exactly that).
+ */
+let packageQueue: Promise<unknown> = Promise.resolve()
+function enqueuePackage<T>(task: () => Promise<T>): Promise<T> {
+  const next = packageQueue.then(task, task)
+  packageQueue = next.catch(() => undefined)
+  return next
+}
+
+export type ActiveTab = 'design' | 'users' | 'export' | 'calibration' | 'settings'
+
+export type AppProps = {
+  /** Read ?url= and #share/ links from the address bar and clear them once used. */
+  syncUrl?: boolean
+  /** A package to open, by identity: a new object opens again. */
+  initialPackage?: PackageBytes
+  /** Who sent `initialPackage`, as the status messages name it. */
+  packageLabel?: string
+  /** A package to open by URL (http, https or blob:). */
+  packageUrl?: string
+  /**
+   * Where share links point. Without one, the standalone app (syncUrl) uses
+   * its own address and an embedded printer offers the package only.
+   */
+  shareBaseUrl?: string | null
+  /** Also handed every package the user downloads. */
+  onExportPackage?: (bytes: Uint8Array, filename: string) => void
+  initialTab?: ActiveTab
+  onTabChange?: (tab: ActiveTab) => void
+}
 type DesignMode = 'import' | 'designer' | 'designs'
 
 // The card's long edge when fitted, at most: a big window fits a big card,
@@ -168,9 +205,26 @@ const PREVIEW_SIDE_CHROME = 76
 // Kept clear under the card for the zoom buttons floating over the canvas.
 const PREVIEW_ZOOM_CLEARANCE = 40
 
-function App() {
+function App({
+  syncUrl = false,
+  initialPackage,
+  packageLabel,
+  packageUrl,
+  shareBaseUrl = null,
+  onExportPackage,
+  initialTab = 'users',
+  onTabChange,
+}: AppProps = {}) {
   const storage = useStorage()
-  const [activeTab, setActiveTab] = useState<ActiveTab>('users')
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab)
+  const onTabChangeRef = useRef(onTabChange)
+  onTabChangeRef.current = onTabChange
+  const reportedTab = useRef(activeTab)
+  useEffect(() => {
+    if (reportedTab.current === activeTab) return
+    reportedTab.current = activeTab
+    onTabChangeRef.current?.(activeTab)
+  }, [activeTab])
   const [designMode, setDesignMode] = useState<DesignMode>('import')
   const [calibrationMode, setCalibrationMode] = useState<CalibrationMode>('swatch')
   const { profiles: colorProfiles, loading: colorProfilesLoading } = useColorProfiles()
@@ -189,6 +243,7 @@ function App() {
   const [fieldCustomValues, setFieldCustomValues] = useState<Record<string, string>>({})
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [sharePayload, setSharePayload] = useState<SharedTemplatePayload | null>(null)
+  const [shareBase, setShareBase] = useState<string | null>(null)
   // Set when the open template arrived through a view-only share link.
   const [isSharedReadOnly, setIsSharedReadOnly] = useState(false)
   const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
@@ -219,7 +274,7 @@ function App() {
     setPunchGuide(templatePunch.position)
     setPunchShapeGuide(templatePunch.shape)
   }, [templatePunch])
-  const [linkLoading, setLinkLoading] = useState<string | null>(null)
+  const [linkLoading, setLinkLoading] = useState<{ source: string; download: boolean } | null>(null)
   // The result of a ?url= load, reported outside the side panels so it is
   // readable when those are collapsed (which is the default on a phone).
   const [linkResult, setLinkResult] = useState<{ ok: boolean; text: string } | null>(null)
@@ -1279,6 +1334,7 @@ function App() {
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
+    onExportPackage?.(new Uint8Array(await blob.arrayBuffer()), packageFileName(manifest.name))
 
     const missing = manifest.missingFonts?.length
       ? ` ${manifest.missingFonts.length} font${manifest.missingFonts.length === 1 ? '' : 's'} could not be included: ${manifest.missingFonts.join(', ')}.`
@@ -1387,65 +1443,73 @@ function App() {
   }
 
   /**
-   * Open the design a ?url= link points at.
+   * Open a package from a link or from the host.
    *
    * Someone following the link may never have used the app, or may have been
    * here before and already have it — so a package already opened in this
    * browser is reopened rather than imported a second time.
    */
-  const handlePackageUrl = async (url: string) => {
-    const source = describePackageSource(url)
-    setLinkLoading(source)
-    setErrorMessage(null)
-    // Show the design the link is opening, rather than whatever tab the app
-    // happens to start on.
-    setActiveTab('design')
-    setDesignMode('import')
+  const openPackageFrom = (source: string, load: () => Promise<FetchedPackage>, download: boolean) =>
+    enqueuePackage(async () => {
+      setLinkLoading({ source, download })
+      setErrorMessage(null)
+      // Show the design the package is opening, rather than whatever tab the
+      // app happens to start on.
+      setActiveTab('design')
+      setDesignMode('import')
 
-    try {
-      const fetched = await fetchPackage(url)
-      const seen = recallOpenedPackage(fetched.hash)
+      try {
+        const fetched = await load()
+        const seen = recallOpenedPackage(fetched.hash)
 
-      if (seen) {
-        // Ask storage rather than the template list in state: this runs on
-        // mount, before that list has loaded.
-        const existing = await storage.getTemplate(seen.frontTemplateId).catch(() => null)
-        if (existing) {
-          await reloadDesignTemplates()
-          await handleTemplateSelect(existing)
-          if (seen.designId) setSelectedExportCardDesignId(seen.designId)
-          const message = `Reopened "${seen.name}" — you already have this design.`
-          setStatusMessage(message)
-          setLinkResult({ ok: true, text: message })
-          return
+        if (seen) {
+          // Ask storage rather than the template list in state: this runs on
+          // mount, before that list has loaded.
+          const existing = await storage.getTemplate(seen.frontTemplateId).catch(() => null)
+          if (existing) {
+            await reloadDesignTemplates()
+            await handleTemplateSelect(existing)
+            if (seen.designId) setSelectedExportCardDesignId(seen.designId)
+            const message = `Reopened "${seen.name}" — you already have this design.`
+            setStatusMessage(message)
+            setLinkResult({ ok: true, text: message })
+            return
+          }
+          // It was opened before but has since been deleted, so import it again.
+          forgetOpenedPackage(fetched.hash)
         }
-        // It was opened before but has since been deleted, so import it again.
-        forgetOpenedPackage(fetched.hash)
-      }
 
-      const file = new File([fetched.blob], 'card-design.zip', { type: 'application/zip' })
-      const result = await handleOpenPackage(file)
+        const file = new File([fetched.blob], 'card-design.zip', { type: 'application/zip' })
+        const result = await handleOpenPackage(file)
 
-      if (result && fetched.hash) {
-        rememberOpenedPackage({
-          hash: fetched.hash,
-          frontTemplateId: result.frontTemplateId,
-          backTemplateId: result.backTemplateId,
-          designId: result.designId,
-          name: result.name,
-          openedAt: new Date().toISOString(),
-        })
+        if (result && fetched.hash) {
+          rememberOpenedPackage({
+            hash: fetched.hash,
+            frontTemplateId: result.frontTemplateId,
+            backTemplateId: result.backTemplateId,
+            designId: result.designId,
+            name: result.name,
+            openedAt: new Date().toISOString(),
+          })
+        }
+        const message = `Opened "${result?.name ?? 'the design'}" from ${source}.`
+        setStatusMessage(message)
+        setLinkResult({ ok: true, text: message })
+      } catch (error) {
+        console.error(error)
+        const message = error instanceof Error ? error.message : 'Could not open the design from that link.'
+        setErrorMessage(message)
+        setLinkResult({ ok: false, text: message })
+      } finally {
+        setLinkLoading(null)
       }
-      const message = `Opened "${result?.name ?? 'the design'}" from ${source}.`
-      setStatusMessage(message)
-      setLinkResult({ ok: true, text: message })
-    } catch (error) {
-      console.error(error)
-      const message = error instanceof Error ? error.message : 'Could not open the design from that link.'
-      setErrorMessage(message)
-      setLinkResult({ ok: false, text: message })
+    })
+
+  /** Open the design a ?url= link points at, then drop the link from the address bar. */
+  const handlePackageUrl = async (url: string) => {
+    try {
+      await openPackageFrom(describePackageSource(url), () => fetchPackage(url), true)
     } finally {
-      setLinkLoading(null)
       // Drop the parameter either way, so a refresh does not fetch it again.
       clearPackageUrlFromLocation()
     }
@@ -1457,6 +1521,8 @@ function App() {
       svgLayerId,
       standardFieldName,
     }))
+    // Read when the dialog opens, after any ?url= has been cleared from it.
+    setShareBase(shareBaseUrl ?? (syncUrl ? window.location.href : null))
     setSharePayload(
       buildSharedTemplatePayload({
         name: template.name,
@@ -1480,7 +1546,7 @@ function App() {
 
   // Open the design a ?url= link points at. Runs once per page load.
   useEffect(() => {
-    if (linkPackageHandled) return
+    if (!syncUrl || linkPackageHandled) return
     const url = readPackageUrl(window.location.search)
     if (!url) return
     linkPackageHandled = true
@@ -1490,7 +1556,7 @@ function App() {
 
   // Import a template carried in the location hash. Runs once per page load.
   useEffect(() => {
-    if (shareLinkHandled) return
+    if (!syncUrl || shareLinkHandled) return
     const target = readShareTarget(window.location.hash)
     if (!target) return
     shareLinkHandled = true
@@ -1550,6 +1616,33 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // A package the host hands over by URL. Each new URL opens once; the same
+  // URL again (StrictMode, a re-render) does not import it twice.
+  const openedPackageUrl = useRef<string | null>(null)
+  useEffect(() => {
+    if (!packageUrl || openedPackageUrl.current === packageUrl) return
+    openedPackageUrl.current = packageUrl
+    const url = resolveHostPackageUrl(packageUrl)
+    if (!url) {
+      const message = 'The package URL must be an http, https or blob: address.'
+      setErrorMessage(message)
+      setLinkResult({ ok: false, text: message })
+      return
+    }
+    void openPackageFrom(packageLabel || describePackageSource(url) || 'the host app', () => fetchPackage(url), true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packageUrl])
+
+  // A package the host hands over in memory, opened again whenever the host
+  // passes a different object.
+  const openedPackage = useRef<PackageBytes | null>(null)
+  useEffect(() => {
+    if (!initialPackage || openedPackage.current === initialPackage) return
+    openedPackage.current = initialPackage
+    void openPackageFrom(packageLabel || 'the host app', () => packageFromBytes(initialPackage), false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPackage])
 
   const handleFieldSelect = (fieldId: string) => {
     setSelectedFieldId(fieldId)
@@ -2469,6 +2562,7 @@ function App() {
                 missingFonts={missingFonts}
                 getFonts={() => storage.listFonts()}
                 onLoadFont={loadFontFile}
+                onExportPackage={onExportPackage}
                 key={editingCanvasDesignId ?? 'new'}
                 designId={editingCanvasDesignId ?? undefined}
                 initialName={editingDesignData?.name}
@@ -3227,7 +3321,9 @@ function App() {
       {linkLoading && (
         <div
           style={{
-            position: 'fixed',
+            // Over the printer, not the whole page: an embedded printer is one
+            // part of its host's page.
+            position: 'absolute',
             inset: 0,
             zIndex: 100,
             display: 'grid',
@@ -3248,7 +3344,7 @@ function App() {
           >
             <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)' }}>Opening card design…</p>
             <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-              Downloading from {linkLoading}, with its fonts.
+              {linkLoading.download ? 'Downloading from' : 'Reading the package from'} {linkLoading.source}, with its fonts.
             </p>
           </div>
         </div>
@@ -3308,6 +3404,7 @@ function App() {
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
         payload={sharePayload}
+        shareBaseUrl={shareBase}
         onDownloadPackage={handleDownloadPackage}
       />
 
