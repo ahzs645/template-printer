@@ -65,7 +65,7 @@ export function ProfileManager({
       </div>
 
       {/* Profile Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 @min-[48rem]:grid-cols-2 @min-[64rem]:grid-cols-3 gap-4">
         {profiles.map(profile => {
           const adjustmentCount = Object.keys(profile.adjustments || {}).length
           const avgAdjustment = adjustmentCount > 0 ?
@@ -151,7 +151,7 @@ export function ProfileManager({
 
             {!showFineTuning ? (
               // Compact View
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto">
+              <div className="grid grid-cols-1 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3 @min-[80rem]:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto">
                 {Object.entries(selectedProfile.adjustments || {}).map(([color, adjustment]) => {
                   const baseColor = getProfileAdjustmentBaseColor(color)
                   // Calculate scanned color (original + initial adjustment)
@@ -219,7 +219,7 @@ export function ProfileManager({
 
                   return (
                     <div key={color} className="bg-surface p-4 rounded-lg border-2 border-line-subtle">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 @min-[48rem]:grid-cols-2 gap-4">
                         {/* Color Display */}
                         <div>
                           <div className="flex gap-3 items-center">

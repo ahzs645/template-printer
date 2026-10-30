@@ -28,7 +28,7 @@ export function ImageContainer({
       <div
         ref={containerRef}
         className="relative w-full bg-surface-alt rounded-lg border-2 border-line overflow-hidden"
-        style={{ height: 'clamp(220px, 34vh, 360px)' }}
+        style={{ height: 'clamp(220px, calc(var(--template-printer-height, 100vh) * 0.34), 360px)' }}
       >
         <img
           ref={imageRef}

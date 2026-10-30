@@ -1,0 +1,1541 @@
+/*
+ * The printer's own rules: layout, navigation, ribbon, panels, forms and
+ * dialogs. Written unscoped for readability; embed/template-printer.css
+ * imports this file nested inside `.template-printer`, so every selector here
+ * ends up scoped to the printer's root (and its portal layer).
+ *
+ * Layout breakpoints are container queries on the printer's root, named
+ * `template-printer`, so an embedded printer in a narrow box gets the phone
+ * layout on a wide screen. Heights that were fractions of the window are
+ * fractions of the printer, `--template-printer-height` (the root's height,
+ * kept up to date by TemplatePrinter). Rules for dialogs keep @media: dialogs are sized to
+ * the window, not to the printer.
+ */
+
+a {
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Native controls take the theme accent rather than the browser default blue,
+   so a checkbox matches the buttons next to it. */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ===== App Layout ===== */
+.app-layout {
+  position: relative;
+  display: flex;
+  /* The printer fills the box its host gives it (the standalone page gives
+     it the whole dynamic viewport, see index.css). */
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-workspace {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-app);
+  padding: 12px;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* ===== Icon Navigation ===== */
+.icon-nav {
+  width: 48px;
+  background: var(--bg-nav);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-default);
+}
+
+.icon-nav__brand {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-on);
+  margin-bottom: 12px;
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+.icon-nav__items {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 0 6px;
+}
+
+.icon-nav__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 0 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.icon-nav__item {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.icon-nav__item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-on-dark);
+}
+
+.icon-nav__item--active {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+.icon-nav__item--active:hover {
+  background: var(--accent-hover);
+}
+
+.icon-nav__label {
+  display: none;
+}
+
+/* ===== Design Mode Tabs ===== */
+.design-mode-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.design-mode-tab {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease;
+}
+
+.design-mode-tab:hover {
+  color: var(--text-primary);
+}
+
+.design-mode-tab--active {
+  color: var(--accent);
+}
+
+.design-mode-tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* ===== Ribbon Toolbar ===== */
+.ribbon {
+  background: var(--bg-ribbon);
+  border-bottom: 1px solid var(--border-default);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  min-height: 56px;
+  /* The design ribbon is wider than a laptop screen, not only a phone's: let
+     every width scroll sideways rather than clip the groups at the end —
+     Check (with Lanyard) and Guides used to vanish below about 1440 px. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ribbon-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 16px;
+  border-right: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.ribbon-group:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+
+.ribbon-group__content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ribbon-group__title {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.ribbon-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--text-primary);
+  min-width: 48px;
+}
+
+.ribbon-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+}
+
+.ribbon-button--active {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ribbon-button--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ribbon-button--disabled:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.ribbon-button--large {
+  padding: 8px 12px;
+  min-width: 56px;
+}
+
+.ribbon-button--large .ribbon-button__icon {
+  font-size: 20px;
+}
+
+.ribbon-button__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ribbon-button__label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ribbon-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+
+/* ===== Dockable Panel ===== */
+.dockable-panel {
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s ease;
+  overflow: hidden;
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
+}
+
+.dockable-panel--left {
+  border-left: none;
+  border-right: 1px solid var(--border-default);
+}
+
+.dockable-panel--right {
+  border-right: none;
+  border-left: 1px solid var(--border-default);
+}
+
+.dockable-panel--closed {
+  width: 32px !important;
+}
+
+.dockable-panel__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: var(--bg-surface-alt);
+  border: none;
+  border-bottom: 1px solid var(--border-default);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.dockable-panel__toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dockable-panel__toggle--header {
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.dockable-panel--left .dockable-panel__toggle--header {
+  flex-direction: row-reverse;
+}
+
+.dockable-panel__toggle--header .dockable-panel__toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dockable-panel--closed .dockable-panel__toggle {
+  flex-direction: column;
+  padding: 12px 4px;
+  writing-mode: vertical-lr;
+  text-orientation: mixed;
+  gap: 8px;
+}
+
+.dockable-panel__toggle-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dockable-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+}
+
+/* ===== Panel Section ===== */
+.panel-section {
+  margin-bottom: 4px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.panel-section__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.panel-section__header:hover {
+  background: var(--bg-hover);
+}
+
+.panel-section__chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 12px;
+}
+
+.panel-section__title {
+  flex: 1;
+}
+
+.panel-section__actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+
+.panel-section__content {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ===== Canvas Area ===== */
+.canvas-container {
+  flex: 1;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Centred only while it fits: content taller or wider than the area (both
+     sides of a card on a phone) starts at the top instead of running off
+     above it, where it could not be scrolled back into view. */
+  align-items: safe center;
+  justify-content: safe center;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Zoom for the card preview, floating over the canvas's bottom-right corner. */
+.canvas-zoom {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  z-index: 2;
+}
+
+.canvas-zoom__button,
+.canvas-zoom__level {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.canvas-zoom__button {
+  width: 28px;
+}
+
+.canvas-zoom__level {
+  min-width: 48px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom__button:hover:not(:disabled),
+.canvas-zoom__level:hover {
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
+}
+
+.canvas-zoom__button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.canvas-preview-frame {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.canvas-preview-frame .export-preview-svg,
+.canvas-preview-frame .canvas-preview {
+  flex-shrink: 0;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.canvas-preview-frame .export-preview-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-preview-frame .export-preview-svg svg,
+.canvas-preview-frame .canvas-preview svg {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+/* A preview box sized from the card's proportions: the artwork fills it. */
+.canvas-preview-frame .canvas-preview--sized svg {
+  width: 100%;
+  height: 100%;
+}
+
+@container template-printer (max-width: 768px) {
+  .app-content {
+    flex-direction: column;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Tab labels are short; let the strip scroll sideways rather than wrap each
+     label onto two cramped lines. */
+  .design-mode-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px;
+  }
+
+  .design-mode-tab {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    white-space: nowrap;
+  }
+
+  .settings-page {
+    padding: 16px 12px;
+  }
+
+  .settings-card {
+    padding: 16px;
+  }
+
+  /* Tighter gutters between a field and its buttons on a narrow row. */
+  .field-row {
+    gap: 6px;
+  }
+
+  /* The card is what someone opening a shared link came to see, so it goes
+     above the side panels rather than after the left one. */
+  .app-workspace {
+    order: -1;
+    min-height: calc(var(--template-printer-height, 100vh) * 0.6);
+    padding: 8px;
+    gap: 8px;
+    overflow: visible;
+  }
+
+  /* The card designer lays its panels out in a row of its own; stacked, the
+     canvas goes first and the panels fold under it, as on the other tabs. */
+  .designer-main {
+    flex-direction: column;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .designer-main__canvas {
+    order: -1;
+    flex: none !important;
+    min-height: 280px;
+  }
+
+  /* The name takes the first row; the side switch and Save wrap under it
+     instead of running off the right edge. */
+  .designer-header {
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+  }
+
+  .designer-header > :first-child {
+    flex: 1 1 100%;
+  }
+
+  .designer-header > :first-child input {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  /* Like the ribbon, the tool groups scroll sideways on a narrow screen. */
+  .designer-toolbar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 12px !important;
+  }
+
+  .designer-toolbar > * {
+    flex-shrink: 0;
+  }
+
+  /* The canvas is drawn at the card's real size, so give it the width and let
+     it scroll on a phone too narrow for it rather than cut it off. */
+  .designer-canvas-container {
+    padding: 8px !important;
+    overflow: auto !important;
+    justify-content: safe center !important;
+    align-items: safe center !important;
+  }
+
+  /* On a tab that is for a list, such as Users, the list comes first and the
+     card preview follows it. */
+  .app-content--list-first .app-workspace {
+    order: 0;
+    min-height: calc(var(--template-printer-height, 100vh) * 0.5);
+  }
+
+  .dockable-panel {
+    width: 100% !important;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--border-default);
+  }
+
+  .dockable-panel--closed {
+    height: 32px;
+  }
+
+  .dockable-panel--closed .dockable-panel__toggle {
+    flex-direction: row;
+    width: 100%;
+    writing-mode: horizontal-tb;
+    padding: 8px 12px;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  /* Stacked, every panel folds up and down, whichever side it docks to on a
+     desktop: the title sits on the left and the chevron turns to point down
+     to open and up to close. */
+  .dockable-panel__toggle--header {
+    flex-direction: row-reverse;
+  }
+
+  .dockable-panel--left .dockable-panel__toggle svg {
+    transform: rotate(90deg);
+  }
+
+  .dockable-panel--right .dockable-panel__toggle svg {
+    transform: rotate(-90deg);
+  }
+
+  .dockable-panel__content {
+    max-height: calc(var(--template-printer-height, 100vh) * 0.6);
+  }
+
+  /* Ribbon groups are wider than a phone, so let them scroll sideways
+     instead of compressing every button. */
+  .ribbon {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px;
+  }
+
+  .ribbon-group {
+    flex-shrink: 0;
+  }
+
+  .icon-nav {
+    width: 44px;
+  }
+
+  /* Card previews carry a fixed pixel width; let them scale down rather than
+     run off the right edge. */
+  .canvas-container {
+    padding: 0;
+  }
+
+  .canvas-preview {
+    flex-shrink: 1;
+  }
+}
+
+/* Reset styles for Fabric.js canvas-container wrapper inside the designer */
+.designer-canvas-wrapper .canvas-container {
+  flex: none;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  display: block;
+  overflow: visible;
+  min-height: auto;
+}
+
+.canvas-preview {
+  position: relative;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--card-stock);
+  box-shadow: var(--shadow-panel);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.canvas-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ===== Form Elements ===== */
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.form-input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 8px;
+  font-size: 13px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-input--sm {
+  height: var(--control-h-sm);
+  font-size: 12px;
+}
+
+textarea.form-input {
+  height: auto;
+  min-height: calc(var(--control-h) * 2);
+  padding: 6px 8px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* An option with an icon, in the list and in the closed select alike. The icon
+   holds its size and the label gives way, so a long name ends in an ellipsis
+   rather than wrapping inside a control that is one line tall. */
+.select-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.select-option > svg {
+  flex-shrink: 0;
+}
+
+.select-option__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A native colour well is a field, so it carries the same frame as the text
+   input it usually sits beside instead of a borderless square. */
+.color-swatch {
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  padding: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.color-swatch::-moz-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+/* A field and the buttons that act on it. Stretching the row keeps them the
+   same height even when a child sets its own padding. */
+.field-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field-row > * {
+  height: var(--control-h);
+}
+
+.field-row__grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-h);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  height: var(--control-h-sm);
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* Square, so a row of icon buttons reads as one strip rather than a set of
+   slightly different rectangles. */
+.btn-icon {
+  width: var(--control-h);
+  padding: 0;
+}
+
+.btn-sm.btn-icon {
+  width: var(--control-h-sm);
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Dialog Layout ===== */
+/* A dialog wide enough for two panes on a desktop is only as wide as the
+   phone it is on, so the split folds into one column there. */
+.dialog-split {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dialog-split--preview-first {
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+}
+
+@media (max-width: 768px) {
+  .dialog-split,
+  .dialog-split--preview-first {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===== Calibration Layout ===== */
+/* Two columns on a desktop, one on a phone. The fixed track on the side
+   column used to be wider than a phone, so the two columns overlapped. */
+.calibration-layout {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  overflow: auto;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+
+.calibration-layout--compare {
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+}
+
+.calibration-layout--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.calibration-layout--profiles {
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+}
+
+@container template-printer (max-width: 900px) {
+  .calibration-layout,
+  .calibration-layout--compare,
+  .calibration-layout--profiles {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* ===== Settings Page ===== */
+.settings-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-card {
+  padding: 20px;
+  background: var(--bg-surface);
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+}
+
+/* Copy on the left, its action on the right, stacking once the pair no longer
+   fits side by side rather than pushing the button off-screen. */
+.settings-card__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.settings-card__body {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+/* ===== Status Messages ===== */
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.status-message--success {
+  background: var(--success-soft);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+
+.status-message--error {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.status-message--warning {
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+
+/* ===== Field List ===== */
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.field-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+}
+
+.field-item--selected {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.field-item__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.field-item__type {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ===== Scrollbar Styles ===== */
+.dockable-panel__content::-webkit-scrollbar,
+.canvas-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dockable-panel__content::-webkit-scrollbar-track,
+.canvas-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dockable-panel__content::-webkit-scrollbar-thumb,
+.canvas-container::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+.dockable-panel__content::-webkit-scrollbar-thumb:hover,
+.canvas-container::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* ===== Font List ===== */
+.font-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  margin-bottom: 4px;
+}
+
+.font-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.font-item__name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-item__status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.font-item__status--loaded {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.font-item__status--missing {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-muted);
+}
+
+.empty-state__icon {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state__text {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ===== Link Load Banner ===== */
+/* Reports the result of a ?url= design load. Sits at the top of the main
+   column, so it is readable whether or not the side panels are open. */
+.link-result-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: var(--shadow-panel);
+}
+
+.link-result-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-result-banner__close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.link-result-banner__close:hover {
+  opacity: 1;
+}
+
+/* ===== Lanyard ===== */
+/* The stage is the point of the dialog, so it gets most of the screen: a
+   dark studio the strap drops into from above, with the controls in a column
+   beside it on a desktop and under it on a phone. */
+.lanyard-dialog {
+  max-width: min(1240px, calc(100vw - 2rem)) !important;
+  width: calc(100vw - 2rem) !important;
+  height: min(860px, calc(100dvh - 2rem));
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lanyard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.25rem;
+  min-height: 0;
+}
+
+.lanyard-stage {
+  position: relative;
+  min-height: 420px;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 42%, #2b2f38 0%, #15171c 55%, #0b0c0f 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.lanyard-stage__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.lanyard-stage__message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.lanyard-stage__message--error {
+  color: #fca5a5;
+}
+
+.lanyard-stage__hint {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+.lanyard-stage__actions {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(20, 22, 27, 0.72);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+}
+
+.lanyard-stage__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lanyard-stage__button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lanyard-stage__button[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+}
+
+.lanyard-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.lanyard-controls__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.lanyard-controls__section:last-child {
+  border-bottom: 0;
+}
+
+.lanyard-controls__heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lanyard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.lanyard-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.lanyard-note--warning {
+  color: var(--warning);
+}
+
+.lanyard-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.lanyard-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-default);
+}
+
+.lanyard-segmented__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lanyard-segmented__option[aria-checked='true'] {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+.lanyard-segmented__glyph {
+  display: block;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+
+.lanyard-segmented__glyph--portrait {
+  width: 13px;
+  height: 20px;
+}
+
+.lanyard-segmented__glyph--landscape {
+  width: 20px;
+  height: 13px;
+  margin: 3.5px 0;
+}
+
+.lanyard-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.lanyard-swatches__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.lanyard-swatches__swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent);
+}
+
+.lanyard-swatches__custom {
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+/* The way into the lanyard view, under the card preview where the eye already is. */
+.lanyard-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lanyard-launch:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .lanyard-dialog {
+    height: auto;
+    grid-template-rows: auto auto;
+  }
+
+  .lanyard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lanyard-stage {
+    min-height: 0;
+    height: min(62dvh, 560px);
+  }
+
+  .lanyard-controls {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 480px) {
+  .lanyard-stage__hint {
+    display: none;
+  }
+
+  .lanyard-stage__actions {
+    gap: 2px;
+    bottom: 10px;
+  }
+
+  .lanyard-stage__button {
+    padding: 7px 9px;
+    font-size: 12px;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 400px) {
+  .lanyard-stage__button svg {
+    display: none;
+  }
+}
+
+/* What is on the card, in the lanyard dialog from the print screen. */
+.lanyard-segmented--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lanyard-segmented__option--row {
+  flex-direction: row;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+}
+
+.lanyard-segmented__option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lanyard-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.lanyard-field__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* The way into the lanyard from the print preview. */
+.export-preview-actions {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Download, Upload, Plus, Trash2, Settings2, ScanLine, Printer } from 'lucide-react'
 import { Slider } from '../ui/slider'
 import { Button } from '../ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { ColorSwatchChart } from './ColorSwatchChart'
 import { useCardLayout, useColorChart, useColorProfiles, useImageAnalysis } from '../../hooks/calibration'
 import { usePrintLayouts } from '../../hooks/usePrintLayouts'
@@ -184,24 +185,27 @@ export function CalibrationTab({ mode, onModeChange }: CalibrationTabProps) {
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 620 }}>
-                <select
+                <Select
                   value={selectedPrintLayoutId ?? ''}
-                  onChange={(event) => setSelectedPrintLayoutId(event.target.value || null)}
+                  onValueChange={(value) => setSelectedPrintLayoutId(value || null)}
                   disabled={printLayoutsLoading || printLayouts.length === 0}
-                  className="form-input form-input--sm"
-                  style={{ width: 300, maxWidth: '100%' }}
-                  title="Select a print layout for tray-ready calibration exports"
                 >
-                  {printLayouts.length === 0 ? (
-                    <option value="">No print layouts available</option>
-                  ) : (
-                    printLayouts.map((layout) => (
-                      <option key={layout.id} value={layout.id}>
+                  <SelectTrigger
+                    className="h-control-sm"
+                    style={{ width: 300, maxWidth: '100%' }}
+                    title="Select a print layout for tray-ready calibration exports"
+                    aria-label="Print layout"
+                  >
+                    <SelectValue placeholder="No print layouts available" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {printLayouts.map((layout) => (
+                      <SelectItem key={layout.id} value={layout.id}>
                         {layout.name}
-                      </option>
-                    ))
-                  )}
-                </select>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => void handleExportPrintLayout()}

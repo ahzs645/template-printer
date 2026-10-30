@@ -11,6 +11,13 @@ pnpm dev
 
 The dev server runs on <http://localhost:5173>. Production builds are generated with `pnpm build` and output to `dist/`.
 
+## Embedding
+
+The app is one component, `TemplatePrinter` (`src/embed`), which `src/main.tsx` renders across the
+whole page. Another React app can render it inline from a git submodule, with
+`src/embed/template-printer.css` scoped to the component's root: see
+[docs/embedding.md](../docs/embedding.md).
+
 ## Storage Modes
 
 The app uses a shared storage provider interface, so UI code does not talk directly to a database.

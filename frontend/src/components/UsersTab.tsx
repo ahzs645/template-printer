@@ -592,7 +592,7 @@ export function UsersTab({
                 </button>
               </div>
             ) : (
-              <div className="field-list" style={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+              <div className="field-list" style={{ maxHeight: 'calc(var(--template-printer-height, 100vh) - 280px)', overflow: 'auto' }}>
                 {users.map((user) => {
                   const isSelected = selectedUserId === user.id
                   const designName = user.cardDesignId

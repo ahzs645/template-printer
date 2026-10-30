@@ -1,17 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../../lib/utils'
-
-// Matches the stacked layout breakpoint in index.css. On a phone the panels
-// sit under the card, so starting them collapsed keeps the card on screen.
-const STACKED_LAYOUT_QUERY = '(max-width: 768px)'
-
-function isStackedLayout(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false
-  }
-  return window.matchMedia(STACKED_LAYOUT_QUERY).matches
-}
+import { STACKED_LAYOUT_MAX_WIDTH, usePrinterScope } from '../../contexts/PrinterScope'
 
 type DockablePanelProps = {
   title: string
@@ -36,7 +26,13 @@ export function DockablePanel({
   width = 280,
   className,
 }: DockablePanelProps) {
-  const [isOpen, setIsOpen] = useState(() => defaultOpen && (openWhenStacked || !isStackedLayout()))
+  // On a phone-width printer the panels sit under the card, so starting them
+  // collapsed keeps the card on screen. The printer's own width decides, not
+  // the window's: an embedded printer can be narrow on a wide screen.
+  const { width: printerWidth } = usePrinterScope()
+  const [isOpen, setIsOpen] = useState(
+    () => defaultOpen && (openWhenStacked || printerWidth > STACKED_LAYOUT_MAX_WIDTH),
+  )
 
   const ChevronIcon = side === 'left'
     ? (isOpen ? ChevronLeft : ChevronRight)

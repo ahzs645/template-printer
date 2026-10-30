@@ -4,7 +4,7 @@ This workflow adds editable vector/raster artwork, explicit record bindings, por
 
 ## Try the three specimens
 
-Open **Design → Card Designer** and choose **MIT specimen**, **Stanford specimen** or **Harvard specimen** in the left panel. The same original packages are available in `frontend/public/card-specimens/` and can be opened with **Open editable package**.
+Open **Design → Card Designer** and choose **MIT specimen**, **Stanford specimen** or **Harvard specimen** in the left panel. The same original packages are available in `frontend/src/assets/card-specimens/` and can be opened with **Open editable package**.
 
 These are anonymous, visibly labelled layout test specimens with fictional identifiers and schematic logos. They are not official credentials or verified reproductions of the photographed cards. The reference photographs partly cover the Stanford and Harvard layouts; covered regions are not ground truth. The examples use an explicit 85.6 × 53.98 mm test size. No font files or original personal portraits are supplied in the specimen packages.
 

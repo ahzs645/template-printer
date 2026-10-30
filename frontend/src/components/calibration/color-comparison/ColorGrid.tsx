@@ -6,7 +6,7 @@ export function ColorGrid({ colorChart }: ColorGridProps) {
   return (
     <div>
       <h3 className="text-xl font-medium mb-4">Expected Colors</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 @min-[40rem]:grid-cols-3 @min-[48rem]:grid-cols-4 @min-[64rem]:grid-cols-6 gap-2">
         {colorChart.map((color, index) => (
           <div key={index} className="space-y-1">
             <div

@@ -1,7 +1,6 @@
-import pkg from 'js-aruco2'
+import { AR } from './jsAruco'
 import { generateArucoMarker } from './aruco'
 
-const { AR } = pkg
 
 // Enhanced color analysis utilities
 export interface ColorSample {

@@ -10,19 +10,22 @@ import { createTemplatePackage, packageFileName, readTemplatePackage } from '../
 import type { FontData } from '../../lib/api'
 import type { CardData } from '../../lib/types'
 import { InlineSvg } from '../InlineSvg'
-import './card-designer.css'
+import { cardSpecimenUrl } from '../../lib/cardSpecimens'
+import { usePrinterScope, useIsEventInScope } from '../../contexts/PrinterScope'
+// Styles: card-designer.css is part of the printer's scoped stylesheet (embed/template-printer.css).
 
 const PX_PER_MM=96/25.4
 /** 180 % on a desktop; on a phone, whatever fits the card across the screen (the panels stack under it there). */
-function initialZoom(cardWidthMm:number){if(typeof window==='undefined'||window.innerWidth>800)return 1.8;const room=window.innerWidth-48-50;return Math.max(.5,Math.min(1.8,Math.floor(room/(cardWidthMm*PX_PER_MM)*10)/10))}
+function initialZoom(cardWidthMm:number,available:number){if(available>800)return 1.8;const room=available-48-50;return Math.max(.5,Math.min(1.8,Math.floor(room/(cardWidthMm*PX_PER_MM)*10)/10))}
 const SYSTEM_FONTS=['Arial','Helvetica','Times New Roman','Georgia','Verdana','sans-serif','serif']
 type SaveData={name:string;frontCanvasData:string;backCanvasData:string;cardWidth:number;cardHeight:number}
-type Props={designId?:string;initialName?:string;initialFrontData?:string|null;initialBackData?:string|null;initialCardWidth?:number;initialCardHeight?:number;onSave:(data:SaveData)=>void;onCancel:()=>void;fontOptions?:string[];missingFonts?:string[];getFonts?:()=>Promise<FontData[]>;onLoadFont?:(name:string,file:File)=>Promise<unknown>}
+type Props={designId?:string;initialName?:string;initialFrontData?:string|null;initialBackData?:string|null;initialCardWidth?:number;initialCardHeight?:number;onSave:(data:SaveData)=>void;onCancel:()=>void;fontOptions?:string[];missingFonts?:string[];getFonts?:()=>Promise<FontData[]>;onLoadFont?:(name:string,file:File)=>Promise<unknown>;/** Also handed every editable package the designer saves (an embedding host's import). */onExportPackage?:(bytes:Uint8Array,filename:string)=>void}
 
-export function CardDesignerTab({initialName='Untitled Design',initialFrontData,initialBackData,initialCardWidth=85.6,initialCardHeight=53.98,onSave,onCancel,fontOptions=SYSTEM_FONTS,missingFonts=[],getFonts,onLoadFont}:Props){
+export function CardDesignerTab({initialName='Untitled Design',initialFrontData,initialBackData,initialCardWidth=85.6,initialCardHeight=53.98,onSave,onCancel,fontOptions=SYSTEM_FONTS,missingFonts=[],getFonts,onLoadFont,onExportPackage}:Props){
+  const scope=usePrinterScope(),inScope=useIsEventInScope()
   const [name,setName]=useState(initialName),[width,setWidth]=useState(initialCardWidth),[height,setHeight]=useState(initialCardHeight)
   const [side,setSide]=useState<'front'|'back'>('front'),[sessions,setSessions]=useState<{front:SceneSession;back:SceneSession}|null>(null)
-  const [revision,setRevision]=useState(0),[error,setError]=useState<string|null>(null),[message,setMessage]=useState(''),[grid,setGrid]=useState(true),[zoom,setZoom]=useState(()=>initialZoom(initialCardWidth)),[preview,setPreview]=useState(false),[previewSvg,setPreviewSvg]=useState('')
+  const [revision,setRevision]=useState(0),[error,setError]=useState<string|null>(null),[message,setMessage]=useState(''),[grid,setGrid]=useState(true),[zoom,setZoom]=useState(()=>initialZoom(initialCardWidth,scope.width)),[preview,setPreview]=useState(false),[previewSvg,setPreviewSvg]=useState('')
   const frontElement=useRef<HTMLCanvasElement>(null),backElement=useRef<HTMLCanvasElement>(null)
   const initial=useRef({initialFrontData,initialBackData,initialCardWidth,initialCardHeight})
   const disposal=useRef<Promise<unknown>>(Promise.resolve())
@@ -55,7 +58,7 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
   useEffect(()=>{
     if(!session)return
     const key=(event:KeyboardEvent)=>{
-      if(isEditingText(event,session.canvas)||session.busy)return
+      if(!inScope(event)||isEditingText(event,session.canvas)||session.busy)return
       const mod=event.ctrlKey||event.metaKey
       if(mod&&event.key.toLowerCase()==='z'){event.preventDefault();void(event.shiftKey?session.redo():session.undo()).catch(reason=>setError(String(reason)))}
       else if(mod&&event.key.toLowerCase()==='y'){event.preventDefault();void session.redo().catch(reason=>setError(String(reason)))}
@@ -63,7 +66,7 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
       else if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();session.removeSelection()}
     }
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)
-  },[session])
+  },[session,inScope])
 
   useEffect(()=>{
     if(!session||!preview)return
@@ -95,6 +98,7 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
     const front=await makeSide(sessions.front,'front'),back=sessions.back.canvas.getObjects().length?await makeSide(sessions.back,'back'):undefined
     const result=await createTemplatePackage({name,front,back,availableFonts:await getFonts?.()??[],editor:{version:1,widthMm:width,heightMm:height,front:sessions.front.snapshot(false),back:sessions.back.snapshot(false)}})
     const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=packageFileName(name);link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+    onExportPackage?.(new Uint8Array(await result.blob.arrayBuffer()),packageFileName(name))
     setMessage('Editable package saved with SVG fallbacks. Reference images were excluded.')
   }
   const openPackage=async(file:File)=>{
@@ -134,7 +138,7 @@ export function CardDesignerTab({initialName='Untitled Design',initialFrontData,
   },[session,snap])
   const openSpecimen=async(kind:string)=>{
     if(session?.canvas.getObjects().length&&!window.confirm('Replace the open canvas with this specimen? Save the current design first to keep it.'))return
-    const response=await fetch(import.meta.env.BASE_URL+'card-specimens/'+kind+'-specimen.template-printer.zip')
+    const response=await fetch(cardSpecimenUrl(kind))
     if(!response.ok)throw new Error('The bundled specimen could not be loaded.')
     await openPackage(new File([await response.blob()],kind+'.zip',{type:'application/zip'}))
   }

@@ -2,6 +2,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/utils'
 import { X } from 'lucide-react'
+import { usePortalContainer } from '../../contexts/PrinterScope'
 
 // Elements a user can reach with Tab. The size check drops anything that is
 // not rendered, which matters here because several dialogs carry a hidden
@@ -103,14 +104,17 @@ const DialogTrigger = React.forwardRef<
 })
 DialogTrigger.displayName = 'DialogTrigger'
 
-// Renders into document.body so an ancestor that clips or transforms its
-// children cannot cut the dialog off or shift where `fixed` anchors it.
+// Renders into the printer's portal layer, a themed element in document.body,
+// so an ancestor that clips or transforms its children cannot cut the dialog
+// off or shift where `fixed` anchors it, and the printer's scoped styles still
+// reach it when the printer is embedded in another page.
 const DialogPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { open } = React.useContext(DialogContext)
+  const container = usePortalContainer()
 
-  if (!open || typeof document === 'undefined') return null
+  if (!open || !container) return null
 
-  return createPortal(children, document.body)
+  return createPortal(children, container)
 }
 
 const DialogOverlay = React.forwardRef<

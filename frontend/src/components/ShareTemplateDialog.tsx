@@ -23,6 +23,12 @@ export type ShareTemplateDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   payload: SharedTemplatePayload | null
+  /**
+   * The page share links open, normally this one. Null when there is no page
+   * of the printer's own to send people to (an embedded printer without a
+   * share address): then only the package is offered.
+   */
+  shareBaseUrl?: string | null
   /** Build and download a package, which carries the fonts a link cannot. */
   onDownloadPackage?: () => Promise<void> | void
 }
@@ -36,6 +42,7 @@ export function ShareTemplateDialog({
   open,
   onOpenChange,
   payload,
+  shareBaseUrl = null,
   onDownloadPackage,
 }: ShareTemplateDialogProps) {
   const [packaging, setPackaging] = useState(false)
@@ -45,7 +52,7 @@ export function ShareTemplateDialog({
   const [copied, setCopied] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!open || !payload) {
+    if (!open || !payload || !shareBaseUrl) {
       setLinks(null)
       setError(null)
       return
@@ -55,7 +62,7 @@ export function ShareTemplateDialog({
     setBuilding(true)
     setError(null)
 
-    createShareLinks(payload, window.location.href)
+    createShareLinks(payload, shareBaseUrl)
       .then((result) => {
         if (cancelled) return
         setLinks(result)
@@ -79,7 +86,7 @@ export function ShareTemplateDialog({
     return () => {
       cancelled = true
     }
-  }, [open, payload])
+  }, [open, payload, shareBaseUrl])
 
   useEffect(() => {
     if (!copied) return
@@ -135,8 +142,9 @@ export function ShareTemplateDialog({
         <DialogHeader>
           <DialogTitle>Share template</DialogTitle>
           <DialogDescription>
-            The template is compressed into the link itself, so it works without an account or an
-            upload. Nothing is sent to a server.
+            {shareBaseUrl
+              ? 'The template is compressed into the link itself, so it works without an account or an upload. Nothing is sent to a server.'
+              : 'Download a package to send the design, with its fonts, to anyone with Template Printer.'}
           </DialogDescription>
         </DialogHeader>
 

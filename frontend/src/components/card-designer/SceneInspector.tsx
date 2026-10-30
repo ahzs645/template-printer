@@ -3,7 +3,21 @@ import { FabricObject, Group } from 'fabric'
 import { STANDARD_FIELDS, normalizeStandardFieldName } from '../../lib/standardFields'
 import { BARCODE_SYMBOLOGIES, BARCODE_SYMBOLOGY_LABELS, type BarcodeSymbology } from '../../lib/barcode'
 import { SceneSession, nodeData, readRasterFile } from './utils/sceneSession'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 const PX_PER_MM = 96/25.4
+
+type SceneOption = string | { value: string; label: string }
+
+/** A labelled dropdown in the inspector, drawn with the app's own Select rather than the browser's. */
+export function SceneSelect({label,ariaLabel=label,value,onChange,options}:{label:string;ariaLabel?:string;value:string;onChange:(value:string)=>void;options:SceneOption[]}) {
+  const items=options.map(option=>typeof option==='string'?{value:option,label:option}:option)
+  // A value the list does not name (a weight such as 450 read from an SVG) is still shown, as the native control did.
+  if(value&&!items.some(item=>item.value===value))items.unshift({value,label:value})
+  return <div className="scene-control"><span>{label}</span><Select value={value} onValueChange={onChange}>
+    <SelectTrigger aria-label={ariaLabel} className="scene-select"><SelectValue/></SelectTrigger>
+    <SelectContent>{items.map(item=><SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+  </Select></div>
+}
 
 export function NumberControl({label,value,onChange,min,max,step=0.1}:{label:string;value:number;onChange:(value:number)=>void;min?:number;max?:number;step?:number}) {
   const [draft,setDraft]=useState(String(Math.round(value*1000)/1000))
@@ -42,17 +56,16 @@ export function SceneInspector({session,object,fontOptions,missingFonts,onError}
     </div>}
     {text&&<fieldset><legend>Typography</legend>
       <label className="scene-control"><span>Text / sample value</span><textarea aria-label="Text / sample value" rows={3} value={textValue??''} onChange={event=>set('text',event.target.value)}/></label>
-      <label className="scene-control"><span>Font family</span><select aria-label="Font family" value={fontFamily} onChange={event=>set('fontFamily',event.target.value)}>
-        {Array.from(new Set([...fontOptions,fontFamily])).sort().map(font=><option key={font} value={font}>{font}{missingFonts.includes(font)?' (missing)':''}</option>)}
-      </select></label>
+      <SceneSelect label="Font family" value={fontFamily} onChange={value=>set('fontFamily',value)}
+        options={Array.from(new Set([...fontOptions,fontFamily])).filter(Boolean).sort().map(font=>({value:font,label:font+(missingFonts.includes(font)?' (missing)':'')}))}/>
       {missingFonts.includes(fontFamily)&&<p role="status" className="scene-warning">This font is not loaded. Load it in the app’s font manager before checking print fidelity.</p>}
       <div className="scene-two-columns">
         <NumberControl label="Font size (pt)" value={fontSize*Math.abs(object.scaleY)*72/96} min={1} onChange={value=>set('fontSize',value*96/72/Math.abs(object.scaleY))}/>
-        <label className="scene-control"><span>Weight</span><select aria-label="Font weight" value={String(object.get('fontWeight')??'normal')} onChange={event=>set('fontWeight',event.target.value)}>{['normal','bold','100','200','300','400','500','600','700','800','900'].map(weight=><option key={weight}>{weight}</option>)}</select></label>
+        <SceneSelect label="Weight" ariaLabel="Font weight" value={String(object.get('fontWeight')??'normal')} onChange={value=>set('fontWeight',value)} options={['normal','bold','100','200','300','400','500','600','700','800','900']}/>
         <NumberControl label="Line spacing" value={Number(object.get('lineHeight'))||1.2} min={0.5} max={4} onChange={value=>set('lineHeight',value)}/>
         <NumberControl label="Letter spacing (px)" value={(Number(object.get('charSpacing'))||0)*fontSize/1000} onChange={value=>set('charSpacing',value/fontSize*1000)}/>
         <NumberControl label="Text box width (mm)" value={object.width*Math.abs(object.scaleX)/PX_PER_MM} min={1} onChange={value=>set('width',value*PX_PER_MM/Math.abs(object.scaleX))}/>
-        <label className="scene-control"><span>Alignment</span><select aria-label="Text alignment" value={String(object.get('textAlign')??'left')} onChange={event=>set('textAlign',event.target.value)}>{['left','center','right'].map(align=><option key={align}>{align}</option>)}</select></label>
+        <SceneSelect label="Alignment" ariaLabel="Text alignment" value={String(object.get('textAlign')??'left')} onChange={value=>set('textAlign',value)} options={['left','center','right']}/>
       </div>
       <label className="scene-check"><input type="checkbox" checked={dynamic} onChange={event=>changeData(event.target.checked?{elementType:'dynamic-text',isDynamic:true,fieldId:data.fieldId??'fullName_First_Last'}:{elementType:'text',isDynamic:false,fieldId:undefined,required:false})}/>Variable text</label>
     </fieldset>}
@@ -65,9 +78,9 @@ export function SceneInspector({session,object,fontOptions,missingFonts,onError}
         <NumberControl label="Maximum lines (0 = unlimited)" value={data.layout?.maxLines??0} min={0} step={1} onChange={value=>changeData({layout:{...data.layout,maxLines:Math.floor(value)||undefined}})}/>
         <NumberControl label="Minimum font size (pt)" value={(data.layout?.minFontSize??fontSize*0.6)*72/96} min={1} onChange={value=>changeData({layout:{...data.layout,minFontSize:value*96/72}})}/>
       </div>}
-      {data.elementType==='barcode'&&<label className="scene-control"><span>Barcode format</span><select aria-label="Barcode format" value={data.barcodeConfig?.barcodeType??'code128'} onChange={event=>changeData({barcodeConfig:{fieldId:data.fieldId??'studentId',barcodeType:event.target.value as BarcodeSymbology}})}>{BARCODE_SYMBOLOGIES.map(type=><option key={type} value={type}>{BARCODE_SYMBOLOGY_LABELS[type]}</option>)}</select></label>}
+      {data.elementType==='barcode'&&<SceneSelect label="Barcode format" value={data.barcodeConfig?.barcodeType??'code128'} onChange={value=>changeData({barcodeConfig:{fieldId:data.fieldId??'studentId',barcodeType:value as BarcodeSymbology}})} options={BARCODE_SYMBOLOGIES.map(type=>({value:type,label:BARCODE_SYMBOLOGY_LABELS[type]}))}/>}
       {data.elementType==='image-placeholder'&&<>
-        <label className="scene-control"><span>Photo fit</span><select aria-label="Photo fit" value={photo?.fitMode??'cover'} onChange={event=>photoChange({fitMode:event.target.value as 'cover'|'contain'|'fill'})}><option value="cover">Cover / crop</option><option value="contain">Contain</option><option value="fill">Stretch (distorts photo)</option></select></label>
+        <SceneSelect label="Photo fit" value={photo?.fitMode??'cover'} onChange={value=>photoChange({fitMode:value as 'cover'|'contain'|'fill'})} options={[{value:'cover',label:'Cover / crop'},{value:'contain',label:'Contain'},{value:'fill',label:'Stretch (distorts photo)'}]}/>
         <div className="scene-two-columns">
           <NumberControl label="Photo zoom (%)" value={(photo?.scale??1)*100} min={10} max={1000} step={1} onChange={value=>photoChange({scale:value/100})}/>
           <NumberControl label="Photo offset X (%)" value={(photo?.offsetX??0)*100} min={-200} max={200} step={1} onChange={value=>photoChange({offsetX:value/100})}/>

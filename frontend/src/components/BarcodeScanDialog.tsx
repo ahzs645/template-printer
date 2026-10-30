@@ -14,6 +14,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { describeScan, scanBarcodeFromImage, type ScannedBarcode } from '../lib/barcodeScanner'
 import { BARCODE_SYMBOLOGY_LABELS } from '../lib/barcode'
+import { useIsEventInScope } from '../contexts/PrinterScope'
 
 export type BarcodeScanDialogProps = {
   open: boolean
@@ -34,6 +35,7 @@ export function BarcodeScanDialog({
   onApply,
 }: BarcodeScanDialogProps) {
   const [scan, setScan] = useState<ScannedBarcode | null>(null)
+  const inScope = useIsEventInScope()
   const [error, setError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -82,12 +84,13 @@ export function BarcodeScanDialog({
   useEffect(() => {
     if (!open) return
     const onPaste = (event: ClipboardEvent) => {
+      if (!inScope(event)) return
       const file = Array.from(event.clipboardData?.files ?? [])[0]
       if (file?.type.startsWith('image/')) void handleFile(file)
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [open])
+  }, [open, inScope])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

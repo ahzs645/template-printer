@@ -184,3 +184,48 @@ export function clearPackageUrlFromLocation(): void {
   url.searchParams.delete(PACKAGE_URL_PARAM)
   window.history.replaceState(null, '', url.toString())
 }
+
+/** Anything a host can hand the printer as a package. */
+export type PackageBytes = Uint8Array | ArrayBuffer | Blob
+
+/**
+ * Wrap a package a host handed over in memory, with the same size limit and
+ * the same hash a fetched one gets, so it is recognised when opened again.
+ */
+export async function packageFromBytes(input: PackageBytes): Promise<FetchedPackage> {
+  let buffer: ArrayBuffer
+  if (input instanceof Blob) {
+    buffer = await input.arrayBuffer()
+  } else if (input instanceof ArrayBuffer) {
+    buffer = input
+  } else {
+    // Copy, so a view onto a larger or shared buffer hashes only its own bytes.
+    buffer = input.slice().buffer as ArrayBuffer
+  }
+  if (buffer.byteLength > MAX_PACKAGE_BYTES) {
+    throw new Error(`That package is larger than the ${Math.round(MAX_PACKAGE_BYTES / 1024 / 1024)} MB limit.`)
+  }
+  return {
+    blob: new Blob([buffer], { type: 'application/zip' }),
+    hash: await hashBytes(buffer),
+    url: '',
+  }
+}
+
+/**
+ * Check a package URL a host passed in as a prop.
+ *
+ * The host is trusted more than a link in the address bar, so a blob: URL it
+ * made from bytes it holds is accepted too. A relative URL resolves against the
+ * page.
+ */
+export function resolveHostPackageUrl(value: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(value, typeof document === 'undefined' ? undefined : document.baseURI)
+  } catch {
+    return null
+  }
+  if (!['https:', 'http:', 'blob:'].includes(parsed.protocol)) return null
+  return parsed.toString()
+}

@@ -8,6 +8,7 @@ Welcome to the Template Printer documentation. This application allows you to ma
 2. [SVG Template Usage](./svg-templates.md) - Guide to creating and using SVG templates
 3. [User Database Fields](./user-database.md) - Complete reference of all supported user fields
 4. [Reference Templates](./reference-templates/README.md) - Sample Illustrator exports, and what they exercise in the importer
+5. [Embedding](./embedding.md) - Render Template Printer inside another React app as a component, without an iframe
 
 ## Quick Start
 
